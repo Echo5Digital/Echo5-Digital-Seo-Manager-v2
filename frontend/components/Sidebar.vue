@@ -64,6 +64,7 @@ const menuItems = computed(() => {
     { name: 'Clients', path: '/clients', icon: UsersIcon },
     { name: 'Keywords', path: '/keywords', icon: MagnifyingGlassIcon },
     { name: 'Tasks', path: '/tasks', icon: CheckCircleIcon },
+    { name: 'Pages', path: '/pages', icon: NewspaperIcon },
     { name: 'Audits', path: '/audits', icon: DocumentMagnifyingGlassIcon },
     { name: 'Backlinks', path: '/backlinks', icon: LinkIcon },
     { name: 'Reports', path: '/reports', icon: DocumentTextIcon },
