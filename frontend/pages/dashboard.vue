@@ -59,6 +59,8 @@
 <script setup>
 import { useAuthStore } from '~/stores/auth'
 import { useClientStore } from '~/stores/clients'
+import { useTaskStore } from '~/stores/tasks'
+import { useKeywordStore } from '~/stores/keywords'
 
 definePageMeta({
   middleware: ['auth'],
@@ -66,6 +68,8 @@ definePageMeta({
 
 const authStore = useAuthStore()
 const clientStore = useClientStore()
+const taskStore = useTaskStore()
+const keywordStore = useKeywordStore()
 
 // Dashboard stats
 const stats = ref({
@@ -78,19 +82,39 @@ const stats = ref({
 const recentClients = ref([])
 const pendingTasks = ref([])
 const recentNotifications = ref([])
+const loading = ref(true)
 
 // Fetch dashboard data
 onMounted(async () => {
-  await clientStore.fetchClients()
-  
-  // Calculate stats
-  stats.value.totalClients = clientStore.clients.length
-  
-  // Mock data - replace with actual API calls
-  stats.value.activeTasks = 24
-  stats.value.totalKeywords = 156
-  stats.value.avgSeoScore = 78
-  
-  recentClients.value = clientStore.clients.slice(0, 5)
+  try {
+    loading.value = true
+    
+    // Fetch all data in parallel
+    await Promise.all([
+      clientStore.fetchClients(),
+      taskStore.fetchTasks(),
+      keywordStore.fetchKeywords(),
+    ])
+    
+    // Calculate real stats
+    stats.value.totalClients = clientStore.clients.length
+    stats.value.activeTasks = taskStore.pendingTasks.length + taskStore.inProgressTasks.length
+    stats.value.totalKeywords = keywordStore.totalKeywords
+    
+    // Calculate average SEO score from clients
+    const scores = clientStore.clients.map(c => c.seoScore || 0)
+    stats.value.avgSeoScore = scores.length > 0 
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) 
+      : 0
+    
+    // Get recent data
+    recentClients.value = clientStore.clients.slice(0, 5)
+    pendingTasks.value = taskStore.pendingTasks.slice(0, 5)
+    
+  } catch (error) {
+    console.error('Dashboard data fetch error:', error)
+  } finally {
+    loading.value = false
+  }
 })
 </script>
