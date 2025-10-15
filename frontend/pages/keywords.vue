@@ -71,16 +71,16 @@
                 <div class="text-sm text-gray-900">{{ keyword.clientId?.name }}</div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="getRankBadgeClass(keyword.currentRank)">
-                  {{ keyword.currentRank || 'N/A' }}
+                <span :class="getRankBadgeClass(keyword.rankTracking?.currentRank)">
+                  {{ keyword.rankTracking?.currentRank || 'N/A' }}
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ keyword.searchVolume?.toLocaleString() || '-' }}
+                {{ keyword.volume?.toLocaleString() || '-' }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="getDifficultyBadgeClass(keyword.difficulty)">
-                  {{ keyword.difficulty }}
+                <span :class="getDifficultyBadgeClass(keyword.competition)">
+                  {{ keyword.competition }}
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
