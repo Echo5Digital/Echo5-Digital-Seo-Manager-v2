@@ -21,6 +21,7 @@ const reportRoutes = require('./routes/report.routes');
 const backlinkRoutes = require('./routes/backlink.routes');
 const userRoutes = require('./routes/user.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const pageRoutes = require('./routes/page.routes');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -120,6 +121,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/backlinks', backlinkRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/pages', pageRoutes);
 
 // 404 handler
 app.use((req, res) => {
