@@ -117,13 +117,13 @@
 
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Search Volume</label>
-            <input v-model.number="newKeyword.searchVolume" type="number" class="input" 
+            <input v-model.number="newKeyword.volume" type="number" class="input" 
                    placeholder="Monthly search volume" />
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
-            <select v-model="newKeyword.difficulty" class="input">
+            <select v-model="newKeyword.competition" class="input">
               <option value="Low">Low</option>
               <option value="Medium">Medium</option>
               <option value="High">High</option>
@@ -166,8 +166,8 @@ const filteredKeywords = ref([])
 const newKeyword = ref({
   clientId: '',
   keyword: '',
-  searchVolume: 0,
-  difficulty: 'Medium',
+  volume: 0,
+  competition: 'Medium',
 })
 
 onMounted(async () => {
