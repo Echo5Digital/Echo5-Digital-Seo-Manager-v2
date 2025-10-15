@@ -202,8 +202,8 @@ const handleAddKeyword = async () => {
     newKeyword.value = {
       clientId: '',
       keyword: '',
-      searchVolume: 0,
-      difficulty: 'Medium',
+      volume: 0,
+      competition: 'Medium',
     }
     filterKeywords()
   } catch (error) {
