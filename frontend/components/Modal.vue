@@ -7,8 +7,23 @@
       <!-- Modal -->
       <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
         <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
-          <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-            <slot />
+          <!-- Modal Header -->
+          <div v-if="$slots.title" class="bg-white px-6 pt-5 pb-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900" id="modal-title">
+                <slot name="title" />
+              </h3>
+              <button @click="$emit('close')" type="button" class="text-gray-400 hover:text-gray-500">
+                <XMarkIcon class="h-6 w-6" />
+              </button>
+            </div>
+          </div>
+          
+          <!-- Modal Content -->
+          <div class="bg-white px-6 py-4">
+            <slot name="content">
+              <slot />
+            </slot>
           </div>
         </div>
       </div>
@@ -17,6 +32,7 @@
 </template>
 
 <script setup>
+import { XMarkIcon } from '@heroicons/vue/24/outline'
 const props = defineProps({
   show: {
     type: Boolean,
