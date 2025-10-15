@@ -1,0 +1,373 @@
+const express = require('express');
+const router = express.Router();
+const Page = require('../models/Page.model');
+const { protect } = require('../middleware/auth');
+const aiService = require('../services/ai.service');
+
+// GET /api/pages - Get all pages with filters
+router.get('/', protect, async (req, res, next) => {
+  try {
+    const { clientId, type, status } = req.query;
+    
+    const filter = {};
+    if (clientId) filter.clientId = clientId;
+    if (type) filter.type = type;
+    if (status) filter.status = status;
+    
+    const pages = await Page.find(filter)
+      .populate('clientId', 'name domain')
+      .populate('author', 'name email')
+      .sort('-lastModified');
+
+    res.json({
+      status: 'success',
+      results: pages.length,
+      data: { pages },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/pages/:id - Get single page
+router.get('/:id', protect, async (req, res, next) => {
+  try {
+    const page = await Page.findById(req.params.id)
+      .populate('clientId', 'name domain')
+      .populate('author', 'name email')
+      .populate('lastEditedBy', 'name email');
+
+    if (!page) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Page not found',
+      });
+    }
+
+    res.json({
+      status: 'success',
+      data: { page },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/pages - Create new page
+router.post('/', protect, async (req, res, next) => {
+  try {
+    const pageData = {
+      ...req.body,
+      author: req.user._id,
+      lastEditedBy: req.user._id,
+    };
+    
+    const page = await Page.create(pageData);
+
+    res.status(201).json({
+      status: 'success',
+      data: { page },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/pages/:id - Update page
+router.put('/:id', protect, async (req, res, next) => {
+  try {
+    const updateData = {
+      ...req.body,
+      lastEditedBy: req.user._id,
+    };
+    
+    const page = await Page.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!page) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Page not found',
+      });
+    }
+
+    res.json({
+      status: 'success',
+      data: { page },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/pages/:id - Delete page
+router.delete('/:id', protect, async (req, res, next) => {
+  try {
+    const page = await Page.findByIdAndDelete(req.params.id);
+
+    if (!page) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Page not found',
+      });
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Page deleted successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/pages/:id/analyze - AI-powered SEO analysis
+router.post('/:id/analyze', protect, async (req, res, next) => {
+  try {
+    const page = await Page.findById(req.params.id);
+    
+    if (!page) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Page not found',
+      });
+    }
+
+    // AI analyze page SEO
+    const analysis = await aiService.analyzePageSEO(page);
+    
+    // Update page with AI insights
+    page.seo.seoScore = analysis.score;
+    page.issues = analysis.issues;
+    await page.save();
+
+    res.json({
+      status: 'success',
+      data: { 
+        page,
+        analysis,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/pages/:id/generate-schema - Generate JSON-LD structured data
+router.post('/:id/generate-schema', protect, async (req, res, next) => {
+  try {
+    const page = await Page.findById(req.params.id);
+    
+    if (!page) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Page not found',
+      });
+    }
+
+    const { schemaType } = req.body;
+    
+    // Generate structured data based on type
+    const schema = generateStructuredData(page, schemaType);
+    
+    page.structuredData.type = schemaType;
+    page.structuredData.schema = schema;
+    await page.save();
+
+    res.json({
+      status: 'success',
+      data: { 
+        page,
+        schema,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/pages/:id/check-issues - Check for SEO issues
+router.post('/:id/check-issues', protect, async (req, res, next) => {
+  try {
+    const page = await Page.findById(req.params.id);
+    
+    if (!page) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Page not found',
+      });
+    }
+
+    const issues = checkSEOIssues(page);
+    
+    page.issues = issues;
+    await page.save();
+
+    res.json({
+      status: 'success',
+      data: { 
+        page,
+        issuesCount: issues.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Helper: Generate Structured Data
+function generateStructuredData(page, type) {
+  const baseSchema = {
+    '@context': 'https://schema.org',
+  };
+
+  switch (type) {
+    case 'Article':
+    case 'BlogPosting':
+      return {
+        ...baseSchema,
+        '@type': type,
+        headline: page.title,
+        description: page.metaDescription,
+        image: page.openGraph.image,
+        datePublished: page.publishedAt,
+        dateModified: page.lastModified,
+        author: {
+          '@type': 'Person',
+          name: page.author?.name || 'Unknown',
+        },
+      };
+      
+    case 'Product':
+      return {
+        ...baseSchema,
+        '@type': 'Product',
+        name: page.title,
+        description: page.metaDescription,
+        image: page.openGraph.image,
+      };
+      
+    case 'WebPage':
+      return {
+        ...baseSchema,
+        '@type': 'WebPage',
+        name: page.title,
+        description: page.metaDescription,
+        url: page.url,
+      };
+      
+    case 'FAQPage':
+      return {
+        ...baseSchema,
+        '@type': 'FAQPage',
+        mainEntity: [],
+      };
+      
+    default:
+      return { ...baseSchema, '@type': type };
+  }
+}
+
+// Helper: Check SEO Issues
+function checkSEOIssues(page) {
+  const issues = [];
+
+  // Title checks
+  if (!page.title) {
+    issues.push({
+      type: 'error',
+      category: 'title',
+      message: 'Missing page title',
+      severity: 'critical',
+    });
+  } else if (page.title.length < 30) {
+    issues.push({
+      type: 'warning',
+      category: 'title',
+      message: 'Title is too short (less than 30 characters)',
+      severity: 'medium',
+    });
+  } else if (page.title.length > 60) {
+    issues.push({
+      type: 'warning',
+      category: 'title',
+      message: 'Title is too long (more than 60 characters)',
+      severity: 'medium',
+    });
+  }
+
+  // Meta description checks
+  if (!page.metaDescription) {
+    issues.push({
+      type: 'error',
+      category: 'meta',
+      message: 'Missing meta description',
+      severity: 'high',
+    });
+  } else if (page.metaDescription.length < 120) {
+    issues.push({
+      type: 'warning',
+      category: 'meta',
+      message: 'Meta description is too short (less than 120 characters)',
+      severity: 'medium',
+    });
+  }
+
+  // H1 checks
+  if (!page.h1) {
+    issues.push({
+      type: 'error',
+      category: 'content',
+      message: 'Missing H1 heading',
+      severity: 'high',
+    });
+  }
+
+  // Image alt tags
+  const imagesWithoutAlt = page.images.filter(img => !img.alt);
+  if (imagesWithoutAlt.length > 0) {
+    issues.push({
+      type: 'warning',
+      category: 'images',
+      message: `${imagesWithoutAlt.length} images missing alt tags`,
+      severity: 'medium',
+    });
+  }
+
+  // Structured data
+  if (!page.structuredData.schema || Object.keys(page.structuredData.schema).length === 0) {
+    issues.push({
+      type: 'info',
+      category: 'technical',
+      message: 'No structured data (JSON-LD) found',
+      severity: 'low',
+    });
+  }
+
+  // Canonical URL
+  if (!page.seo.canonical) {
+    issues.push({
+      type: 'info',
+      category: 'technical',
+      message: 'No canonical URL set',
+      severity: 'low',
+    });
+  }
+
+  // Open Graph
+  if (!page.openGraph.title || !page.openGraph.description || !page.openGraph.image) {
+    issues.push({
+      type: 'warning',
+      category: 'meta',
+      message: 'Incomplete Open Graph tags',
+      severity: 'medium',
+    });
+  }
+
+  return issues;
+}
+
+module.exports = router;
