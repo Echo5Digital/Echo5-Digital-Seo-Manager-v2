@@ -17,7 +17,7 @@
 </template>
 
 <script setup>
-defineEmits(['close'])
+const emit = defineEmits(['close'])
 
 // Close on escape key
 onMounted(() => {
@@ -32,6 +32,4 @@ onMounted(() => {
     window.removeEventListener('keydown', handleEscape)
   })
 })
-
-const emit = defineEmits(['close'])
 </script>
