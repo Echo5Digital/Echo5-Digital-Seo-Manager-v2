@@ -52,7 +52,8 @@ import {
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
   DocumentMagnifyingGlassIcon,
-  LinkIcon
+  LinkIcon,
+  NewspaperIcon
 } from '@heroicons/vue/24/outline'
 
 const authStore = useAuthStore()
