@@ -140,16 +140,16 @@
                 {{ getClientName(keyword.clientId) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="getRankBadgeClass(keyword.currentPosition)">
-                  #{{ keyword.currentPosition }}
+                <span :class="getRankBadgeClass(keyword.rankTracking?.currentRank)">
+                  #{{ keyword.rankTracking?.currentRank || 'N/A' }}
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ keyword.searchVolume?.toLocaleString() || 'N/A' }}
+                {{ keyword.volume?.toLocaleString() || 'N/A' }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="getDifficultyBadgeClass(keyword.difficulty)">
-                  {{ keyword.difficulty }}
+                <span :class="getDifficultyBadgeClass(keyword.competition)">
+                  {{ keyword.competition }}
                 </span>
               </td>
             </tr>
@@ -232,12 +232,12 @@ const filteredKeywords = computed(() => {
 
 const avgPosition = computed(() => {
   if (filteredKeywords.value.length === 0) return 'N/A'
-  const sum = filteredKeywords.value.reduce((acc, k) => acc + (k.currentPosition || 0), 0)
+  const sum = filteredKeywords.value.reduce((acc, k) => acc + (k.rankTracking?.currentRank || 0), 0)
   return (sum / filteredKeywords.value.length).toFixed(1)
 })
 
 const top10Count = computed(() => {
-  return filteredKeywords.value.filter(k => k.currentPosition && k.currentPosition <= 10).length
+  return filteredKeywords.value.filter(k => k.rankTracking?.currentRank && k.rankTracking.currentRank <= 10).length
 })
 
 const top10Percentage = computed(() => {
@@ -260,7 +260,7 @@ const difficultyStats = computed(() => {
   ]
   
   filteredKeywords.value.forEach(k => {
-    const diff = stats.find(s => s.name === k.difficulty)
+    const diff = stats.find(s => s.name === k.competition)
     if (diff) diff.count++
   })
   
@@ -279,7 +279,7 @@ const rankingStats = computed(() => {
   ]
   
   filteredKeywords.value.forEach(k => {
-    const pos = k.currentPosition || 100
+    const pos = k.rankTracking?.currentRank || 100
     if (pos <= 3) stats[0].count++
     else if (pos <= 10) stats[1].count++
     else if (pos <= 20) stats[2].count++
@@ -294,8 +294,8 @@ const rankingStats = computed(() => {
 
 const topKeywords = computed(() => {
   return [...filteredKeywords.value]
-    .filter(k => k.currentPosition)
-    .sort((a, b) => a.currentPosition - b.currentPosition)
+    .filter(k => k.rankTracking?.currentRank)
+    .sort((a, b) => (a.rankTracking?.currentRank || 100) - (b.rankTracking?.currentRank || 100))
     .slice(0, 10)
 })
 
@@ -303,8 +303,8 @@ const clientStats = computed(() => {
   return clients.value.map(client => {
     const clientKeywords = keywords.value.filter(k => k.clientId === client._id)
     const clientTasks = tasks.value.filter(t => t.clientId === client._id)
-    const top10 = clientKeywords.filter(k => k.currentPosition && k.currentPosition <= 10).length
-    const sum = clientKeywords.reduce((acc, k) => acc + (k.currentPosition || 0), 0)
+    const top10 = clientKeywords.filter(k => k.rankTracking?.currentRank && k.rankTracking.currentRank <= 10).length
+    const sum = clientKeywords.reduce((acc, k) => acc + (k.rankTracking?.currentRank || 0), 0)
     const avg = clientKeywords.length > 0 ? (sum / clientKeywords.length).toFixed(1) : 'N/A'
     
     return {

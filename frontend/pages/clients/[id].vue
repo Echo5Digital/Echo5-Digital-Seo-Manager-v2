@@ -194,14 +194,14 @@
               <tr v-for="keyword in clientKeywords" :key="keyword._id">
                 <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ keyword.keyword }}</td>
                 <td class="px-4 py-3">
-                  <span :class="getRankBadgeClass(keyword.currentPosition)">
-                    #{{ keyword.currentPosition || 'N/A' }}
+                  <span :class="getRankBadgeClass(keyword.rankTracking?.currentRank)">
+                    #{{ keyword.rankTracking?.currentRank || 'N/A' }}
                   </span>
                 </td>
-                <td class="px-4 py-3 text-sm text-gray-900">{{ keyword.searchVolume?.toLocaleString() || 'N/A' }}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">{{ keyword.volume?.toLocaleString() || 'N/A' }}</td>
                 <td class="px-4 py-3">
-                  <span :class="getDifficultyBadgeClass(keyword.difficulty)">
-                    {{ keyword.difficulty }}
+                  <span :class="getDifficultyBadgeClass(keyword.competition)">
+                    {{ keyword.competition }}
                   </span>
                 </td>
               </tr>

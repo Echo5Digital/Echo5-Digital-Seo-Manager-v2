@@ -17,7 +17,7 @@
           @click="showNotifications = !showNotifications"
           class="relative p-2 text-gray-600 hover:text-gray-900"
         >
-          <span class="text-2xl">🔔</span>
+          <BellIcon class="w-6 h-6" />
           <span
             v-if="notificationStore.unreadCount > 0"
             class="absolute top-0 right-0 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center"
@@ -72,6 +72,7 @@
 </template>
 
 <script setup>
+import { BellIcon } from '@heroicons/vue/24/outline'
 import { useAuthStore } from '~/stores/auth'
 import { useNotificationStore } from '~/stores/notifications'
 import { formatDistanceToNow } from 'date-fns'

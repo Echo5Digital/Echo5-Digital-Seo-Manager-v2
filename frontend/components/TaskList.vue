@@ -14,7 +14,7 @@
       </div>
       <div class="flex-1">
         <h4 class="font-medium text-gray-900 text-sm">{{ task.title }}</h4>
-        <p class="text-xs text-gray-500">{{ task.client || 'General' }}</p>
+        <p class="text-xs text-gray-500">{{ task.clientId?.name || 'General' }}</p>
       </div>
       <div>
         <span class="badge" :class="getStatusBadge(task.status)">
