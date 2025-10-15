@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <Teleport to="body" v-if="show">
     <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
       <!-- Backdrop -->
       <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="$emit('close')"></div>
@@ -17,19 +17,28 @@
 </template>
 
 <script setup>
+const props = defineProps({
+  show: {
+    type: Boolean,
+    default: false
+  }
+})
+
 const emit = defineEmits(['close'])
 
 // Close on escape key
-onMounted(() => {
-  const handleEscape = (e) => {
-    if (e.key === 'Escape') {
-      emit('close')
+watch(() => props.show, (isShown) => {
+  if (isShown) {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        emit('close')
+      }
     }
+    window.addEventListener('keydown', handleEscape)
+    
+    onUnmounted(() => {
+      window.removeEventListener('keydown', handleEscape)
+    })
   }
-  window.addEventListener('keydown', handleEscape)
-  
-  onUnmounted(() => {
-    window.removeEventListener('keydown', handleEscape)
-  })
 })
 </script>

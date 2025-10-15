@@ -36,7 +36,7 @@
     </div>
 
     <!-- Add Client Modal -->
-    <Modal v-if="showAddModal" @close="showAddModal = false">
+    <Modal :show="showAddModal" @close="showAddModal = false">
       <AddClientForm @success="handleClientAdded" @cancel="showAddModal = false" />
     </Modal>
   </div>
