@@ -6,7 +6,7 @@
     </div>
 
     <div class="card text-center py-12">
-      <div class="text-6xl mb-4">📈</div>
+      <DocumentTextIcon class="w-16 h-16 mx-auto mb-4 text-gray-400" />
       <h2 class="text-2xl font-semibold mb-2">Reporting Coming Soon</h2>
       <p class="text-gray-600">Generate comprehensive SEO reports for your clients.</p>
     </div>
@@ -14,6 +14,8 @@
 </template>
 
 <script setup>
+import { DocumentTextIcon } from '@heroicons/vue/24/outline'
+
 definePageMeta({
   middleware: ['auth'],
 })

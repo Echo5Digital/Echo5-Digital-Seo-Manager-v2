@@ -6,7 +6,7 @@
     </div>
 
     <div class="card text-center py-12">
-      <div class="text-6xl mb-4">📊</div>
+      <ChartPieIcon class="w-16 h-16 mx-auto mb-4 text-gray-400" />
       <h2 class="text-2xl font-semibold mb-2">Analytics Coming Soon</h2>
       <p class="text-gray-600">Deep dive into SEO performance metrics and trends.</p>
     </div>
@@ -14,6 +14,8 @@
 </template>
 
 <script setup>
+import { ChartPieIcon } from '@heroicons/vue/24/outline'
+
 definePageMeta({
   middleware: ['auth', 'boss'],
 })
