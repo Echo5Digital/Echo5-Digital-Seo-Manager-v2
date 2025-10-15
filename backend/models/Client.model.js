@@ -106,8 +106,7 @@ const clientSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// Index for faster queries
-clientSchema.index({ domain: 1 });
+// Index for faster queries (domain already has unique index)
 clientSchema.index({ assignedStaff: 1 });
 clientSchema.index({ isActive: 1 });
 

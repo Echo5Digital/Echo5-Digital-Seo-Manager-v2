@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-500 to-primary-700">
+  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700">
     <div class="max-w-md w-full">
       <div class="card">
         <div class="text-center mb-8">
@@ -32,7 +32,7 @@
             />
           </div>
 
-          <div v-if="error" class="p-3 bg-danger-50 text-danger-700 rounded-lg text-sm">
+          <div v-if="error" class="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
             {{ error }}
           </div>
 
