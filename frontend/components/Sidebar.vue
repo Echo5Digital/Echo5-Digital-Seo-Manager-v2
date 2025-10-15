@@ -50,7 +50,9 @@ import {
   UserGroupIcon,
   ChartPieIcon,
   Cog6ToothIcon,
-  ArrowRightOnRectangleIcon
+  ArrowRightOnRectangleIcon,
+  DocumentMagnifyingGlassIcon,
+  LinkIcon
 } from '@heroicons/vue/24/outline'
 
 const authStore = useAuthStore()
@@ -61,6 +63,8 @@ const menuItems = computed(() => {
     { name: 'Clients', path: '/clients', icon: UsersIcon },
     { name: 'Keywords', path: '/keywords', icon: MagnifyingGlassIcon },
     { name: 'Tasks', path: '/tasks', icon: CheckCircleIcon },
+    { name: 'Audits', path: '/audits', icon: DocumentMagnifyingGlassIcon },
+    { name: 'Backlinks', path: '/backlinks', icon: LinkIcon },
     { name: 'Reports', path: '/reports', icon: DocumentTextIcon },
   ]
 
