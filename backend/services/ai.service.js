@@ -420,6 +420,165 @@ Keep it concise and actionable.`;
     }
   }
 
+  /**
+   * Analyze page SEO and provide recommendations
+   * @param {Object} page - Page object
+   * @returns {Promise<Object>} SEO analysis
+   */
+  async analyzePageSEO(page) {
+    try {
+      const prompt = `Analyze this webpage for SEO optimization:
+
+Title: ${page.title}
+Meta Description: ${page.metaDescription}
+URL: ${page.url}
+H1: ${page.h1}
+Type: ${page.type}
+Word Count: ${page.content?.wordCount || 'Unknown'}
+Images: ${page.images.length} (${page.images.filter(i => !i.alt).length} missing alt tags)
+Keywords: ${page.keywords.map(k => k.keyword).join(', ')}
+
+Provide:
+1. SEO Score (0-100)
+2. Critical Issues (must fix)
+3. Recommendations (actionable improvements)
+4. Content Suggestions
+5. Meta Tag Improvements
+
+Be specific and actionable.`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert SEO analyst specializing in on-page optimization, content strategy, and technical SEO.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.5,
+        max_tokens: 800,
+      });
+
+      const analysis = completion.choices[0].message.content;
+      
+      return {
+        score: this.extractSEOScore(analysis),
+        issues: this.extractIssuesFromAnalysis(analysis),
+        recommendations: this.extractList(analysis, 'Recommendations'),
+        contentSuggestions: this.extractList(analysis, 'Content Suggestions'),
+        generatedAt: new Date(),
+      };
+    } catch (error) {
+      logger.error('AI Page SEO Analysis Error:', error);
+      throw new Error('Failed to analyze page SEO');
+    }
+  }
+
+  /**
+   * Generate meta description from content
+   * @param {string} title - Page title
+   * @param {string} content - Page content
+   * @returns {Promise<string>} Generated meta description
+   */
+  async generateMetaDescription(title, content) {
+    try {
+      const prompt = `Generate a compelling meta description (max 155 characters) for this page:
+
+Title: ${title}
+Content: ${content.substring(0, 500)}...
+
+The meta description should:
+- Be engaging and click-worthy
+- Include relevant keywords naturally
+- Stay under 155 characters
+- Accurately describe the page content`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert SEO copywriter specializing in meta descriptions that drive clicks.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 100,
+      });
+
+      return completion.choices[0].message.content.trim().replace(/['"]/g, '');
+    } catch (error) {
+      logger.error('AI Meta Description Generation Error:', error);
+      throw new Error('Failed to generate meta description');
+    }
+  }
+
+  /**
+   * Suggest alt text for images
+   * @param {string} imageUrl - Image URL
+   * @param {string} context - Page context
+   * @returns {Promise<string>} Suggested alt text
+   */
+  async suggestAltText(imageUrl, context) {
+    try {
+      const prompt = `Suggest descriptive alt text for an image on this page:
+
+Image URL: ${imageUrl}
+Page Context: ${context}
+
+The alt text should:
+- Be descriptive and specific
+- Include relevant keywords naturally
+- Be under 125 characters
+- Help with accessibility`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert in web accessibility and SEO image optimization.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.6,
+        max_tokens: 50,
+      });
+
+      return completion.choices[0].message.content.trim().replace(/['"]/g, '');
+    } catch (error) {
+      logger.error('AI Alt Text Suggestion Error:', error);
+      throw new Error('Failed to suggest alt text');
+    }
+  }
+
+  extractSEOScore(text) {
+    const match = text.match(/SEO\s*Score[:\s]+(\d+)/i);
+    return match ? parseInt(match[1]) : 50;
+  }
+
+  extractIssuesFromAnalysis(text) {
+    const issuesSection = this.extractSection(text, 'Critical Issues');
+    const issuesList = this.extractList(text, 'Critical Issues');
+    
+    return issuesList.map(issue => ({
+      type: 'error',
+      category: 'seo',
+      message: issue,
+      severity: 'high',
+    }));
+  }
+
   // Helper methods
   extractSection(text, sectionName) {
     const regex = new RegExp(`${sectionName}[:\\s]+(.*?)(?=\\n\\n|\\d+\\.|$)`, 'is');
