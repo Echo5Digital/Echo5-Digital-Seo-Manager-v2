@@ -3,7 +3,7 @@
     <div class="flex flex-col h-full">
       <!-- Logo -->
       <div class="flex items-center justify-center h-16 border-b border-gray-200">
-        <h1 class="text-xl font-bold text-primary-600">SEO Manager</h1>
+        <h1 class="text-xl font-bold text-blue-600">SEO Manager</h1>
       </div>
 
       <!-- Navigation -->
@@ -12,8 +12,8 @@
           v-for="item in menuItems"
           :key="item.path"
           :to="item.path"
-          class="flex items-center px-6 py-3 text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors"
-          active-class="bg-primary-50 text-primary-600 border-r-4 border-primary-600"
+          class="flex items-center px-6 py-3 text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-colors"
+          active-class="bg-blue-50 text-blue-600 border-r-4 border-blue-600"
         >
           <span class="mr-3">{{ item.icon }}</span>
           <span class="font-medium">{{ item.name }}</span>
@@ -23,7 +23,7 @@
       <!-- User Info -->
       <div class="border-t border-gray-200 p-4">
         <div class="flex items-center">
-          <div class="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold">
+          <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold">
             {{ userInitials }}
           </div>
           <div class="ml-3 flex-1">

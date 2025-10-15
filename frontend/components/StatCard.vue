@@ -2,12 +2,12 @@
   <div class="card">
     <div class="flex items-center justify-between mb-2">
       <h3 class="text-lg font-semibold text-gray-900">{{ title }}</h3>
-      <div :class="`text-3xl text-${color}-600`">
+      <div :class="iconColorClass">
         {{ iconMap[icon] || '📊' }}
       </div>
     </div>
     
-    <p :class="`text-3xl font-bold text-${color}-600`">
+    <p :class="valueColorClass">
       {{ formattedValue }}
     </p>
     
@@ -48,6 +48,37 @@ const iconMap = {
   chart: '📊',
   check: '✓',
   alert: '⚠️',
+}
+
+const colorMap = {
+  primary: 'blue',
+  success: 'green',
+  warning: 'yellow',
+  danger: 'red',
+}
+
+const iconColorClass = computed(() => {
+  const c = colorMap[props.color] || 'blue'
+  return `text-3xl text-${c}-600`
+})
+
+const valueColorClass = computed(() => {
+  const c = colorMap[props.color] || 'blue'
+  return `text-3xl font-bold text-${c}-600`
+})
+
+const formattedValue = computed(() => {
+  if (typeof props.value === 'number') {
+    return props.value.toLocaleString()
+  }
+  return props.value
+})
+
+const changeClass = computed(() => {
+  if (!props.change) return ''
+  return props.change > 0 ? 'text-green-600' : 'text-red-600'
+})
+</script>
 }
 
 const formattedValue = computed(() => {
