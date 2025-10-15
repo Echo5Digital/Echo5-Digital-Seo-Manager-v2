@@ -2,9 +2,7 @@
   <div class="card">
     <div class="flex items-center justify-between mb-2">
       <h3 class="text-lg font-semibold text-gray-900">{{ title }}</h3>
-      <div :class="iconColorClass">
-        {{ iconMap[icon] || '📊' }}
-      </div>
+      <component :is="iconComponent" :class="iconColorClass" />
     </div>
     
     <p :class="valueColorClass">
@@ -12,12 +10,24 @@
     </p>
     
     <p v-if="change" class="text-sm mt-2" :class="changeClass">
-      {{ change > 0 ? '↑' : '↓' }} {{ Math.abs(change) }}%
+      <component :is="change > 0 ? ArrowTrendingUpIcon : ArrowTrendingDownIcon" class="w-4 h-4 inline mr-1" />
+      {{ Math.abs(change) }}%
     </p>
   </div>
 </template>
 
 <script setup>
+import { 
+  UsersIcon,
+  ClipboardDocumentListIcon,
+  MagnifyingGlassIcon,
+  ChartBarIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon
+} from '@heroicons/vue/24/outline'
+
 const props = defineProps({
   title: {
     type: String,
@@ -42,12 +52,12 @@ const props = defineProps({
 })
 
 const iconMap = {
-  users: '👥',
-  clipboard: '📋',
-  search: '🔍',
-  chart: '📊',
-  check: '✓',
-  alert: '⚠️',
+  users: UsersIcon,
+  clipboard: ClipboardDocumentListIcon,
+  search: MagnifyingGlassIcon,
+  chart: ChartBarIcon,
+  check: CheckCircleIcon,
+  alert: ExclamationTriangleIcon,
 }
 
 const colorMap = {
@@ -57,9 +67,11 @@ const colorMap = {
   danger: 'red',
 }
 
+const iconComponent = computed(() => iconMap[props.icon] || ChartBarIcon)
+
 const iconColorClass = computed(() => {
   const c = colorMap[props.color] || 'blue'
-  return `text-3xl text-${c}-600`
+  return `w-8 h-8 text-${c}-600`
 })
 
 const valueColorClass = computed(() => {

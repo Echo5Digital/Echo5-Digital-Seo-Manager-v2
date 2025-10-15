@@ -15,7 +15,7 @@
           class="flex items-center px-6 py-3 text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-colors"
           active-class="bg-blue-50 text-blue-600 border-r-4 border-blue-600"
         >
-          <span class="mr-3">{{ item.icon }}</span>
+          <component :is="item.icon" class="w-5 h-5 mr-3" />
           <span class="font-medium">{{ item.name }}</span>
         </NuxtLink>
       </nav>
@@ -31,7 +31,7 @@
             <p class="text-xs text-gray-500">{{ authStore.user?.role }}</p>
           </div>
           <button @click="handleLogout" class="text-gray-400 hover:text-gray-600">
-            <span class="text-xl">→</span>
+            <ArrowRightOnRectangleIcon class="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -41,26 +41,37 @@
 
 <script setup>
 import { useAuthStore } from '~/stores/auth'
+import { 
+  ChartBarIcon, 
+  UsersIcon, 
+  MagnifyingGlassIcon, 
+  CheckCircleIcon, 
+  DocumentTextIcon,
+  UserGroupIcon,
+  ChartPieIcon,
+  Cog6ToothIcon,
+  ArrowRightOnRectangleIcon
+} from '@heroicons/vue/24/outline'
 
 const authStore = useAuthStore()
 
 const menuItems = computed(() => {
   const items = [
-    { name: 'Dashboard', path: '/dashboard', icon: '📊' },
-    { name: 'Clients', path: '/clients', icon: '👥' },
-    { name: 'Keywords', path: '/keywords', icon: '🔍' },
-    { name: 'Tasks', path: '/tasks', icon: '✓' },
-    { name: 'Reports', path: '/reports', icon: '📈' },
+    { name: 'Dashboard', path: '/dashboard', icon: ChartBarIcon },
+    { name: 'Clients', path: '/clients', icon: UsersIcon },
+    { name: 'Keywords', path: '/keywords', icon: MagnifyingGlassIcon },
+    { name: 'Tasks', path: '/tasks', icon: CheckCircleIcon },
+    { name: 'Reports', path: '/reports', icon: DocumentTextIcon },
   ]
 
   if (authStore.isBoss) {
     items.push(
-      { name: 'Team', path: '/team', icon: '👨‍💼' },
-      { name: 'Analytics', path: '/analytics', icon: '📊' }
+      { name: 'Team', path: '/team', icon: UserGroupIcon },
+      { name: 'Analytics', path: '/analytics', icon: ChartPieIcon }
     )
   }
 
-  items.push({ name: 'Settings', path: '/settings', icon: '⚙️' })
+  items.push({ name: 'Settings', path: '/settings', icon: Cog6ToothIcon })
 
   return items
 })
