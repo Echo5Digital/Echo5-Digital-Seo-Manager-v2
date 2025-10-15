@@ -161,27 +161,188 @@
       </div>
 
       <!-- Keywords Tab -->
-      <div v-if="activeTab === 'keywords'" class="card">
-        <h3 class="text-lg font-semibold mb-4">Keywords</h3>
-        <p class="text-gray-500">Keyword tracking coming soon...</p>
+      <div v-if="activeTab === 'keywords'" class="space-y-4">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold">Keywords ({{ clientKeywords.length }})</h3>
+          <button @click="router.push('/keywords')" class="btn btn-primary btn-sm">
+            Manage Keywords
+          </button>
+        </div>
+
+        <div v-if="loadingKeywords" class="card text-center py-8">
+          <p class="text-gray-500">Loading keywords...</p>
+        </div>
+
+        <div v-else-if="clientKeywords.length === 0" class="card text-center py-8">
+          <p class="text-gray-500">No keywords tracked for this client</p>
+          <button @click="router.push('/keywords')" class="btn btn-primary mt-4">
+            Add Keywords
+          </button>
+        </div>
+
+        <div v-else class="card overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keyword</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Position</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Search Volume</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Difficulty</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="keyword in clientKeywords" :key="keyword._id">
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ keyword.keyword }}</td>
+                <td class="px-4 py-3">
+                  <span :class="getRankBadgeClass(keyword.currentPosition)">
+                    #{{ keyword.currentPosition || 'N/A' }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900">{{ keyword.searchVolume?.toLocaleString() || 'N/A' }}</td>
+                <td class="px-4 py-3">
+                  <span :class="getDifficultyBadgeClass(keyword.difficulty)">
+                    {{ keyword.difficulty }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Tasks Tab -->
-      <div v-if="activeTab === 'tasks'" class="card">
-        <h3 class="text-lg font-semibold mb-4">Tasks</h3>
-        <p class="text-gray-500">Task management coming soon...</p>
+      <div v-if="activeTab === 'tasks'" class="space-y-4">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold">Tasks ({{ clientTasks.length }})</h3>
+          <button @click="router.push('/tasks')" class="btn btn-primary btn-sm">
+            Manage Tasks
+          </button>
+        </div>
+
+        <div v-if="loadingTasks" class="card text-center py-8">
+          <p class="text-gray-500">Loading tasks...</p>
+        </div>
+
+        <div v-else-if="clientTasks.length === 0" class="card text-center py-8">
+          <p class="text-gray-500">No tasks for this client</p>
+          <button @click="router.push('/tasks')" class="btn btn-primary mt-4">
+            Create Task
+          </button>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div v-for="task in clientTasks" :key="task._id" class="card hover:shadow-md transition-shadow">
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <h4 class="font-medium text-gray-900">{{ task.title }}</h4>
+                <p class="text-sm text-gray-600 mt-1">{{ task.description }}</p>
+                <div class="flex gap-2 mt-2">
+                  <span :class="getStatusBadgeClass(task.status)">{{ task.status }}</span>
+                  <span :class="getPriorityBadgeClass(task.priority)">{{ task.priority }}</span>
+                </div>
+              </div>
+              <div class="text-sm text-gray-500">
+                {{ formatDate(task.createdAt) }}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Audits Tab -->
-      <div v-if="activeTab === 'audits'" class="card">
-        <h3 class="text-lg font-semibold mb-4">SEO Audits</h3>
-        <p class="text-gray-500">Audit history coming soon...</p>
+      <div v-if="activeTab === 'audits'" class="space-y-4">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold">SEO Audits ({{ clientAudits.length }})</h3>
+          <button @click="router.push('/audits')" class="btn btn-primary btn-sm">
+            Run New Audit
+          </button>
+        </div>
+
+        <div v-if="loadingAudits" class="card text-center py-8">
+          <p class="text-gray-500">Loading audits...</p>
+        </div>
+
+        <div v-else-if="clientAudits.length === 0" class="card text-center py-8">
+          <p class="text-gray-500">No audits yet for this client</p>
+          <button @click="router.push('/audits')" class="btn btn-primary mt-4">
+            Run First Audit
+          </button>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div v-for="audit in clientAudits" :key="audit._id" class="card hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between">
+              <div class="flex-1">
+                <div class="flex items-center gap-4">
+                  <div :class="getScoreColor(audit.score)" class="text-3xl font-bold">
+                    {{ audit.score || 'N/A' }}
+                  </div>
+                  <div>
+                    <a :href="audit.url" target="_blank" class="text-blue-600 hover:underline">
+                      {{ audit.url }}
+                    </a>
+                    <p class="text-sm text-gray-500">{{ formatDate(audit.createdAt) }}</p>
+                  </div>
+                </div>
+                <div v-if="audit.issues" class="flex gap-2 mt-2">
+                  <span v-if="audit.issues.critical" class="badge badge-danger">
+                    {{ audit.issues.critical }} Critical
+                  </span>
+                  <span v-if="audit.issues.warning" class="badge badge-warning">
+                    {{ audit.issues.warning }} Warnings
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Reports Tab -->
-      <div v-if="activeTab === 'reports'" class="card">
-        <h3 class="text-lg font-semibold mb-4">Reports</h3>
-        <p class="text-gray-500">Reports coming soon...</p>
+      <div v-if="activeTab === 'reports'" class="space-y-4">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold">Reports ({{ clientReports.length }})</h3>
+          <button @click="router.push('/reports')" class="btn btn-primary btn-sm">
+            Generate Report
+          </button>
+        </div>
+
+        <div v-if="loadingReports" class="card text-center py-8">
+          <p class="text-gray-500">Loading reports...</p>
+        </div>
+
+        <div v-else-if="clientReports.length === 0" class="card text-center py-8">
+          <p class="text-gray-500">No reports generated yet</p>
+          <button @click="router.push('/reports')" class="btn btn-primary mt-4">
+            Generate First Report
+          </button>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div v-for="report in clientReports" :key="report._id" class="card hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between">
+              <div class="flex-1">
+                <h4 class="font-medium text-gray-900">{{ report.type }}</h4>
+                <p class="text-sm text-gray-600 mt-1">
+                  {{ formatDateRange(report.dateRange) }}
+                </p>
+                <div class="flex gap-4 mt-2 text-sm">
+                  <div v-if="report.metrics?.organicTraffic">
+                    <span class="text-gray-500">Traffic:</span>
+                    <span class="font-semibold ml-1">{{ report.metrics.organicTraffic.toLocaleString() }}</span>
+                  </div>
+                  <div v-if="report.metrics?.avgPosition">
+                    <span class="text-gray-500">Avg Position:</span>
+                    <span class="font-semibold ml-1">{{ report.metrics.avgPosition }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="text-sm text-gray-500">
+                {{ formatDate(report.createdAt) }}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Settings Tab -->
@@ -237,6 +398,10 @@
 
 <script setup>
 import { useClientStore } from '~/stores/clients'
+import { useKeywordStore } from '~/stores/keywords'
+import { useTaskStore } from '~/stores/tasks'
+import { useAuditStore } from '~/stores/audits'
+import { useReportStore } from '~/stores/reports'
 
 definePageMeta({
   middleware: ['auth'],
@@ -245,9 +410,17 @@ definePageMeta({
 const route = useRoute()
 const router = useRouter()
 const clientStore = useClientStore()
+const keywordStore = useKeywordStore()
+const taskStore = useTaskStore()
+const auditStore = useAuditStore()
+const reportStore = useReportStore()
 
 const client = ref(null)
 const activeTab = ref('overview')
+const loadingKeywords = ref(false)
+const loadingTasks = ref(false)
+const loadingAudits = ref(false)
+const loadingReports = ref(false)
 
 const tabs = [
   { id: 'overview', name: 'Overview' },
@@ -257,6 +430,59 @@ const tabs = [
   { id: 'reports', name: 'Reports' },
   { id: 'settings', name: 'Settings' },
 ]
+
+// Computed properties for client-specific data
+const clientKeywords = computed(() => {
+  if (!client.value) return []
+  return keywordStore.keywords.filter(k => k.clientId === client.value._id)
+})
+
+const clientTasks = computed(() => {
+  if (!client.value) return []
+  return taskStore.tasks.filter(t => t.clientId === client.value._id)
+})
+
+const clientAudits = computed(() => {
+  if (!client.value) return []
+  return auditStore.audits.filter(a => a.clientId === client.value._id)
+})
+
+const clientReports = computed(() => {
+  if (!client.value) return []
+  return reportStore.reports.filter(r => r.clientId === client.value._id)
+})
+
+// Watch for tab changes and load data
+watch(activeTab, async (newTab) => {
+  if (!client.value) return
+  
+  try {
+    switch(newTab) {
+      case 'keywords':
+        loadingKeywords.value = true
+        await keywordStore.fetchKeywords()
+        loadingKeywords.value = false
+        break
+      case 'tasks':
+        loadingTasks.value = true
+        await taskStore.fetchTasks()
+        loadingTasks.value = false
+        break
+      case 'audits':
+        loadingAudits.value = true
+        await auditStore.fetchAudits()
+        loadingAudits.value = false
+        break
+      case 'reports':
+        loadingReports.value = true
+        await reportStore.fetchReports()
+        loadingReports.value = false
+        break
+    }
+  } catch (error) {
+    console.error(`Error loading ${newTab} data:`, error)
+  }
+})
 
 // Fetch client data
 onMounted(async () => {
@@ -274,11 +500,53 @@ const formatDate = (date) => {
   })
 }
 
+const formatDateRange = (dateRange) => {
+  if (!dateRange) return 'N/A'
+  const start = new Date(dateRange.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const end = new Date(dateRange.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return `${start} - ${end}`
+}
+
 const getScoreColor = (score) => {
   if (score >= 80) return 'text-green-600'
   if (score >= 60) return 'text-yellow-600'
   if (score >= 40) return 'text-orange-600'
   return 'text-red-600'
+}
+
+const getRankBadgeClass = (position) => {
+  if (!position) return 'badge badge-secondary'
+  if (position <= 3) return 'badge badge-success'
+  if (position <= 10) return 'badge badge-info'
+  if (position <= 20) return 'badge badge-warning'
+  return 'badge badge-danger'
+}
+
+const getDifficultyBadgeClass = (difficulty) => {
+  const classes = {
+    'Low': 'badge badge-success',
+    'Medium': 'badge badge-warning',
+    'High': 'badge badge-danger'
+  }
+  return classes[difficulty] || 'badge badge-secondary'
+}
+
+const getStatusBadgeClass = (status) => {
+  const classes = {
+    'Pending': 'badge badge-warning',
+    'In Progress': 'badge badge-info',
+    'Completed': 'badge badge-success'
+  }
+  return classes[status] || 'badge badge-secondary'
+}
+
+const getPriorityBadgeClass = (priority) => {
+  const classes = {
+    'Low': 'badge badge-secondary',
+    'Medium': 'badge badge-warning',
+    'High': 'badge badge-danger'
+  }
+  return classes[priority] || 'badge badge-secondary'
 }
 
 const updateSettings = async () => {
