@@ -79,18 +79,3 @@ const changeClass = computed(() => {
   return props.change > 0 ? 'text-green-600' : 'text-red-600'
 })
 </script>
-}
-
-const formattedValue = computed(() => {
-  if (typeof props.value === 'number' && props.value > 1000) {
-    return (props.value / 1000).toFixed(1) + 'K'
-  }
-  return props.value
-})
-
-const changeClass = computed(() => {
-  if (props.change > 0) return 'text-success-600'
-  if (props.change < 0) return 'text-danger-600'
-  return 'text-gray-600'
-})
-</script>
