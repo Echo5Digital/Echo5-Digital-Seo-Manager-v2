@@ -6,7 +6,7 @@
         <a
           :href="`https://${client.domain}`"
           target="_blank"
-          class="text-sm text-primary-600 hover:underline"
+          class="text-sm text-blue-600 hover:underline"
           @click.stop
         >
           {{ client.domain }}
@@ -41,15 +41,15 @@
     <div class="grid grid-cols-4 gap-2 pt-4 border-t border-gray-200">
       <div class="text-center">
         <p class="text-xs text-gray-500">Critical</p>
-        <p class="text-lg font-semibold text-danger-600">{{ client.seoHealth?.criticalIssues || 0 }}</p>
+        <p class="text-lg font-semibold text-red-600">{{ client.seoHealth?.criticalIssues || 0 }}</p>
       </div>
       <div class="text-center">
         <p class="text-xs text-gray-500">High</p>
-        <p class="text-lg font-semibold text-warning-600">{{ client.seoHealth?.highIssues || 0 }}</p>
+        <p class="text-lg font-semibold text-orange-600">{{ client.seoHealth?.highIssues || 0 }}</p>
       </div>
       <div class="text-center">
         <p class="text-xs text-gray-500">Medium</p>
-        <p class="text-lg font-semibold text-primary-600">{{ client.seoHealth?.mediumIssues || 0 }}</p>
+        <p class="text-lg font-semibold text-yellow-600">{{ client.seoHealth?.mediumIssues || 0 }}</p>
       </div>
       <div class="text-center">
         <p class="text-xs text-gray-500">Low</p>
@@ -60,7 +60,7 @@
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   client: {
     type: Object,
     required: true,
