@@ -4,26 +4,29 @@ A full-stack, intelligent SEO management platform for agencies to automate, anal
 
 ## 📋 Tech Stack
 
-- **Frontend:** Next.js 14 (App Router), JavaScript, Tailwind CSS, ShadCN UI, Zustand
+- **Frontend:** Nuxt 3 (Vue.js), JavaScript, Tailwind CSS, Pinia, Headless UI
 - **Backend:** Express.js, Node.js
 - **Database:** MongoDB with Mongoose
 - **AI:** OpenAI GPT-4/GPT-4o-mini
 - **Scheduler:** Node Cron
-- **Auth:** NextAuth.js
+- **Auth:** Custom JWT Authentication
 - **Real-time:** Socket.io
-- **Deployment:** Vercel (frontend) + Render/Railway (backend) + MongoDB Atlas
+- **Deployment:** Vercel/Netlify (frontend) + Render/Railway (backend) + MongoDB Atlas
 
 ## 🏗️ Project Structure
 
 ```
 seo-management-platform/
-├── frontend/              # Next.js application
-│   ├── app/              # App Router pages
-│   ├── components/       # React components
-│   ├── hooks/           # Custom React hooks
-│   ├── lib/             # Utilities & configs
-│   ├── store/           # Zustand state management
-│   └── public/          # Static assets
+├── frontend/              # Nuxt 3 application
+│   ├── pages/            # Vue pages (auto-routing)
+│   ├── components/       # Vue components
+│   ├── composables/      # Vue composables
+│   ├── stores/           # Pinia state management
+│   ├── plugins/          # Nuxt plugins
+│   ├── middleware/       # Route middleware
+│   ├── layouts/          # App layouts
+│   ├── assets/           # CSS & static assets
+│   └── public/           # Public files
 │
 ├── backend/              # Express.js API
 │   ├── models/          # Mongoose schemas
@@ -74,13 +77,10 @@ SMTP_USER=your_email
 SMTP_PASS=your_password
 ```
 
-**Frontend (.env.local)**
+**Frontend (.env)**
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:5000
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your_nextauth_secret
-GOOGLE_CLIENT_ID=your_google_oauth_id
-GOOGLE_CLIENT_SECRET=your_google_oauth_secret
+NUXT_PUBLIC_API_URL=http://localhost:5000
+NUXT_PUBLIC_SOCKET_URL=http://localhost:5000
 ```
 
 ### 3. Run Development Servers
@@ -168,10 +168,14 @@ Access the app at: **http://localhost:3000**
 
 ## 📦 Deployment
 
-### Frontend (Vercel)
+### Frontend (Vercel/Netlify)
 ```bash
 cd frontend
+npm run build
+# For Vercel
 vercel deploy
+# For Netlify
+netlify deploy --prod
 ```
 
 ### Backend (Render/Railway)
