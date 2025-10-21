@@ -168,6 +168,12 @@ export const useAuditStore = defineStore('audits', {
         console.error('Delete audit error:', error)
         throw error
       }
+    },
+
+    resetAuditProgress() {
+      this.auditProgress.isRunning = false
+      this.auditProgress.progress = 0
+      this.auditProgress.step = ''
     }
   }
 })

@@ -417,6 +417,9 @@
         </div>
       </template>
     </Modal>
+
+    <!-- Audit Progress Bar -->
+    <AuditProgressBar />
   </div>
 </template>
 
@@ -577,9 +580,11 @@ const handleFilterChange = () => {
 const handleRunAudit = async () => {
   submitting.value = true
   try {
+    showRunModal.value = false // Close modal immediately to show progress
     await auditStore.runAudit(newAudit.value.clientId, newAudit.value.url)
-    showRunModal.value = false
     newAudit.value = { clientId: '', url: '' }
+    // Refresh audits list after completion
+    await auditStore.fetchAudits()
   } catch (error) {
     console.error('Error running audit:', error)
     alert('Failed to run audit. Please try again.')
