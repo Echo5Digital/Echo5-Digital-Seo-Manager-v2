@@ -5,7 +5,23 @@ export const useAuditStore = defineStore('audits', {
   state: () => ({
     audits: [],
     loading: false,
-    error: null
+    error: null,
+    auditProgress: {
+      isRunning: false,
+      step: '',
+      progress: 0,
+      steps: [
+        'Initializing audit...',
+        'Analyzing page structure...',
+        'Checking SEO metadata...',
+        'Scanning for technical issues...',
+        'Analyzing content quality...',
+        'Checking mobile responsiveness...',
+        'Measuring page performance...',
+        'Generating recommendations...',
+        'Finalizing audit report...'
+      ]
+    },
   }),
 
   getters: {
@@ -58,8 +74,19 @@ export const useAuditStore = defineStore('audits', {
       const config = useRuntimeConfig()
       this.loading = true
       this.error = null
+      this.auditProgress.isRunning = true
+      this.auditProgress.progress = 0
 
       try {
+        // Simulate progress through steps
+        for (let i = 0; i < this.auditProgress.steps.length; i++) {
+          this.auditProgress.step = this.auditProgress.steps[i]
+          this.auditProgress.progress = ((i + 1) / this.auditProgress.steps.length) * 100
+          
+          // Add delay to show progress
+          await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000))
+        }
+
         const response = await $fetch(`${config.public.apiBase}/api/audits`, {
           method: 'POST',
           headers: {
@@ -82,6 +109,9 @@ export const useAuditStore = defineStore('audits', {
         throw error
       } finally {
         this.loading = false
+        this.auditProgress.isRunning = false
+        this.auditProgress.progress = 0
+        this.auditProgress.step = ''
       }
     },
 
