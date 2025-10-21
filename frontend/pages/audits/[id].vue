@@ -131,6 +131,136 @@
 
         <!-- Tab Content -->
         <div class="p-6">
+          <!-- Overview Tab -->
+          <div v-if="activeTab === 'overview'" class="space-y-6">
+            <h3 class="text-xl font-semibold text-gray-900">Website Overview & Page Details</h3>
+            
+            <!-- Site Summary -->
+            <div class="grid md:grid-cols-3 gap-6 mb-8">
+              <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg">
+                <h4 class="font-semibold text-blue-900 mb-2">Pages Analyzed</h4>
+                <p class="text-3xl font-bold text-blue-800">{{ audit.summary?.totalPages || 0 }}</p>
+                <p class="text-sm text-blue-600 mt-1">{{ audit.summary?.pagesAnalyzed || 0 }} successfully crawled</p>
+              </div>
+              <div class="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg">
+                <h4 class="font-semibold text-green-900 mb-2">Average Word Count</h4>
+                <p class="text-3xl font-bold text-green-800">{{ Math.round(audit.summary?.averageWordCount || 0) }}</p>
+                <p class="text-sm text-green-600 mt-1">words per page</p>
+              </div>
+              <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg">
+                <h4 class="font-semibold text-purple-900 mb-2">Images Found</h4>
+                <p class="text-3xl font-bold text-purple-800">{{ audit.summary?.totalImages || 0 }}</p>
+                <p class="text-sm text-purple-600 mt-1">{{ audit.summary?.imagesWithoutAlt || 0 }} missing alt text</p>
+              </div>
+            </div>
+
+            <!-- Detailed Page List -->
+            <div v-if="audit.results?.pages?.length > 0" class="bg-white border rounded-lg overflow-hidden">
+              <div class="px-6 py-4 border-b bg-gray-50">
+                <h4 class="font-semibold text-gray-900">All Pages Analyzed</h4>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Page</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Meta Description</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">H1s</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Word Count</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Images</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Links</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody class="bg-white divide-y divide-gray-200">
+                    <tr v-for="page in audit.results.pages" :key="page.url" class="hover:bg-gray-50">
+                      <td class="px-6 py-4">
+                        <a :href="page.url" target="_blank" class="text-blue-600 hover:underline font-medium text-sm">
+                          {{ truncateUrl(page.url, 40) }}
+                        </a>
+                      </td>
+                      <td class="px-6 py-4">
+                        <div class="text-sm">
+                          <span v-if="page.title" class="text-gray-900">{{ truncateText(page.title, 50) }}</span>
+                          <span v-else class="text-red-500 font-medium">Missing Title</span>
+                          <div v-if="page.title" class="text-xs text-gray-500 mt-1">{{ page.title.length }} chars</div>
+                        </div>
+                      </td>
+                      <td class="px-6 py-4">
+                        <div class="text-sm">
+                          <span v-if="page.metaDescription" class="text-gray-900">{{ truncateText(page.metaDescription, 50) }}</span>
+                          <span v-else class="text-red-500 font-medium">Missing Description</span>
+                          <div v-if="page.metaDescription" class="text-xs text-gray-500 mt-1">{{ page.metaDescription.length }} chars</div>
+                        </div>
+                      </td>
+                      <td class="px-6 py-4 text-sm">
+                        <div v-if="page.h1?.length > 0">
+                          <span class="text-gray-900 font-medium">{{ page.h1.length }}</span>
+                          <div class="text-xs text-gray-500">{{ truncateText(page.h1[0], 30) }}</div>
+                        </div>
+                        <span v-else class="text-red-500 font-medium">No H1</span>
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-900">
+                        {{ page.wordCount?.toLocaleString() || 'N/A' }}
+                      </td>
+                      <td class="px-6 py-4 text-sm">
+                        <div v-if="page.images?.length > 0">
+                          <span class="text-gray-900">{{ page.images.length }}</span>
+                          <div class="text-xs text-gray-500">
+                            {{ page.images.filter(img => !img.alt).length }} missing alt
+                          </div>
+                        </div>
+                        <span v-else class="text-gray-500">0</span>
+                      </td>
+                      <td class="px-6 py-4 text-sm">
+                        <div class="text-gray-900">
+                          <div>{{ page.internalLinks || 0 }} internal</div>
+                          <div class="text-xs text-gray-500">{{ page.externalLinks || 0 }} external</div>
+                        </div>
+                      </td>
+                      <td class="px-6 py-4">
+                        <span v-if="page.error" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          Error
+                        </span>
+                        <span v-else-if="page.statusCode === 200" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          {{ page.statusCode }}
+                        </span>
+                        <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          {{ page.statusCode }}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- SEO Issues Summary -->
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                <h5 class="font-medium text-red-900 mb-2">Missing Titles</h5>
+                <p class="text-2xl font-bold text-red-700">{{ audit.summary?.pagesWithMissingTitle || 0 }}</p>
+                <p class="text-sm text-red-600">pages without title tags</p>
+              </div>
+              <div class="bg-orange-50 border border-orange-200 p-4 rounded-lg">
+                <h5 class="font-medium text-orange-900 mb-2">Missing Descriptions</h5>
+                <p class="text-2xl font-bold text-orange-700">{{ audit.summary?.pagesWithMissingDescription || 0 }}</p>
+                <p class="text-sm text-orange-600">pages without meta descriptions</p>
+              </div>
+              <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                <h5 class="font-medium text-yellow-900 mb-2">Missing H1s</h5>
+                <p class="text-2xl font-bold text-yellow-700">{{ audit.summary?.pagesWithMissingH1 || 0 }}</p>
+                <p class="text-sm text-yellow-600">pages without H1 tags</p>
+              </div>
+              <div class="bg-purple-50 border border-purple-200 p-4 rounded-lg">
+                <h5 class="font-medium text-purple-900 mb-2">Images w/o Alt</h5>
+                <p class="text-2xl font-bold text-purple-700">{{ audit.summary?.imagesWithoutAlt || 0 }}</p>
+                <p class="text-sm text-purple-600">images missing alt text</p>
+              </div>
+            </div>
+          </div>
+
           <!-- Page Analysis Tab -->
           <div v-if="activeTab === 'pages'" class="space-y-6">
             <h3 class="text-xl font-semibold text-gray-900">Page-by-Page Analysis</h3>
@@ -483,9 +613,15 @@ const clientStore = useClientStore()
 const loading = ref(true)
 const error = ref(null)
 const audit = ref(null)
-const activeTab = ref('pages')
+const activeTab = ref('overview')
 
 const tabs = computed(() => [
+  {
+    id: 'overview',
+    name: 'Overview',
+    icon: DocumentTextIcon,
+    count: audit.value?.results?.pages?.length || 0
+  },
   {
     id: 'pages',
     name: 'Page Analysis',
@@ -564,10 +700,16 @@ const getSeverityClass = (severity) => {
   }
 }
 
-const truncateUrl = (url) => {
+const truncateUrl = (url, maxLength = 60) => {
   if (!url || typeof url !== 'string') return 'N/A'
-  if (url.length <= 60) return url
-  return url.substring(0, 57) + '...'
+  if (url.length <= maxLength) return url
+  return url.substring(0, maxLength - 3) + '...'
+}
+
+const truncateText = (text, maxLength = 50) => {
+  if (!text || typeof text !== 'string') return 'N/A'
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength - 3) + '...'
 }
 
 onMounted(async () => {

@@ -114,6 +114,38 @@ const auditSchema = new mongoose.Schema({
       issue: String,
       severity: String,
     }],
+
+    // Detailed page analysis
+    pages: [{
+      url: String,
+      title: String,
+      metaDescription: String,
+      metaKeywords: String,
+      h1: [String],
+      h2: [String],
+      h3: [String],
+      images: [{
+        src: String,
+        alt: String,
+        title: String
+      }],
+      wordCount: Number,
+      internalLinks: Number,
+      externalLinks: Number,
+      canonicalUrl: String,
+      robotsMeta: String,
+      ogTitle: String,
+      ogDescription: String,
+      ogImage: String,
+      twitterCard: String,
+      schema: [mongoose.Schema.Types.Mixed],
+      responseTime: Number,
+      statusCode: Number,
+      contentType: String,
+      lastModified: String,
+      contentLength: Number,
+      error: String
+    }]
   },
   
   summary: {
@@ -142,6 +174,16 @@ const auditSchema = new mongoose.Schema({
       min: 0,
       max: 100,
     },
+    // Enhanced summary metrics
+    totalPages: Number,
+    pagesAnalyzed: Number,
+    averageWordCount: Number,
+    pagesWithMissingTitle: Number,
+    pagesWithMissingDescription: Number,
+    pagesWithMissingH1: Number,
+    totalImages: Number,
+    imagesWithoutAlt: Number,
+    avgResponseTime: Number,
   },
   
   aiAnalysis: {

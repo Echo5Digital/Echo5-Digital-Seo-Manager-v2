@@ -594,9 +594,8 @@ const handleRunAudit = async () => {
 }
 
 const viewAudit = async (auditId) => {
-  // Open audit details in new tab
-  const url = `/audits/${auditId}`
-  window.open(url, '_blank')
+  // Navigate to audit details page in same tab
+  await navigateTo(`/audits/${auditId}`)
 }
 
 const handleDeleteAudit = async (auditId) => {

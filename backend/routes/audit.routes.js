@@ -35,8 +35,8 @@ router.post('/', protect, async (req, res, next) => {
       triggeredBy: req.user._id,
     });
 
-    // Start audit (async)
-    auditService.performFullAudit(url || client.domain)
+    // Start audit (async) - Use enhanced audit for comprehensive analysis
+    auditService.performEnhancedAudit(url || client.domain)
       .then(async (results) => {
         const summary = auditService.calculateAuditScore(results);
         const aiAnalysis = await aiService.analyzeAuditResults(summary, url || client.domain);
