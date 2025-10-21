@@ -594,13 +594,9 @@ const handleRunAudit = async () => {
 }
 
 const viewAudit = async (auditId) => {
-  try {
-    selectedAudit.value = await auditStore.getAuditDetails(auditId)
-    showDetailsModal.value = true
-  } catch (error) {
-    console.error('Error loading audit details:', error)
-    alert('Failed to load audit details')
-  }
+  // Open audit details in new tab
+  const url = `/audits/${auditId}`
+  window.open(url, '_blank')
 }
 
 const handleDeleteAudit = async (auditId) => {
