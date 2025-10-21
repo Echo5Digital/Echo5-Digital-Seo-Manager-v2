@@ -10,9 +10,9 @@ export const useKeywordStore = defineStore('keywords', {
 
   getters: {
     keywordsByClient: (state) => (clientId) => {
-      return state.keywords.filter(k => k.clientId === clientId)
+      return (state.keywords || []).filter(k => k.clientId === clientId)
     },
-    totalKeywords: (state) => state.keywords.length,
+    totalKeywords: (state) => (state.keywords || []).length,
   },
 
   actions: {
@@ -22,20 +22,16 @@ export const useKeywordStore = defineStore('keywords', {
       this.error = null
 
       try {
-        const config = {
+        const runtimeConfig = useRuntimeConfig()
+        const response = await $fetch(`${runtimeConfig.public.apiBase}/api/keywords`, {
           headers: {
             Authorization: `Bearer ${authStore.token}`,
           },
-          params: clientId ? { clientId } : {},
-        }
-
-        const response = await $fetch('/api/keywords', {
-          baseURL: 'http://localhost:5001',
-          ...config,
+          query: clientId ? { clientId } : {},
         })
 
-        this.keywords = response.data.keywords
-        return response.data.keywords
+        this.keywords = response.data.keywords || []
+        return response.data.keywords || []
       } catch (error) {
         this.error = error.message
         throw error
@@ -50,15 +46,18 @@ export const useKeywordStore = defineStore('keywords', {
       this.error = null
 
       try {
-        const response = await $fetch('/api/keywords', {
+        const runtimeConfig = useRuntimeConfig()
+        const response = await $fetch(`${runtimeConfig.public.apiBase}/api/keywords`, {
           method: 'POST',
-          baseURL: 'http://localhost:5001',
           headers: {
             Authorization: `Bearer ${authStore.token}`,
           },
           body: keywordData,
         })
 
+        if (!this.keywords) {
+          this.keywords = []
+        }
         this.keywords.unshift(response.data.keyword)
         return response.data.keyword
       } catch (error) {
@@ -75,15 +74,18 @@ export const useKeywordStore = defineStore('keywords', {
       this.error = null
 
       try {
-        const response = await $fetch(`/api/keywords/${id}`, {
+        const runtimeConfig = useRuntimeConfig()
+        const response = await $fetch(`${runtimeConfig.public.apiBase}/api/keywords/${id}`, {
           method: 'PATCH',
-          baseURL: 'http://localhost:5001',
           headers: {
             Authorization: `Bearer ${authStore.token}`,
           },
           body: updates,
         })
 
+        if (!this.keywords) {
+          this.keywords = []
+        }
         const index = this.keywords.findIndex(k => k._id === id)
         if (index !== -1) {
           this.keywords[index] = response.data.keyword
@@ -103,15 +105,15 @@ export const useKeywordStore = defineStore('keywords', {
       this.error = null
 
       try {
-        await $fetch(`/api/keywords/${id}`, {
+        const runtimeConfig = useRuntimeConfig()
+        await $fetch(`${runtimeConfig.public.apiBase}/api/keywords/${id}`, {
           method: 'DELETE',
-          baseURL: 'http://localhost:5001',
           headers: {
             Authorization: `Bearer ${authStore.token}`,
           },
         })
 
-        this.keywords = this.keywords.filter(k => k._id !== id)
+        this.keywords = (this.keywords || []).filter(k => k._id !== id)
       } catch (error) {
         this.error = error.message
         throw error

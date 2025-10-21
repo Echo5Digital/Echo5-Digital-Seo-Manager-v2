@@ -12,8 +12,9 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:5000',
-      socketUrl: process.env.NUXT_PUBLIC_SOCKET_URL || 'http://localhost:5000',
+      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:5001',
+      apiBase: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:5001',
+      socketUrl: process.env.NUXT_PUBLIC_SOCKET_URL || 'http://localhost:5001',
     },
   },
 

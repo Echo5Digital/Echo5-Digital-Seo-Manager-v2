@@ -13,9 +13,9 @@ export const useClientStore = defineStore('clients', {
   }),
 
   getters: {
-    activeClients: (state) => state.clients.filter(c => c.isActive),
+    activeClients: (state) => (state.clients || []).filter(c => c.isActive),
     clientCount: (state) => state.clients.length,
-    getClientById: (state) => (id) => state.clients.find(c => c._id === id),
+    getClientById: (state) => (id) => (state.clients || []).find(c => c._id === id),
   },
 
   actions: {
@@ -70,6 +70,9 @@ export const useClientStore = defineStore('clients', {
         const response = await $api.post('/clients', clientData)
         
         if (response.data.status === 'success') {
+          if (!this.clients) {
+            this.clients = []
+          }
           this.clients.push(response.data.data.client)
           return { success: true, client: response.data.data.client }
         }
@@ -112,7 +115,7 @@ export const useClientStore = defineStore('clients', {
         const { $api } = useNuxtApp()
         await $api.delete(`/clients/${id}`)
         
-        this.clients = this.clients.filter(c => c._id !== id)
+        this.clients = (this.clients || []).filter(c => c._id !== id)
         return { success: true }
       } catch (error) {
         return {

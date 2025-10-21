@@ -10,17 +10,17 @@ export const useAuditStore = defineStore('audits', {
 
   getters: {
     getAuditsByClient: (state) => (clientId) => {
-      return state.audits.filter(audit => audit.clientId === clientId)
+      return (state.audits || []).filter(audit => audit.clientId === clientId)
     },
     
     latestAudits: (state) => {
-      return [...state.audits]
+      return [...(state.audits || [])]
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, 10)
     },
 
     getAuditById: (state) => (auditId) => {
-      return state.audits.find(audit => audit._id === auditId)
+      return (state.audits || []).find(audit => audit._id === auditId)
     }
   },
 
@@ -42,8 +42,8 @@ export const useAuditStore = defineStore('audits', {
           }
         })
 
-        this.audits = response.data
-        return response.data
+        this.audits = response.data || []
+        return response.data || []
       } catch (error) {
         this.error = error.message
         console.error('Fetch audits error:', error)
@@ -71,6 +71,9 @@ export const useAuditStore = defineStore('audits', {
           }
         })
 
+        if (!this.audits) {
+          this.audits = []
+        }
         this.audits.unshift(response.data)
         return response.data
       } catch (error) {
@@ -89,13 +92,16 @@ export const useAuditStore = defineStore('audits', {
       this.error = null
 
       try {
-        const response = await $fetch(`${config.public.apiBase}/api/audits/${auditId}`, {
+        const response = await $fetch(`${config.public.apiBase}/api/audits/details/${auditId}`, {
           headers: {
             Authorization: `Bearer ${authStore.token}`
           }
         })
 
         // Update audit in state if exists
+        if (!this.audits) {
+          this.audits = []
+        }
         const index = this.audits.findIndex(a => a._id === auditId)
         if (index !== -1) {
           this.audits[index] = response.data
@@ -126,7 +132,7 @@ export const useAuditStore = defineStore('audits', {
           }
         })
 
-        this.audits = this.audits.filter(a => a._id !== auditId)
+        this.audits = (this.audits || []).filter(a => a._id !== auditId)
       } catch (error) {
         this.error = error.message
         console.error('Delete audit error:', error)

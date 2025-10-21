@@ -14,7 +14,7 @@
     <!-- Filters -->
     <div class="card mb-6">
       <div class="flex gap-4">
-        <select v-model="selectedClient" @change="filterKeywords" class="input">
+        <select v-model="selectedClient" class="input">
           <option value="">All Clients</option>
           <option v-for="client in clients" :key="client._id" :value="client._id">
             {{ client.name }}
@@ -145,6 +145,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { MagnifyingGlassIcon, PlusIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import { useKeywordStore } from '~/stores/keywords'
 import { useClientStore } from '~/stores/clients'
@@ -160,8 +161,13 @@ const loading = ref(true)
 const showAddModal = ref(false)
 const submitting = ref(false)
 const selectedClient = ref('')
-const clients = ref([])
-const filteredKeywords = ref([])
+const clients = computed(() => clientStore.clients || [])
+const keywords = computed(() => keywordStore.keywords || [])
+
+const filteredKeywords = computed(() => {
+  if (!selectedClient.value) return keywords.value
+  return keywords.value.filter(k => k.clientId === selectedClient.value)
+})
 
 const newKeyword = ref({
   clientId: '',
@@ -177,8 +183,6 @@ onMounted(async () => {
       keywordStore.fetchKeywords(),
       clientStore.fetchClients(),
     ])
-    clients.value = clientStore.clients
-    filteredKeywords.value = keywordStore.keywords
   } catch (error) {
     console.error('Error loading keywords:', error)
   } finally {
@@ -186,13 +190,7 @@ onMounted(async () => {
   }
 })
 
-const filterKeywords = () => {
-  if (selectedClient.value) {
-    filteredKeywords.value = keywordStore.keywordsByClient(selectedClient.value)
-  } else {
-    filteredKeywords.value = keywordStore.keywords
-  }
-}
+
 
 const handleAddKeyword = async () => {
   try {
@@ -205,7 +203,6 @@ const handleAddKeyword = async () => {
       volume: 0,
       competition: 'Medium',
     }
-    filterKeywords()
   } catch (error) {
     console.error('Error adding keyword:', error)
     alert('Failed to add keyword')
