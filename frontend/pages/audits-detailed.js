@@ -29,8 +29,11 @@ export default function AuditDetailed() {
         await fetchClients()
         const auditData = await getAuditDetails(id)
         console.log('📊 Loaded audit data:', auditData)
-        console.log('📄 Discovered pages:', auditData?.results?.discoveredPages?.length || 0)
+        console.log('� Full results object:', auditData?.results)
+        console.log('�📄 Discovered pages:', auditData?.results?.discoveredPages?.length || 0)
         console.log('🔍 Page analysis:', auditData?.results?.pageAnalysis?.length || 0)
+        console.log('🗂️ Results keys:', auditData?.results ? Object.keys(auditData.results) : 'No results')
+        console.log('📋 First discovered page:', auditData?.results?.discoveredPages?.[0])
         setAudit(auditData)
       } catch (error) {
         console.error('Error loading audit:', error)
