@@ -84,10 +84,18 @@ const useClientStore = create((set, get) => ({
           loading: false
         }))
         return data.data.client
+      } else {
+        // Handle error response
+        set({
+          error: data.message || 'Failed to add client',
+          loading: false
+        })
+        throw new Error(data.message || 'Failed to add client')
       }
     } catch (error) {
+      const errorMessage = error.message || 'Failed to add client'
       set({
-        error: error.message || 'Failed to add client',
+        error: errorMessage,
         loading: false
       })
       throw error

@@ -91,9 +91,16 @@ router.post(
     try {
       const { name, domain, industry, cms, assignedStaff, contactInfo } = req.body;
 
+      // Strip protocol and trailing slash from domain
+      const cleanDomain = domain
+        .toLowerCase()
+        .replace(/^https?:\/\//, '') // Remove http:// or https://
+        .replace(/^www\./, '')        // Remove www.
+        .replace(/\/$/, '');          // Remove trailing slash
+
       const client = await Client.create({
         name,
-        domain: domain.toLowerCase(),
+        domain: cleanDomain,
         industry,
         cms,
         assignedStaff: assignedStaff || [],
@@ -147,7 +154,7 @@ router.put(
   authorize('Boss'),
   async (req, res, next) => {
     try {
-      const { assignedStaff, ...updateFields } = req.body;
+      const { assignedStaff, domain, ...updateFields } = req.body;
 
       const client = await Client.findById(req.params.id);
       if (!client) {
@@ -155,6 +162,15 @@ router.put(
           status: 'error',
           message: 'Client not found',
         });
+      }
+
+      // Clean domain if provided
+      if (domain) {
+        updateFields.domain = domain
+          .toLowerCase()
+          .replace(/^https?:\/\//, '') // Remove http:// or https://
+          .replace(/^www\./, '')        // Remove www.
+          .replace(/\/$/, '');          // Remove trailing slash
       }
 
       // Update client
@@ -196,7 +212,7 @@ router.put(
 
 /**
  * @route   DELETE /api/clients/:id
- * @desc    Delete (deactivate) client
+ * @desc    Delete (deactivate) client - Use ?permanent=true for hard delete
  * @access  Private (Boss only)
  */
 router.delete('/:id', protect, authorize('Boss'), async (req, res, next) => {
@@ -210,19 +226,37 @@ router.delete('/:id', protect, authorize('Boss'), async (req, res, next) => {
       });
     }
 
-    client.isActive = false;
-    await client.save();
+    // Check if permanent delete is requested
+    if (req.query.permanent === 'true') {
+      // Hard delete - completely remove from database
+      await Client.findByIdAndDelete(req.params.id);
+      
+      // Remove from assigned staff
+      await User.updateMany(
+        { assignedClients: client._id },
+        { $pull: { assignedClients: client._id } }
+      );
+      
+      res.json({
+        status: 'success',
+        message: 'Client permanently deleted successfully',
+      });
+    } else {
+      // Soft delete - just deactivate
+      client.isActive = false;
+      await client.save();
 
-    // Remove from assigned staff
-    await User.updateMany(
-      { assignedClients: client._id },
-      { $pull: { assignedClients: client._id } }
-    );
+      // Remove from assigned staff
+      await User.updateMany(
+        { assignedClients: client._id },
+        { $pull: { assignedClients: client._id } }
+      );
 
-    res.json({
-      status: 'success',
-      message: 'Client deactivated successfully',
-    });
+      res.json({
+        status: 'success',
+        message: 'Client deactivated successfully',
+      });
+    }
   } catch (error) {
     next(error);
   }

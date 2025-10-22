@@ -48,7 +48,7 @@ export default function Clients() {
       setFormData({ name: '', domain: '', cms: 'WordPress', industry: '' })
       setEditingClient(null)
     } catch (error) {
-      alert('Failed to save client')
+      alert(error.message || 'Failed to save client')
     }
   }
 
