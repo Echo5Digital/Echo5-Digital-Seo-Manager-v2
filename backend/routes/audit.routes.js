@@ -115,7 +115,7 @@ router.get('/', protect, async (req, res, next) => {
     res.json({
       status: 'success',
       results: audits.length,
-      data: audits,
+      data: { audits },
     });
   } catch (error) {
     next(error);
