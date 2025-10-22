@@ -697,8 +697,8 @@ class AuditService {
     // Aggregate meta analysis
     results.metaAnalysis = results.pageAnalysis.map(page => ({
       url: page.url,
-      title: page.metaData?.title,
-      description: page.metaData?.description,
+      title: page.metaData?.title?.content || page.metaData?.title?.text || '',
+      description: page.metaData?.description?.content || page.metaData?.description?.text || '',
       issues: [
         ...(page.metaData?.title?.isEmpty ? [{
           type: 'Missing Title',

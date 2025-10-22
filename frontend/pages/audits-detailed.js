@@ -721,14 +721,14 @@ export default function AuditDetailed() {
                         {heading.headings.map((h, hIdx) => (
                           <div key={hIdx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                             <span className={`px-3 py-1 rounded-lg text-xs font-bold shadow-sm flex-shrink-0 ${
-                              h.level === 'h1' ? 'bg-indigo-600 text-white' :
-                              h.level === 'h2' ? 'bg-blue-600 text-white' :
-                              h.level === 'h3' ? 'bg-cyan-600 text-white' :
-                              h.level === 'h4' ? 'bg-teal-600 text-white' :
-                              h.level === 'h5' ? 'bg-green-600 text-white' :
+                              h.level === 1 || h.level === 'h1' ? 'bg-indigo-600 text-white' :
+                              h.level === 2 || h.level === 'h2' ? 'bg-blue-600 text-white' :
+                              h.level === 3 || h.level === 'h3' ? 'bg-cyan-600 text-white' :
+                              h.level === 4 || h.level === 'h4' ? 'bg-teal-600 text-white' :
+                              h.level === 5 || h.level === 'h5' ? 'bg-green-600 text-white' :
                               'bg-lime-600 text-white'
                             }`}>
-                              {h.level.toUpperCase()}
+                              {typeof h.level === 'number' ? `H${h.level}` : h.level.toUpperCase()}
                             </span>
                             <span className="text-sm text-gray-900 font-medium">{h.text}</span>
                           </div>
