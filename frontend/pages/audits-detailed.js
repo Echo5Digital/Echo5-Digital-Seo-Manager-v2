@@ -8,7 +8,9 @@ import {
   ArrowLeftIcon,
   DocumentMagnifyingGlassIcon,
   InformationCircleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  ChevronDownIcon,
+  ChevronUpIcon
 } from '@heroicons/react/24/outline'
 
 export default function AuditDetailed() {
@@ -21,6 +23,22 @@ export default function AuditDetailed() {
   
   const [audit, setAudit] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [collapsedSections, setCollapsedSections] = useState({
+    discoveredPages: false,
+    seoAnalysis: false,
+    metaAnalysis: true,  // Collapsed by default
+    headingStructure: true,  // Collapsed by default
+    imageAnalysis: true,  // Collapsed by default
+    linkAnalysis: true,  // Collapsed by default
+    contentAnalysis: true  // Collapsed by default
+  })
+
+  const toggleSection = (section) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }))
+  }
 
   useEffect(() => {
     const loadData = async () => {
@@ -111,32 +129,53 @@ export default function AuditDetailed() {
   return (
     <Layout>
       <div className="space-y-8 pb-12">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* Header - Improved Layout */}
+        <div className="bg-white rounded-xl shadow-md p-6 flex items-center justify-between border-b-4 border-blue-500">
           <button
             onClick={() => router.push('/audits')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+            className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-all shadow-sm hover:shadow-md"
           >
             <ArrowLeftIcon className="w-5 h-5" />
             Back to Audits
           </button>
-          <button
-            onClick={() => {
-              const dataStr = JSON.stringify(audit, null, 2)
-              const dataBlob = new Blob([dataStr], { type: 'application/json' })
-              const url = URL.createObjectURL(dataBlob)
-              const link = document.createElement('a')
-              link.href = url
-              link.download = `audit-${audit._id}-${new Date().toISOString().split('T')[0]}.json`
-              document.body.appendChild(link)
-              link.click()
-              document.body.removeChild(link)
-              URL.revokeObjectURL(url)
-            }}
-            className="btn btn-primary"
-          >
-            📥 Download Full Report (JSON)
-          </button>
+          
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                const allCollapsed = Object.values(collapsedSections).every(v => v);
+                setCollapsedSections({
+                  discoveredPages: !allCollapsed,
+                  seoAnalysis: !allCollapsed,
+                  metaAnalysis: !allCollapsed,
+                  headingStructure: !allCollapsed,
+                  imageAnalysis: !allCollapsed,
+                  linkAnalysis: !allCollapsed,
+                  contentAnalysis: !allCollapsed
+                });
+              }}
+              className="flex items-center gap-2 px-5 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-all shadow-sm hover:shadow-md"
+            >
+              {Object.values(collapsedSections).every(v => v) ? '📂 Expand All' : '📁 Collapse All'}
+            </button>
+            <span className="text-sm text-gray-600 font-medium border-l pl-3">Export:</span>
+            <button
+              onClick={() => {
+                const dataStr = JSON.stringify(audit, null, 2)
+                const dataBlob = new Blob([dataStr], { type: 'application/json' })
+                const url = URL.createObjectURL(dataBlob)
+                const link = document.createElement('a')
+                link.href = url
+                link.download = `audit-${audit._id}-${new Date().toISOString().split('T')[0]}.json`
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+                URL.revokeObjectURL(url)
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all shadow-md hover:shadow-lg"
+            >
+              📥 Download Report
+            </button>
+          </div>
         </div>
 
         {/* Audit Header */}
@@ -276,11 +315,22 @@ export default function AuditDetailed() {
         {/* ALL DISCOVERED PAGES */}
         {audit.results?.discoveredPages?.length > 0 && (
           <div className="bg-white rounded-xl shadow-xl p-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6 flex items-center border-b-4 border-blue-500 pb-4">
-              <DocumentMagnifyingGlassIcon className="w-8 h-8 mr-3 text-blue-600" />
-              All Discovered Pages ({audit.results.discoveredPages.length})
-            </h2>
-            <div className="space-y-4">
+            <div 
+              className="flex items-center justify-between cursor-pointer border-b-4 border-blue-500 pb-4 mb-6"
+              onClick={() => toggleSection('discoveredPages')}
+            >
+              <h2 className="text-3xl font-bold text-gray-900 flex items-center">
+                <DocumentMagnifyingGlassIcon className="w-8 h-8 mr-3 text-blue-600" />
+                All Discovered Pages ({audit.results.discoveredPages.length})
+              </h2>
+              {collapsedSections.discoveredPages ? (
+                <ChevronDownIcon className="w-6 h-6 text-gray-600" />
+              ) : (
+                <ChevronUpIcon className="w-6 h-6 text-gray-600" />
+              )}
+            </div>
+            {!collapsedSections.discoveredPages && (
+              <div className="space-y-4">
               {audit.results.discoveredPages.map((page, index) => (
                 <div key={index} className="p-6 bg-gradient-to-r from-gray-50 to-blue-50 border-2 border-gray-200 rounded-xl hover:border-blue-400 transition-all shadow-sm">
                   <div className="flex justify-between items-start mb-3">
@@ -335,18 +385,30 @@ export default function AuditDetailed() {
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* ENHANCED PAGE ANALYSIS WITH SEO OPPORTUNITIES */}
         {audit.results?.pageAnalysis?.length > 0 && (
           <div className="bg-white rounded-xl shadow-xl p-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6 flex items-center border-b-4 border-orange-500 pb-4">
-              <ExclamationTriangleIcon className="w-8 h-8 mr-3 text-orange-600" />
-              SEO Analysis & Opportunities ({audit.results.pageAnalysis.length} Pages Analyzed)
-            </h2>
-            <div className="space-y-6">
+            <div 
+              className="flex items-center justify-between cursor-pointer border-b-4 border-orange-500 pb-4 mb-6"
+              onClick={() => toggleSection('seoAnalysis')}
+            >
+              <h2 className="text-3xl font-bold text-gray-900 flex items-center">
+                <ExclamationTriangleIcon className="w-8 h-8 mr-3 text-orange-600" />
+                SEO Analysis & Opportunities ({audit.results.pageAnalysis.length} Pages Analyzed)
+              </h2>
+              {collapsedSections.seoAnalysis ? (
+                <ChevronDownIcon className="w-6 h-6 text-gray-600" />
+              ) : (
+                <ChevronUpIcon className="w-6 h-6 text-gray-600" />
+              )}
+            </div>
+            {!collapsedSections.seoAnalysis && (
+              <div className="space-y-6">
               {audit.results.pageAnalysis.map((analysis, index) => (
                 <div key={index} className="p-6 bg-gradient-to-r from-orange-50 to-yellow-50 border-2 border-orange-200 rounded-xl shadow-lg">
                   <div className="flex justify-between items-start mb-4">
@@ -464,18 +526,30 @@ export default function AuditDetailed() {
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* ALL META TAGS ANALYSIS */}
         {audit.results?.metaAnalysis?.length > 0 && (
           <div className="bg-white rounded-xl shadow-xl p-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6 flex items-center border-b-4 border-purple-500 pb-4">
-              <InformationCircleIcon className="w-8 h-8 mr-3 text-purple-600" />
-              Complete Meta Tags Analysis ({audit.results.metaAnalysis.length} Pages)
-            </h2>
-            <div className="space-y-6">
+            <div 
+              className="flex items-center justify-between cursor-pointer border-b-4 border-purple-500 pb-4 mb-6"
+              onClick={() => toggleSection('metaAnalysis')}
+            >
+              <h2 className="text-3xl font-bold text-gray-900 flex items-center">
+                <InformationCircleIcon className="w-8 h-8 mr-3 text-purple-600" />
+                Complete Meta Tags Analysis ({audit.results.metaAnalysis.length} Pages)
+              </h2>
+              {collapsedSections.metaAnalysis ? (
+                <ChevronDownIcon className="w-6 h-6 text-gray-600" />
+              ) : (
+                <ChevronUpIcon className="w-6 h-6 text-gray-600" />
+              )}
+            </div>
+            {!collapsedSections.metaAnalysis && (
+              <div className="space-y-6">
               {audit.results.metaAnalysis.map((meta, index) => (
                 <div key={index} className="p-6 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl shadow-lg">
                   <div className="text-xs font-bold text-purple-600 mb-2 uppercase tracking-wide">
@@ -570,7 +644,8 @@ export default function AuditDetailed() {
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -718,21 +793,28 @@ export default function AuditDetailed() {
                         All Headings ({heading.headings.length}):
                       </div>
                       <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-                        {heading.headings.map((h, hIdx) => (
-                          <div key={hIdx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                            <span className={`px-3 py-1 rounded-lg text-xs font-bold shadow-sm flex-shrink-0 ${
-                              h.level === 1 || h.level === 'h1' ? 'bg-indigo-600 text-white' :
-                              h.level === 2 || h.level === 'h2' ? 'bg-blue-600 text-white' :
-                              h.level === 3 || h.level === 'h3' ? 'bg-cyan-600 text-white' :
-                              h.level === 4 || h.level === 'h4' ? 'bg-teal-600 text-white' :
-                              h.level === 5 || h.level === 'h5' ? 'bg-green-600 text-white' :
-                              'bg-lime-600 text-white'
-                            }`}>
-                              {typeof h.level === 'number' ? `H${h.level}` : h.level.toUpperCase()}
-                            </span>
-                            <span className="text-sm text-gray-900 font-medium">{h.text}</span>
-                          </div>
-                        ))}
+                        {heading.headings.map((h, hIdx) => {
+                          // Safely convert level to display format
+                          const levelDisplay = typeof h.level === 'number' 
+                            ? `H${h.level}` 
+                            : (typeof h.level === 'string' && h.level ? h.level.toUpperCase() : 'H?');
+                          
+                          return (
+                            <div key={hIdx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                              <span className={`px-3 py-1 rounded-lg text-xs font-bold shadow-sm flex-shrink-0 ${
+                                h.level === 1 || h.level === 'h1' ? 'bg-indigo-600 text-white' :
+                                h.level === 2 || h.level === 'h2' ? 'bg-blue-600 text-white' :
+                                h.level === 3 || h.level === 'h3' ? 'bg-cyan-600 text-white' :
+                                h.level === 4 || h.level === 'h4' ? 'bg-teal-600 text-white' :
+                                h.level === 5 || h.level === 'h5' ? 'bg-green-600 text-white' :
+                                'bg-lime-600 text-white'
+                              }`}>
+                                {levelDisplay}
+                              </span>
+                              <span className="text-sm text-gray-900 font-medium">{h.text}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
