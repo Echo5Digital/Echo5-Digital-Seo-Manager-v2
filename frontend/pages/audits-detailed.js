@@ -28,6 +28,9 @@ export default function AuditDetailed() {
       try {
         await fetchClients()
         const auditData = await getAuditDetails(id)
+        console.log('📊 Loaded audit data:', auditData)
+        console.log('📄 Discovered pages:', auditData?.results?.discoveredPages?.length || 0)
+        console.log('🔍 Page analysis:', auditData?.results?.pageAnalysis?.length || 0)
         setAudit(auditData)
       } catch (error) {
         console.error('Error loading audit:', error)
@@ -154,6 +157,19 @@ export default function AuditDetailed() {
               </div>
               <p className="text-sm text-blue-100">Overall SEO Score</p>
             </div>
+          </div>
+        </div>
+
+        {/* Debug Info - Remove in production */}
+        <div className="bg-gray-100 rounded-lg p-4 text-xs">
+          <h3 className="font-bold mb-2">📊 Audit Data Summary:</h3>
+          <div className="space-y-1">
+            <div>Status: <span className="font-semibold">{audit.status}</span></div>
+            <div>Discovered Pages: <span className="font-semibold">{audit.results?.discoveredPages?.length || 0}</span></div>
+            <div>Page Analysis: <span className="font-semibold">{audit.results?.pageAnalysis?.length || 0}</span></div>
+            <div>Meta Analysis: <span className="font-semibold">{audit.results?.metaAnalysis?.length || 0}</span></div>
+            <div>Image Analysis: <span className="font-semibold">{audit.results?.imageAnalysis?.length || 0}</span></div>
+            <div>Has AI Analysis: <span className="font-semibold">{audit.aiAnalysis ? 'Yes' : 'No'}</span></div>
           </div>
         </div>
 
@@ -326,6 +342,135 @@ export default function AuditDetailed() {
                       <span className="font-semibold text-gray-600">Load Time:</span>
                       <span className="ml-2 text-gray-900 font-medium">{page.loadTime || 'N/A'}</span>
                     </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ENHANCED PAGE ANALYSIS WITH SEO OPPORTUNITIES */}
+        {audit.results?.pageAnalysis?.length > 0 && (
+          <div className="bg-white rounded-xl shadow-xl p-8">
+            <h2 className="text-3xl font-bold text-gray-900 mb-6 flex items-center border-b-4 border-orange-500 pb-4">
+              <ExclamationTriangleIcon className="w-8 h-8 mr-3 text-orange-600" />
+              SEO Analysis & Opportunities ({audit.results.pageAnalysis.length} Pages Analyzed)
+            </h2>
+            <div className="space-y-6">
+              {audit.results.pageAnalysis.map((analysis, index) => (
+                <div key={index} className="p-6 bg-gradient-to-r from-orange-50 to-yellow-50 border-2 border-orange-200 rounded-xl shadow-lg">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <div className="text-xs font-bold text-orange-600 mb-2 uppercase tracking-wide">
+                        Analysis {index + 1} of {audit.results.pageAnalysis.length}
+                      </div>
+                      <a
+                        href={analysis.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-orange-600 hover:underline font-semibold text-base break-all block mb-2"
+                      >
+                        🔗 {analysis.url}
+                      </a>
+                    </div>
+                    {analysis.seoAnalysis?.seoScore && (
+                      <div className="ml-4 flex-shrink-0 bg-white rounded-xl p-4 shadow-md text-center">
+                        <div className={`text-4xl font-bold mb-1 ${
+                          analysis.seoAnalysis.seoScore >= 80 ? 'text-green-600' :
+                          analysis.seoAnalysis.seoScore >= 60 ? 'text-yellow-600' :
+                          analysis.seoAnalysis.seoScore >= 40 ? 'text-orange-600' :
+                          'text-red-600'
+                        }`}>
+                          {analysis.seoAnalysis.seoScore}
+                        </div>
+                        <div className="text-xs text-gray-600">SEO Score</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Critical Issues */}
+                  {analysis.seoAnalysis?.criticalIssues?.length > 0 && (
+                    <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                      <h4 className="text-sm font-bold text-red-900 mb-3 flex items-center">
+                        🔴 Critical Issues ({analysis.seoAnalysis.criticalIssues.length})
+                      </h4>
+                      <ul className="space-y-2">
+                        {analysis.seoAnalysis.criticalIssues.map((issue, idx) => (
+                          <li key={idx} className="text-sm text-red-800 flex items-start gap-2">
+                            <span className="font-bold mt-0.5">•</span>
+                            <span>{issue}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Opportunities */}
+                  {analysis.seoAnalysis?.opportunities?.length > 0 && (
+                    <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
+                      <h4 className="text-sm font-bold text-yellow-900 mb-3 flex items-center">
+                        ⚠️ Improvement Opportunities ({analysis.seoAnalysis.opportunities.length})
+                      </h4>
+                      <ul className="space-y-2">
+                        {analysis.seoAnalysis.opportunities.map((opportunity, idx) => (
+                          <li key={idx} className="text-sm text-yellow-800 flex items-start gap-2">
+                            <span className="font-bold mt-0.5">•</span>
+                            <span>{opportunity}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
+                  {analysis.seoAnalysis?.recommendations?.length > 0 && (
+                    <div className="mb-4 bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                      <h4 className="text-sm font-bold text-green-900 mb-3 flex items-center">
+                        ✅ Good Practices ({analysis.seoAnalysis.recommendations.length})
+                      </h4>
+                      <ul className="space-y-2">
+                        {analysis.seoAnalysis.recommendations.map((rec, idx) => (
+                          <li key={idx} className="text-sm text-green-800 flex items-start gap-2">
+                            <span className="font-bold mt-0.5">✓</span>
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Quick Stats */}
+                  <div className="grid grid-cols-4 gap-4 mt-4">
+                    {analysis.content?.wordCount && (
+                      <div className="bg-white p-3 rounded-lg text-center shadow-sm">
+                        <div className="text-2xl font-bold text-gray-900">{analysis.content.wordCount}</div>
+                        <div className="text-xs text-gray-600">Words</div>
+                      </div>
+                    )}
+                    {analysis.images?.total !== undefined && (
+                      <div className="bg-white p-3 rounded-lg text-center shadow-sm">
+                        <div className="text-2xl font-bold text-gray-900">{analysis.images.withAlt}/{analysis.images.total}</div>
+                        <div className="text-xs text-gray-600">Alt Tags</div>
+                      </div>
+                    )}
+                    {analysis.links?.internal?.count !== undefined && (
+                      <div className="bg-white p-3 rounded-lg text-center shadow-sm">
+                        <div className="text-2xl font-bold text-gray-900">{analysis.links.internal.count}</div>
+                        <div className="text-xs text-gray-600">Internal Links</div>
+                      </div>
+                    )}
+                    {analysis.headings?.h1Count !== undefined && (
+                      <div className="bg-white p-3 rounded-lg text-center shadow-sm">
+                        <div className={`text-2xl font-bold ${
+                          analysis.headings.h1Count === 1 ? 'text-green-600' :
+                          analysis.headings.h1Count === 0 ? 'text-red-600' :
+                          'text-orange-600'
+                        }`}>
+                          {analysis.headings.h1Count}
+                        </div>
+                        <div className="text-xs text-gray-600">H1 Tags</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
