@@ -53,8 +53,8 @@ class AuditService {
       console.log('📋 Step 1 completed. Pages discovered:', discoveredPages.length);
       
       // Step 2: Analyze each discovered page
-      console.log('🔍 Step 2: Starting page analysis...');
-      const pageAnalysisPromises = discoveredPages.slice(0, 10).map(page => // Limit to 10 pages for performance
+      console.log('🔍 Step 2: Starting comprehensive page analysis...');
+      const pageAnalysisPromises = discoveredPages.slice(0, 30).map(page => // Increased from 10 to 30 pages
         this.analyzePageSEO(page.url, baseUrl)
       );
       
@@ -99,13 +99,13 @@ class AuditService {
    */
   async discoverPages(baseUrl) {
     try {
-      console.log('🔍 Starting page discovery for:', baseUrl);
+      console.log('🔍 Starting comprehensive page discovery for:', baseUrl);
       const discoveredPages = [];
       const visited = new Set();
       const toVisit = [baseUrl];
       
-      // Limit to prevent infinite crawling
-      const maxPages = 20;
+      // Increased limit for more comprehensive crawling
+      const maxPages = 50; // Increased from 20 to 50
       
       while (toVisit.length > 0 && discoveredPages.length < maxPages) {
         const currentUrl = toVisit.shift();
@@ -114,31 +114,59 @@ class AuditService {
         visited.add(currentUrl);
         
         try {
-          console.log('📄 Analyzing page:', currentUrl);
+          console.log(`📄 Analyzing page ${discoveredPages.length + 1}/${maxPages}:`, currentUrl);
           const response = await axios.get(currentUrl, { 
-            timeout: 10000,
+            timeout: 15000, // Increased timeout
             headers: {
-              'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0)'
+              'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0; +https://seo-audit.example.com)'
             }
           });
           
           const $ = cheerio.load(response.data);
           const title = $('title').text().trim();
           const metaDescription = $('meta[name="description"]').attr('content') || '';
+          const h1 = $('h1').first().text().trim();
+          const robots = $('meta[name="robots"]').attr('content') || '';
+          
+          // Get content preview
+          const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+          const contentPreview = bodyText.substring(0, 500);
+          const wordCount = bodyText.split(' ').filter(w => w.length > 0).length;
           
           const pageData = {
             url: currentUrl,
             title: title,
+            h1: h1,
             metaDescription: metaDescription,
             statusCode: response.status,
             contentLength: response.data.length,
-            discoveredAt: new Date()
+            contentType: response.headers['content-type'] || '',
+            wordCount: wordCount,
+            contentPreview: contentPreview,
+            robots: robots,
+            isIndexable: !robots.toLowerCase().includes('noindex'),
+            discoveredAt: new Date(),
+            // SEO Quick Checks
+            issues: []
           };
           
-          discoveredPages.push(pageData);
-          console.log('✅ Page discovered:', pageData.url, 'Title:', pageData.title);
+          // Detect immediate SEO issues
+          if (!title) pageData.issues.push('Missing Title');
+          if (title && title.length < 30) pageData.issues.push('Title Too Short');
+          if (title && title.length > 60) pageData.issues.push('Title Too Long');
+          if (!metaDescription) pageData.issues.push('Missing Meta Description');
+          if (metaDescription && metaDescription.length < 120) pageData.issues.push('Meta Description Too Short');
+          if (!h1) pageData.issues.push('Missing H1');
+          if (wordCount < 300) pageData.issues.push('Thin Content');
           
-          // Find internal links to crawl
+          discoveredPages.push(pageData);
+          console.log(`✅ Page ${discoveredPages.length} discovered:`, pageData.url);
+          console.log(`   Title: ${pageData.title || '(missing)'}`);
+          console.log(`   H1: ${pageData.h1 || '(missing)'}`);
+          console.log(`   Word Count: ${wordCount}`);
+          console.log(`   Issues: ${pageData.issues.length > 0 ? pageData.issues.join(', ') : 'None'}`);
+          
+          // Find internal links to crawl - more aggressive discovery
           $('a[href]').each((i, element) => {
             const href = $(element).attr('href');
             if (href) {
@@ -150,9 +178,10 @@ class AuditService {
                 // Only crawl same domain, avoid fragments and common files
                 if (urlObj.hostname === baseUrlObj.hostname && 
                     !absoluteUrl.includes('#') &&
-                    !absoluteUrl.match(/\.(pdf|jpg|jpeg|png|gif|css|js|zip)$/i) &&
+                    !absoluteUrl.match(/\.(pdf|jpg|jpeg|png|gif|css|js|zip|xml|txt)$/i) &&
                     !visited.has(absoluteUrl) &&
-                    toVisit.length < 50) {
+                    !toVisit.includes(absoluteUrl) &&
+                    toVisit.length < 200) { // Allow larger queue
                   toVisit.push(absoluteUrl);
                 }
               } catch (urlError) {
@@ -162,12 +191,21 @@ class AuditService {
           });
           
         } catch (error) {
-          // Skip pages that can't be accessed
+          // Skip pages that can't be accessed but log them
           console.warn(`⚠️ Could not access page: ${currentUrl}`, error.message);
+          discoveredPages.push({
+            url: currentUrl,
+            title: 'Error Loading Page',
+            statusCode: error.response?.status || 0,
+            error: error.message,
+            issues: ['Page Load Error'],
+            discoveredAt: new Date()
+          });
         }
       }
       
       console.log('🎉 Page discovery completed. Found', discoveredPages.length, 'pages');
+      console.log('📊 Total issues found:', discoveredPages.reduce((sum, p) => sum + (p.issues?.length || 0), 0));
       return discoveredPages;
     } catch (error) {
       console.error('❌ Page discovery error:', error);
@@ -176,14 +214,14 @@ class AuditService {
   }
 
   /**
-   * Analyze individual page for SEO
+   * Analyze individual page for SEO with comprehensive opportunity detection
    */
   async analyzePageSEO(url, baseUrl) {
     try {
       const response = await axios.get(url, { 
-        timeout: 10000,
+        timeout: 15000,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0)'
+          'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0; +https://seo-audit.example.com)'
         }
       });
       
@@ -195,72 +233,112 @@ class AuditService {
       const metaKeywords = $('meta[name="keywords"]').attr('content') || '';
       const canonical = $('link[rel="canonical"]').attr('href') || '';
       const robots = $('meta[name="robots"]').attr('content') || '';
+      const viewport = $('meta[name="viewport"]').attr('content') || '';
+      const charset = $('meta[charset]').attr('charset') || $('meta[http-equiv="Content-Type"]').attr('content') || '';
+      const lang = $('html').attr('lang') || '';
       
       // Open Graph Tags
       const ogTitle = $('meta[property="og:title"]').attr('content') || '';
       const ogDescription = $('meta[property="og:description"]').attr('content') || '';
       const ogImage = $('meta[property="og:image"]').attr('content') || '';
       const ogUrl = $('meta[property="og:url"]').attr('content') || '';
+      const ogType = $('meta[property="og:type"]').attr('content') || '';
+      const ogSiteName = $('meta[property="og:site_name"]').attr('content') || '';
       
       // Twitter Card Tags
       const twitterCard = $('meta[name="twitter:card"]').attr('content') || '';
       const twitterTitle = $('meta[name="twitter:title"]').attr('content') || '';
       const twitterDescription = $('meta[name="twitter:description"]').attr('content') || '';
       const twitterImage = $('meta[name="twitter:image"]').attr('content') || '';
+      const twitterSite = $('meta[name="twitter:site"]').attr('content') || '';
       
-      // Heading Structure
+      // Heading Structure with full text
       const headings = [];
+      const h1Elements = [];
       ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].forEach(tag => {
         $(tag).each((i, element) => {
+          const text = $(element).text().trim();
           headings.push({
             tag: tag.toUpperCase(),
-            text: $(element).text().trim(),
+            text: text,
             level: parseInt(tag.substring(1))
           });
+          if (tag === 'h1') {
+            h1Elements.push(text);
+          }
         });
       });
       
-      // Images Analysis
+      // Images Analysis with detailed info
       const images = [];
       $('img').each((i, element) => {
         const src = $(element).attr('src');
         const alt = $(element).attr('alt') || '';
         const title = $(element).attr('title') || '';
+        const width = $(element).attr('width') || '';
+        const height = $(element).attr('height') || '';
+        const loading = $(element).attr('loading') || '';
         
         images.push({
           src: src ? this.resolveUrl(baseUrl, src) : '',
           alt: alt,
           title: title,
+          width: width,
+          height: height,
+          loading: loading,
           hasAlt: !!alt,
-          altLength: alt.length
+          altLength: alt.length,
+          hasLazyLoading: loading === 'lazy',
+          hasDimensions: !!(width && height)
         });
       });
       
-      // Links Analysis
+      // Links Analysis with more details
       const internalLinks = [];
       const externalLinks = [];
+      const brokenLinkCandidates = [];
       
       $('a[href]').each((i, element) => {
         const href = $(element).attr('href');
         const text = $(element).text().trim();
         const title = $(element).attr('title') || '';
+        const rel = $(element).attr('rel') || '';
         
         if (href) {
-          const absoluteUrl = this.resolveUrl(baseUrl, href);
-          const urlObj = new URL(absoluteUrl);
-          const baseUrlObj = new URL(baseUrl);
-          
-          const linkData = {
-            href: absoluteUrl,
-            text: text,
-            title: title,
-            isNofollow: $(element).attr('rel')?.includes('nofollow') || false
-          };
-          
-          if (urlObj.hostname === baseUrlObj.hostname) {
-            internalLinks.push(linkData);
-          } else {
-            externalLinks.push(linkData);
+          try {
+            const absoluteUrl = this.resolveUrl(baseUrl, href);
+            const urlObj = new URL(absoluteUrl);
+            const baseUrlObj = new URL(baseUrl);
+            
+            const linkData = {
+              href: absoluteUrl,
+              text: text,
+              title: title,
+              rel: rel,
+              isNofollow: rel.includes('nofollow'),
+              isSponsored: rel.includes('sponsored'),
+              isUGC: rel.includes('ugc'),
+              hasAnchorText: !!text,
+              anchorTextLength: text.length
+            };
+            
+            if (urlObj.hostname === baseUrlObj.hostname) {
+              internalLinks.push(linkData);
+            } else {
+              externalLinks.push(linkData);
+            }
+            
+            // Check for potential broken links
+            if (href.includes('404') || href.includes('error') || href === '#') {
+              brokenLinkCandidates.push(linkData);
+            }
+          } catch (e) {
+            // Invalid URL
+            brokenLinkCandidates.push({
+              href: href,
+              text: text,
+              error: 'Invalid URL'
+            });
           }
         }
       });
@@ -287,34 +365,150 @@ class AuditService {
         jsFiles.push($(element).attr('src'));
       });
       
-      // Content Analysis
-      const textContent = $('body').text().replace(/\s+/g, ' ').trim();
-      const wordCount = textContent.split(' ').length;
+      // Content Analysis with more details
+      const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+      const wordCount = bodyText.split(' ').filter(w => w.length > 0).length;
+      const paragraphs = $('p').length;
+      const lists = $('ul, ol').length;
+      const tables = $('table').length;
+      
+      // Check for videos
+      const videos = $('video, iframe[src*="youtube"], iframe[src*="vimeo"]').length;
+      
+      // Check for forms
+      const forms = $('form').length;
+      
+      // SEO Opportunities Detection
+      const seoOpportunities = [];
+      const criticalIssues = [];
+      const recommendations = [];
+      
+      // Title opportunities
+      if (!title) {
+        criticalIssues.push('🔴 CRITICAL: Missing title tag - add unique, descriptive title');
+      } else if (title.length < 30) {
+        seoOpportunities.push('📝 Title is too short (under 30 chars) - expand for better SEO');
+      } else if (title.length > 60) {
+        seoOpportunities.push('✂️ Title is too long (over 60 chars) - will be truncated in search results');
+      }
+      
+      // Meta description opportunities
+      if (!metaDescription) {
+        criticalIssues.push('🔴 CRITICAL: Missing meta description - add compelling 120-160 char description');
+      } else if (metaDescription.length < 120) {
+        seoOpportunities.push('📝 Meta description is short - expand to 120-160 chars for better CTR');
+      } else if (metaDescription.length > 160) {
+        seoOpportunities.push('✂️ Meta description is too long - will be truncated in search results');
+      }
+      
+      // H1 opportunities
+      if (h1Elements.length === 0) {
+        criticalIssues.push('🔴 CRITICAL: Missing H1 tag - add clear, keyword-rich heading');
+      } else if (h1Elements.length > 1) {
+        seoOpportunities.push(`⚠️ Multiple H1 tags found (${h1Elements.length}) - use only one H1 per page`);
+      }
+      
+      // Content opportunities
+      if (wordCount < 300) {
+        criticalIssues.push(`🔴 CRITICAL: Thin content (${wordCount} words) - add at least 300 words for better ranking`);
+      } else if (wordCount < 500) {
+        seoOpportunities.push(`📝 Content could be expanded (${wordCount} words) - aim for 500+ words`);
+      } else if (wordCount > 2000) {
+        recommendations.push(`✅ Excellent content length (${wordCount} words)`);
+      }
+      
+      // Image opportunities
+      const imagesWithoutAlt = images.filter(img => !img.hasAlt).length;
+      if (imagesWithoutAlt > 0) {
+        criticalIssues.push(`🖼️ ${imagesWithoutAlt} images missing alt text - critical for accessibility and SEO`);
+      }
+      
+      const imagesWithoutLazyLoad = images.filter(img => !img.hasLazyLoading).length;
+      if (imagesWithoutLazyLoad > 3) {
+        seoOpportunities.push(`⚡ ${imagesWithoutLazyLoad} images without lazy loading - add loading="lazy" for performance`);
+      }
+      
+      // Link opportunities
+      if (internalLinks.length === 0) {
+        seoOpportunities.push('🔗 No internal links found - add links to other pages for better site structure');
+      } else if (internalLinks.length < 3) {
+        seoOpportunities.push(`🔗 Only ${internalLinks.length} internal links - add more for better internal linking`);
+      }
+      
+      const externalNofollow = externalLinks.filter(l => l.isNofollow).length;
+      const externalDofollow = externalLinks.length - externalNofollow;
+      if (externalDofollow > 5) {
+        seoOpportunities.push(`🌐 ${externalDofollow} external dofollow links - consider adding nofollow to some`);
+      }
+      
+      // Social media opportunities
+      if (!ogTitle || !ogDescription || !ogImage) {
+        seoOpportunities.push('📱 Incomplete Open Graph tags - add for better social media sharing');
+      }
+      
+      if (!twitterCard) {
+        seoOpportunities.push('🐦 Missing Twitter Card tags - add for better Twitter sharing');
+      }
+      
+      // Technical opportunities
+      if (!canonical) {
+        seoOpportunities.push('🔗 Missing canonical URL - add to prevent duplicate content issues');
+      }
+      
+      if (!viewport) {
+        criticalIssues.push('📱 CRITICAL: Missing viewport meta tag - essential for mobile responsiveness');
+      }
+      
+      if (!charset) {
+        seoOpportunities.push('🔤 Missing charset declaration - add <meta charset="utf-8">');
+      }
+      
+      if (!lang) {
+        seoOpportunities.push('🌍 Missing HTML lang attribute - specify language for better accessibility');
+      }
+      
+      if (structuredData.length === 0) {
+        seoOpportunities.push('📊 No structured data found - add Schema.org markup for rich snippets');
+      }
+      
+      // Performance opportunities
+      if (cssFiles.length > 5) {
+        seoOpportunities.push(`🎨 ${cssFiles.length} CSS files loaded - consider combining for better performance`);
+      }
+      
+      if (jsFiles.length > 10) {
+        seoOpportunities.push(`⚙️ ${jsFiles.length} JS files loaded - consider combining and minifying`);
+      }
       
       return {
         url: url,
         statusCode: response.status,
         loadTime: response.headers['x-response-time'] || null,
         
-        // Meta Data
+        // Meta Data with opportunities
         metaData: {
           title: {
             text: title,
             length: title.length,
             isEmpty: !title,
             isTooShort: title.length < 30,
-            isTooLong: title.length > 60
+            isTooLong: title.length > 60,
+            isOptimal: title.length >= 30 && title.length <= 60
           },
           description: {
             text: metaDescription,
             length: metaDescription.length,
             isEmpty: !metaDescription,
             isTooShort: metaDescription.length < 120,
-            isTooLong: metaDescription.length > 160
+            isTooLong: metaDescription.length > 160,
+            isOptimal: metaDescription.length >= 120 && metaDescription.length <= 160
           },
           keywords: metaKeywords,
           canonical: canonical,
-          robots: robots
+          robots: robots,
+          viewport: viewport,
+          charset: charset,
+          lang: lang
         },
         
         // Social Media Tags
@@ -323,22 +517,29 @@ class AuditService {
             title: ogTitle,
             description: ogDescription,
             image: ogImage,
-            url: ogUrl
+            url: ogUrl,
+            type: ogType,
+            siteName: ogSiteName,
+            isComplete: !!(ogTitle && ogDescription && ogImage)
           },
           twitter: {
             card: twitterCard,
             title: twitterTitle,
             description: twitterDescription,
-            image: twitterImage
+            image: twitterImage,
+            site: twitterSite,
+            isComplete: !!(twitterCard && twitterTitle)
           }
         },
         
         // Content Structure
         headings: {
           structure: headings,
-          h1Count: headings.filter(h => h.tag === 'H1').length,
-          hasH1: headings.some(h => h.tag === 'H1'),
-          hasMultipleH1: headings.filter(h => h.tag === 'H1').length > 1
+          h1Count: h1Elements.length,
+          h1Text: h1Elements,
+          hasH1: h1Elements.length > 0,
+          hasMultipleH1: h1Elements.length > 1,
+          totalHeadings: headings.length
         },
         
         // Images
@@ -346,6 +547,8 @@ class AuditService {
           total: images.length,
           withAlt: images.filter(img => img.hasAlt).length,
           withoutAlt: images.filter(img => !img.hasAlt).length,
+          withLazyLoading: images.filter(img => img.hasLazyLoading).length,
+          withDimensions: images.filter(img => img.hasDimensions).length,
           details: images
         },
         
@@ -357,25 +560,59 @@ class AuditService {
           },
           external: {
             count: externalLinks.length,
+            dofollow: externalDofollow,
+            nofollow: externalNofollow,
             details: externalLinks
-          }
+          },
+          potentiallyBroken: brokenLinkCandidates.length
         },
         
         // Structured Data
-        structuredData: structuredData,
+        structuredData: {
+          count: structuredData.length,
+          types: structuredData.map(s => s['@type']).filter(Boolean),
+          data: structuredData
+        },
         
         // Performance
         performance: {
           cssFiles: cssFiles.length,
           jsFiles: jsFiles.length,
-          totalRequests: cssFiles.length + jsFiles.length,
+          totalResources: cssFiles.length + jsFiles.length,
+          htmlSize: response.data.length
         },
         
         // Content
         content: {
           wordCount: wordCount,
-          textLength: textContent.length,
-          htmlSize: response.data.length
+          paragraphs: paragraphs,
+          lists: lists,
+          tables: tables,
+          videos: videos,
+          forms: forms,
+          textLength: bodyText.length,
+          htmlSize: response.data.length,
+          contentDensity: (wordCount / response.data.length * 100).toFixed(2) + '%'
+        },
+        
+        // SEO Opportunities & Issues
+        seoAnalysis: {
+          criticalIssues: criticalIssues,
+          opportunities: seoOpportunities,
+          recommendations: recommendations,
+          totalIssues: criticalIssues.length + seoOpportunities.length,
+          seoScore: this.calculatePageSEOScore({
+            hasTitle: !!title,
+            titleLength: title.length,
+            hasDescription: !!metaDescription,
+            descriptionLength: metaDescription.length,
+            hasH1: h1Elements.length === 1,
+            wordCount: wordCount,
+            imagesWithAlt: images.filter(img => img.hasAlt).length,
+            totalImages: images.length,
+            internalLinks: internalLinks.length,
+            hasStructuredData: structuredData.length > 0
+          })
         },
         
         analyzedAt: new Date()
@@ -386,9 +623,51 @@ class AuditService {
       return {
         url: url,
         error: error.message,
+        seoAnalysis: {
+          criticalIssues: ['Failed to analyze page: ' + error.message],
+          opportunities: [],
+          recommendations: []
+        },
         analyzedAt: new Date()
       };
     }
+  }
+
+  /**
+   * Calculate page-level SEO score
+   */
+  calculatePageSEOScore(metrics) {
+    let score = 100;
+    
+    // Title (20 points)
+    if (!metrics.hasTitle) score -= 20;
+    else if (metrics.titleLength < 30 || metrics.titleLength > 60) score -= 10;
+    
+    // Description (20 points)
+    if (!metrics.hasDescription) score -= 20;
+    else if (metrics.descriptionLength < 120 || metrics.descriptionLength > 160) score -= 10;
+    
+    // H1 (15 points)
+    if (!metrics.hasH1) score -= 15;
+    
+    // Content (20 points)
+    if (metrics.wordCount < 300) score -= 20;
+    else if (metrics.wordCount < 500) score -= 10;
+    
+    // Images (10 points)
+    if (metrics.totalImages > 0) {
+      const altRatio = metrics.imagesWithAlt / metrics.totalImages;
+      score -= (1 - altRatio) * 10;
+    }
+    
+    // Internal Links (10 points)
+    if (metrics.internalLinks === 0) score -= 10;
+    else if (metrics.internalLinks < 3) score -= 5;
+    
+    // Structured Data (5 points)
+    if (!metrics.hasStructuredData) score -= 5;
+    
+    return Math.max(0, Math.round(score));
   }
 
   /**
