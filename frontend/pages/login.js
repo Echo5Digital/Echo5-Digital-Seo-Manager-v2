@@ -86,7 +86,7 @@ export default function Login() {
 
           <div className="text-center text-sm text-gray-500 mt-4">
             <p>Demo Credentials:</p>
-            <p className="font-mono text-xs mt-1">boss@echo5.com / password123</p>
+            <p className="font-mono text-xs mt-1">admin@echo5.com / Admin@123456</p>
           </div>
         </form>
       </div>

@@ -6,6 +6,7 @@ const useAuthStore = create((set, get) => ({
   isAuthenticated: false,
   loading: false,
   error: null,
+  initialized: false,
 
   // Initialize auth from localStorage
   initAuth: () => {
@@ -13,11 +14,21 @@ const useAuthStore = create((set, get) => ({
       const token = localStorage.getItem('token')
       const user = localStorage.getItem('user')
       if (token && user) {
-        set({
-          token,
-          user: JSON.parse(user),
-          isAuthenticated: true
-        })
+        try {
+          set({
+            token,
+            user: JSON.parse(user),
+            isAuthenticated: true,
+            initialized: true
+          })
+        } catch (error) {
+          console.error('Error parsing user data:', error)
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          set({ initialized: true })
+        }
+      } else {
+        set({ initialized: true })
       }
     }
   },
