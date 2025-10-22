@@ -160,19 +160,6 @@ export default function AuditDetailed() {
           </div>
         </div>
 
-        {/* Debug Info - Remove in production */}
-        <div className="bg-gray-100 rounded-lg p-4 text-xs">
-          <h3 className="font-bold mb-2">📊 Audit Data Summary:</h3>
-          <div className="space-y-1">
-            <div>Status: <span className="font-semibold">{audit.status}</span></div>
-            <div>Discovered Pages: <span className="font-semibold">{audit.results?.discoveredPages?.length || 0}</span></div>
-            <div>Page Analysis: <span className="font-semibold">{audit.results?.pageAnalysis?.length || 0}</span></div>
-            <div>Meta Analysis: <span className="font-semibold">{audit.results?.metaAnalysis?.length || 0}</span></div>
-            <div>Image Analysis: <span className="font-semibold">{audit.results?.imageAnalysis?.length || 0}</span></div>
-            <div>Has AI Analysis: <span className="font-semibold">{audit.aiAnalysis ? 'Yes' : 'No'}</span></div>
-          </div>
-        </div>
-
         {/* Issues Summary */}
         {audit.summary && (
           <div className="grid grid-cols-4 gap-6">
@@ -904,13 +891,266 @@ export default function AuditDetailed() {
           </div>
         )}
 
-        {/* Raw JSON Data */}
-        <div className="bg-gray-900 rounded-xl shadow-xl p-8">
-          <h2 className="text-2xl font-bold text-white mb-4">📊 Complete Raw Audit Data (JSON)</h2>
-          <div className="bg-gray-800 rounded-lg p-4 overflow-auto max-h-96">
-            <pre className="text-green-400 text-xs font-mono">
-              {JSON.stringify(audit, null, 2)}
-            </pre>
+        {/* ALL PAGES SUMMARY TABLE */}
+        <div className="bg-white rounded-xl shadow-xl p-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-6 flex items-center border-b-4 border-indigo-500 pb-4">
+            <svg className="w-8 h-8 mr-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            </svg>
+            Complete Pages Summary Table
+          </h2>
+
+          {/* Summary Stats */}
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="text-2xl font-bold text-blue-600">{audit.results?.discoveredPages?.length || 0}</div>
+              <div className="text-sm text-gray-600">Pages Discovered</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg text-center">
+              <div className="text-2xl font-bold text-purple-600">{audit.results?.pageAnalysis?.length || 0}</div>
+              <div className="text-sm text-gray-600">Pages Analyzed</div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {audit.results?.pageAnalysis?.filter(p => p.seoAnalysis?.seoScore >= 70).length || 0}
+              </div>
+              <div className="text-sm text-gray-600">Good SEO Scores</div>
+            </div>
+            <div className="bg-red-50 p-4 rounded-lg text-center">
+              <div className="text-2xl font-bold text-red-600">
+                {audit.results?.pageAnalysis?.reduce((sum, p) => sum + (p.seoAnalysis?.criticalIssues?.length || 0), 0) || 0}
+              </div>
+              <div className="text-sm text-gray-600">Total Critical Issues</div>
+            </div>
+          </div>
+
+          {/* Pages Table */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r">
+                    #
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r">
+                    Page URL
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r">
+                    Title
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider border-r">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider border-r">
+                    SEO Score
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider border-r">
+                    Words
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider border-r">
+                    Images
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Issues
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {audit.results?.pageAnalysis?.map((page, index) => (
+                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-sm font-bold text-gray-600 border-r">
+                      {index + 1}
+                    </td>
+                    <td className="px-4 py-3 text-sm border-r">
+                      <a
+                        href={page.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline font-medium break-all"
+                      >
+                        {page.url}
+                      </a>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 border-r max-w-xs">
+                      <div className="truncate" title={page.metaData?.title?.text || 'No Title'}>
+                        {page.metaData?.title?.text || '⚠️ No Title'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center border-r">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${
+                        page.statusCode === 200 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {page.statusCode}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center border-r">
+                      {page.seoAnalysis?.seoScore ? (
+                        <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                          page.seoAnalysis.seoScore >= 80 ? 'bg-green-100 text-green-800' :
+                          page.seoAnalysis.seoScore >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                          page.seoAnalysis.seoScore >= 40 ? 'bg-orange-100 text-orange-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {page.seoAnalysis.seoScore}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm text-gray-900 border-r">
+                      {page.content?.wordCount || 0}
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm border-r">
+                      {page.images?.total > 0 ? (
+                        <span className={`${
+                          page.images.withoutAlt > 0 ? 'text-orange-600 font-semibold' : 'text-green-600'
+                        }`}>
+                          {page.images.withAlt}/{page.images.total}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">0</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        {page.seoAnalysis?.criticalIssues?.length > 0 && (
+                          <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-bold">
+                            🔴 {page.seoAnalysis.criticalIssues.length}
+                          </span>
+                        )}
+                        {page.seoAnalysis?.opportunities?.length > 0 && (
+                          <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-bold">
+                            ⚠️ {page.seoAnalysis.opportunities.length}
+                          </span>
+                        )}
+                        {(!page.seoAnalysis?.criticalIssues?.length && !page.seoAnalysis?.opportunities?.length) && (
+                          <span className="text-green-600 text-sm">✓</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                
+                {/* If no pageAnalysis, show discovered pages */}
+                {(!audit.results?.pageAnalysis || audit.results.pageAnalysis.length === 0) && 
+                 audit.results?.discoveredPages?.map((page, index) => (
+                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-sm font-bold text-gray-600 border-r">
+                      {index + 1}
+                    </td>
+                    <td className="px-4 py-3 text-sm border-r">
+                      <a
+                        href={page.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline font-medium break-all"
+                      >
+                        {page.url}
+                      </a>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 border-r max-w-xs">
+                      <div className="truncate" title={page.title || 'No Title'}>
+                        {page.title || '⚠️ No Title'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center border-r">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${
+                        page.statusCode === 200 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {page.statusCode}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center border-r">
+                      <span className="text-gray-400">-</span>
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm text-gray-900 border-r">
+                      {page.wordCount || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm border-r">
+                      <span className="text-gray-400">-</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {page.issues && page.issues.length > 0 ? (
+                        <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-bold">
+                          {page.issues.length}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                
+                {(!audit.results?.pageAnalysis || audit.results.pageAnalysis.length === 0) &&
+                 (!audit.results?.discoveredPages || audit.results.discoveredPages.length === 0) && (
+                  <tr>
+                    <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                      No pages found in this audit
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Table Legend */}
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h4 className="text-sm font-bold text-gray-700 mb-3">📖 Table Legend:</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+              <div>
+                <span className="font-semibold">SEO Score:</span>
+                <div className="mt-1 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 bg-green-500 rounded"></span>
+                    <span>80-100: Excellent</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 bg-yellow-500 rounded"></span>
+                    <span>60-79: Good</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 bg-orange-500 rounded"></span>
+                    <span>40-59: Fair</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 bg-red-500 rounded"></span>
+                    <span>0-39: Poor</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <span className="font-semibold">Status Code:</span>
+                <div className="mt-1 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 bg-green-500 rounded"></span>
+                    <span>200: Success</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 bg-red-500 rounded"></span>
+                    <span>Other: Error</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <span className="font-semibold">Images:</span>
+                <div className="mt-1">
+                  <span className="text-gray-600">Shows: With Alt / Total</span>
+                </div>
+              </div>
+              <div>
+                <span className="font-semibold">Issues:</span>
+                <div className="mt-1 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-red-600">🔴</span>
+                    <span>Critical</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-yellow-600">⚠️</span>
+                    <span>Opportunities</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
