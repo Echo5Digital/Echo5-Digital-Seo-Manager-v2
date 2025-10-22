@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/router'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import AuditProgressBar from '../components/AuditProgressBar'
@@ -15,6 +16,7 @@ import {
 } from '@heroicons/react/24/outline'
 
 export default function Audits() {
+  const router = useRouter()
   const audits = useAuditStore(state => state.audits)
   const fetchAudits = useAuditStore(state => state.fetchAudits)
   const runAudit = useAuditStore(state => state.runAudit)
@@ -159,14 +161,7 @@ export default function Audits() {
   }
 
   const handleViewDetails = async (auditId) => {
-    try {
-      const audit = await getAuditDetails(auditId)
-      setSelectedAudit(audit)
-      setShowDetailsModal(true)
-    } catch (error) {
-      console.error('Error loading audit details:', error)
-      alert('Failed to load audit details')
-    }
+    router.push(`/audits-detailed?id=${auditId}`)
   }
 
   const handleDeleteAudit = async (auditId) => {
