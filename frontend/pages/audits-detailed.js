@@ -189,9 +189,81 @@ export default function AuditDetailed() {
             <h2 className="text-2xl font-bold text-purple-900 mb-4 flex items-center">
               🤖 AI-Powered Analysis & Recommendations
             </h2>
-            <div className="prose prose-lg max-w-none text-gray-800 whitespace-pre-wrap">
-              {audit.aiAnalysis}
-            </div>
+            {typeof audit.aiAnalysis === 'string' ? (
+              <div className="prose prose-lg max-w-none text-gray-800 whitespace-pre-wrap">
+                {audit.aiAnalysis}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Executive Summary */}
+                {audit.aiAnalysis.executiveSummary && (
+                  <div className="bg-white p-5 rounded-lg shadow-md">
+                    <h3 className="text-lg font-bold text-purple-900 mb-3">📊 Executive Summary</h3>
+                    <p className="text-gray-800">{audit.aiAnalysis.executiveSummary}</p>
+                  </div>
+                )}
+
+                {/* Top Priorities */}
+                {audit.aiAnalysis.topPriorities && audit.aiAnalysis.topPriorities.length > 0 && (
+                  <div className="bg-white p-5 rounded-lg shadow-md">
+                    <h3 className="text-lg font-bold text-red-900 mb-3">🔴 Top Priorities</h3>
+                    <ul className="space-y-2">
+                      {audit.aiAnalysis.topPriorities.map((priority, idx) => (
+                        <li key={idx} className="flex items-start gap-3">
+                          <span className="text-red-600 font-bold mt-1">•</span>
+                          <span className="text-gray-800">{priority}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Quick Wins */}
+                {audit.aiAnalysis.quickWins && audit.aiAnalysis.quickWins.length > 0 && (
+                  <div className="bg-white p-5 rounded-lg shadow-md">
+                    <h3 className="text-lg font-bold text-green-900 mb-3">⚡ Quick Wins</h3>
+                    <ul className="space-y-2">
+                      {audit.aiAnalysis.quickWins.map((win, idx) => (
+                        <li key={idx} className="flex items-start gap-3">
+                          <span className="text-green-600 font-bold mt-1">✓</span>
+                          <span className="text-gray-800">{win}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Long Term Actions */}
+                {audit.aiAnalysis.longTermActions && audit.aiAnalysis.longTermActions.length > 0 && (
+                  <div className="bg-white p-5 rounded-lg shadow-md">
+                    <h3 className="text-lg font-bold text-blue-900 mb-3">🎯 Long-Term Actions</h3>
+                    <ul className="space-y-2">
+                      {audit.aiAnalysis.longTermActions.map((action, idx) => (
+                        <li key={idx} className="flex items-start gap-3">
+                          <span className="text-blue-600 font-bold mt-1">→</span>
+                          <span className="text-gray-800">{action}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Estimated Impact */}
+                {audit.aiAnalysis.estimatedImpact && (
+                  <div className="bg-white p-5 rounded-lg shadow-md">
+                    <h3 className="text-lg font-bold text-purple-900 mb-3">📈 Estimated Impact</h3>
+                    <p className="text-gray-800">{audit.aiAnalysis.estimatedImpact}</p>
+                  </div>
+                )}
+
+                {/* Analyzed Date */}
+                {audit.aiAnalysis.analyzedAt && (
+                  <div className="text-sm text-purple-700">
+                    Analysis performed: {formatDate(audit.aiAnalysis.analyzedAt)}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
