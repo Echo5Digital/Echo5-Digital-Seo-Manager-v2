@@ -1,38 +1,33 @@
-# Nuxt dependencies
-node_modules/
-.nuxt/
-.output/
-.data/
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
 
-# Package managers
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
+# Testing
+/coverage
 
-# Environment
-.env
-.env.local
-.env.production
+# Next.js
+/.next/
+/out/
 
-# Logs
-*.log
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# OS
-.DS_Store
-Thumbs.db
+# Local env files
+.env*.local
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Vercel
+.vercel
 
-# Testing
-coverage/
-.nyc_output/
-
-# Build
-dist/
+# Typescript
+*.tsbuildinfo
+next-env.d.ts

@@ -6,6 +6,33 @@ const { protect } = require('../middleware/auth');
 const auditService = require('../services/audit.service');
 const aiService = require('../services/ai.service');
 
+// Test endpoint for debugging page discovery
+router.get('/test-discovery/:domain', protect, async (req, res) => {
+  try {
+    const { domain } = req.params;
+    const baseUrl = domain.startsWith('http') ? domain : `https://${domain}`;
+    
+    console.log('🧪 Testing page discovery for:', baseUrl);
+    const discoveredPages = await auditService.discoverPages(baseUrl);
+    
+    res.json({
+      status: 'success',
+      data: {
+        domain: baseUrl,
+        pagesFound: discoveredPages.length,
+        pages: discoveredPages
+      }
+    });
+  } catch (error) {
+    console.error('Test discovery error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to test page discovery',
+      error: error.message
+    });
+  }
+});
+
 // POST /api/audits - Run audit (new API endpoint)
 router.post('/', protect, async (req, res, next) => {
   try {
@@ -35,8 +62,8 @@ router.post('/', protect, async (req, res, next) => {
       triggeredBy: req.user._id,
     });
 
-    // Start audit (async) - Use enhanced audit for comprehensive analysis
-    auditService.performEnhancedAudit(url || client.domain)
+    // Start audit (async)
+    auditService.performFullAudit(url || client.domain)
       .then(async (results) => {
         const summary = auditService.calculateAuditScore(results);
         const aiAnalysis = await aiService.analyzeAuditResults(summary, url || client.domain);

@@ -1,12 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    "./components/**/*.{js,vue,ts}",
-    "./layouts/**/*.vue",
-    "./pages/**/*.vue",
-    "./plugins/**/*.{js,ts}",
-    "./app.vue",
-    "./error.vue",
+    './pages/**/*.{js,jsx}',
+    './components/**/*.{js,jsx}',
+    './app/**/*.{js,jsx}',
   ],
   theme: {
     extend: {
@@ -22,21 +19,6 @@ module.exports = {
           700: '#1d4ed8',
           800: '#1e40af',
           900: '#1e3a8a',
-        },
-        success: {
-          50: '#f0fdf4',
-          500: '#22c55e',
-          700: '#15803d',
-        },
-        warning: {
-          50: '#fffbeb',
-          500: '#f59e0b',
-          700: '#b45309',
-        },
-        danger: {
-          50: '#fef2f2',
-          500: '#ef4444',
-          700: '#b91c1c',
         },
       },
     },
