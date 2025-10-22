@@ -23,6 +23,11 @@ export default function AuditDetailed() {
   
   const [audit, setAudit] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [selectedPageIndex, setSelectedPageIndex] = useState(null)
+  const [viewMode, setViewMode] = useState('overview') // 'overview' or 'page-detail'
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterBy, setFilterBy] = useState('all') // 'all', 'critical', 'opportunities', 'good'
+  const [sortBy, setSortBy] = useState('index') // 'index', 'score', 'issues'
   const [collapsedSections, setCollapsedSections] = useState({
     discoveredPages: false,
     seoAnalysis: false,
@@ -38,6 +43,18 @@ export default function AuditDetailed() {
       ...prev,
       [section]: !prev[section]
     }))
+  }
+
+  const selectPage = (index) => {
+    setSelectedPageIndex(index)
+    setViewMode('page-detail')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const backToOverview = () => {
+    setSelectedPageIndex(null)
+    setViewMode('overview')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   useEffect(() => {
@@ -228,6 +245,58 @@ export default function AuditDetailed() {
           </div>
         )}
 
+        {/* Content Summary */}
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-6 shadow-lg">
+          <h3 className="text-xl font-bold text-indigo-900 mb-4 flex items-center">
+            📊 Audit Content Summary
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg shadow text-center">
+              <div className="text-3xl font-bold text-blue-600 mb-1">
+                {audit.results?.discoveredPages?.length || 0}
+              </div>
+              <div className="text-xs text-gray-600">Pages Discovered</div>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow text-center">
+              <div className="text-3xl font-bold text-orange-600 mb-1">
+                {audit.results?.pageAnalysis?.length || 0}
+              </div>
+              <div className="text-xs text-gray-600">SEO Analyses</div>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow text-center">
+              <div className="text-3xl font-bold text-purple-600 mb-1">
+                {audit.results?.metaAnalysis?.length || 0}
+              </div>
+              <div className="text-xs text-gray-600">Meta Tags Analyzed</div>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow text-center">
+              <div className="text-3xl font-bold text-green-600 mb-1">
+                {audit.results?.headingStructure?.length || 0}
+              </div>
+              <div className="text-xs text-gray-600">Heading Structures</div>
+            </div>
+          </div>
+          <div className="mt-4 text-sm text-indigo-700 text-center">
+            💡 Click on any page below to view detailed analysis
+          </div>
+        </div>
+
+        {/* View Mode Toggle */}
+        {viewMode === 'page-detail' && selectedPageIndex !== null && (
+          <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 flex items-center justify-between">
+            <button
+              onClick={backToOverview}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all shadow-md hover:shadow-lg"
+            >
+              <ArrowLeftIcon className="w-5 h-5" />
+              Back to All Pages
+            </button>
+            <div className="text-blue-900 font-semibold">
+              Viewing: Page {selectedPageIndex + 1} of {audit.results?.discoveredPages?.length || 0}
+            </div>
+          </div>
+        )}
+
         {/* AI Analysis */}
         {audit.aiAnalysis && (
           <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl p-8 shadow-lg">
@@ -312,86 +381,838 @@ export default function AuditDetailed() {
           </div>
         )}
 
-        {/* ALL DISCOVERED PAGES */}
-        {audit.results?.discoveredPages?.length > 0 && (
+        {/* PAGES TABLE VIEW - Overview Mode */}
+        {viewMode === 'overview' && audit.results?.discoveredPages?.length > 0 && (
           <div className="bg-white rounded-xl shadow-xl p-8">
-            <div 
-              className="flex items-center justify-between cursor-pointer border-b-4 border-blue-500 pb-4 mb-6"
-              onClick={() => toggleSection('discoveredPages')}
-            >
-              <h2 className="text-3xl font-bold text-gray-900 flex items-center">
+            <div className="border-b-4 border-blue-500 pb-6 mb-6">
+              <h2 className="text-3xl font-bold text-gray-900 flex items-center mb-4">
                 <DocumentMagnifyingGlassIcon className="w-8 h-8 mr-3 text-blue-600" />
                 All Discovered Pages ({audit.results.discoveredPages.length})
               </h2>
-              {collapsedSections.discoveredPages ? (
-                <ChevronDownIcon className="w-6 h-6 text-gray-600" />
-              ) : (
-                <ChevronUpIcon className="w-6 h-6 text-gray-600" />
+              <p className="text-gray-600 text-sm mb-6">
+                Click on any row to view detailed SEO analysis, issues, and recommendations for that specific page.
+              </p>
+
+              {/* Search and Filter Controls */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Search Bar */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="🔍 Search by URL or title..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Filter Dropdown */}
+                <div>
+                  <select
+                    value={filterBy}
+                    onChange={(e) => setFilterBy(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white"
+                  >
+                    <option value="all">📊 All Pages</option>
+                    <option value="critical">🔴 Critical Issues Only</option>
+                    <option value="opportunities">⚠️ Has Opportunities</option>
+                    <option value="good">✅ Good SEO Score (80+)</option>
+                    <option value="needs-work">⚡ Needs Work (&lt;60)</option>
+                  </select>
+                </div>
+
+                {/* Sort Dropdown */}
+                <div>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white"
+                  >
+                    <option value="index">🔢 Page Order</option>
+                    <option value="score-desc">📈 SEO Score (High to Low)</option>
+                    <option value="score-asc">📉 SEO Score (Low to High)</option>
+                    <option value="issues-desc">🔴 Most Issues First</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Active Filters Display */}
+              {(searchTerm || filterBy !== 'all' || sortBy !== 'index') && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {searchTerm && (
+                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                      Search: "{searchTerm}"
+                      <button onClick={() => setSearchTerm('')} className="text-blue-600 hover:text-blue-800">✕</button>
+                    </span>
+                  )}
+                  {filterBy !== 'all' && (
+                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
+                      Filter: {filterBy}
+                      <button onClick={() => setFilterBy('all')} className="text-purple-600 hover:text-purple-800">✕</button>
+                    </span>
+                  )}
+                  {sortBy !== 'index' && (
+                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                      Sort: {sortBy}
+                      <button onClick={() => setSortBy('index')} className="text-green-600 hover:text-green-800">✕</button>
+                    </span>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setFilterBy('all');
+                      setSortBy('index');
+                    }}
+                    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full text-sm font-medium transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
               )}
             </div>
-            {!collapsedSections.discoveredPages && (
-              <div className="space-y-4">
-              {audit.results.discoveredPages.map((page, index) => (
-                <div key={index} className="p-6 bg-gradient-to-r from-gray-50 to-blue-50 border-2 border-gray-200 rounded-xl hover:border-blue-400 transition-all shadow-sm">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1">
-                      <div className="text-xs font-bold text-blue-600 mb-2 uppercase tracking-wide">
-                        Page {index + 1} of {audit.results.discoveredPages.length}
-                      </div>
-                      <a
-                        href={page.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline font-semibold text-base break-all block mb-2"
-                      >
-                        🔗 {page.url}
-                      </a>
-                    </div>
-                    <div className="flex gap-2 ml-4 flex-shrink-0">
-                      <span className={`px-3 py-1 rounded-lg text-sm font-bold shadow-sm ${
-                        page.statusCode === 200 ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-                      }`}>
-                        {page.statusCode}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="mb-3">
-                    <div className="text-lg font-bold text-gray-900 mb-2">
-                      📄 {page.title || '⚠️ No Title'}
-                    </div>
-                    <div className="text-sm text-gray-700">
-                      📝 {page.metaDescription || '⚠️ No Meta Description'}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-4 gap-4 text-sm bg-white p-4 rounded-lg shadow-inner">
-                    <div>
-                      <span className="font-semibold text-gray-600">Size:</span>
-                      <span className="ml-2 text-gray-900 font-medium">{formatBytes(page.contentLength)}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-600">Type:</span>
-                      <span className="ml-2 text-gray-900 font-medium">{page.contentType || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-600">Discovered:</span>
-                      <span className="ml-2 text-gray-900 font-medium">{formatDate(page.discoveredAt)}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-600">Load Time:</span>
-                      <span className="ml-2 text-gray-900 font-medium">{page.loadTime || 'N/A'}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              </div>
-            )}
+            
+            <div className="overflow-x-auto shadow-lg rounded-lg">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
+                    <th className="p-4 font-bold text-sm">#</th>
+                    <th className="p-4 font-bold text-sm">Page URL</th>
+                    <th className="p-4 font-bold text-sm">Title</th>
+                    <th className="p-4 font-bold text-sm text-center">Status</th>
+                    <th className="p-4 font-bold text-sm text-center">SEO Score</th>
+                    <th className="p-4 font-bold text-sm text-center">Issues</th>
+                    <th className="p-4 font-bold text-sm text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    // Filter and sort pages
+                    let filteredPages = audit.results.discoveredPages.map((page, index) => ({
+                      ...page,
+                      originalIndex: index,
+                      pageAnalysis: audit.results?.pageAnalysis?.find(p => p.url === page.url),
+                    }));
+
+                    // Apply search
+                    if (searchTerm) {
+                      filteredPages = filteredPages.filter(item => 
+                        item.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        item.title?.toLowerCase().includes(searchTerm.toLowerCase())
+                      );
+                    }
+
+                    // Apply filter
+                    if (filterBy === 'critical') {
+                      filteredPages = filteredPages.filter(item => 
+                        (item.pageAnalysis?.seoAnalysis?.criticalIssues?.length || 0) > 0
+                      );
+                    } else if (filterBy === 'opportunities') {
+                      filteredPages = filteredPages.filter(item => 
+                        (item.pageAnalysis?.seoAnalysis?.opportunities?.length || 0) > 0
+                      );
+                    } else if (filterBy === 'good') {
+                      filteredPages = filteredPages.filter(item => 
+                        (item.pageAnalysis?.seoAnalysis?.seoScore || 0) >= 80
+                      );
+                    } else if (filterBy === 'needs-work') {
+                      filteredPages = filteredPages.filter(item => 
+                        (item.pageAnalysis?.seoAnalysis?.seoScore || 0) < 60
+                      );
+                    }
+
+                    // Apply sort
+                    if (sortBy === 'score-desc') {
+                      filteredPages.sort((a, b) => 
+                        (b.pageAnalysis?.seoAnalysis?.seoScore || 0) - (a.pageAnalysis?.seoAnalysis?.seoScore || 0)
+                      );
+                    } else if (sortBy === 'score-asc') {
+                      filteredPages.sort((a, b) => 
+                        (a.pageAnalysis?.seoAnalysis?.seoScore || 0) - (b.pageAnalysis?.seoAnalysis?.seoScore || 0)
+                      );
+                    } else if (sortBy === 'issues-desc') {
+                      filteredPages.sort((a, b) => {
+                        const aIssues = (a.pageAnalysis?.seoAnalysis?.criticalIssues?.length || 0) + 
+                                       (a.pageAnalysis?.seoAnalysis?.opportunities?.length || 0);
+                        const bIssues = (b.pageAnalysis?.seoAnalysis?.criticalIssues?.length || 0) + 
+                                       (b.pageAnalysis?.seoAnalysis?.opportunities?.length || 0);
+                        return bIssues - aIssues;
+                      });
+                    }
+
+                    if (filteredPages.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan="7" className="p-8 text-center text-gray-500">
+                            <div className="text-4xl mb-2">🔍</div>
+                            <div className="font-semibold">No pages found matching your criteria</div>
+                            <button
+                              onClick={() => {
+                                setSearchTerm('');
+                                setFilterBy('all');
+                                setSortBy('index');
+                              }}
+                              className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              Clear Filters
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filteredPages.map((item, displayIndex) => {
+                      const seoScore = item.pageAnalysis?.seoAnalysis?.seoScore || 'N/A';
+                      const criticalIssues = item.pageAnalysis?.seoAnalysis?.criticalIssues?.length || 0;
+                      const opportunities = item.pageAnalysis?.seoAnalysis?.opportunities?.length || 0;
+                      const totalIssues = criticalIssues + opportunities;
+                      
+                      return (
+                        <tr 
+                          key={item.originalIndex} 
+                          className={`border-b border-gray-200 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all cursor-pointer ${
+                            displayIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                          }`}
+                          onClick={() => selectPage(item.originalIndex)}
+                        >
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-gray-700">{item.originalIndex + 1}</span>
+                              {totalIssues > 5 && (
+                                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" title="High priority"></span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="text-blue-600 font-medium text-sm hover:underline max-w-md truncate" title={item.url}>
+                              {item.url}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="text-gray-900 font-medium text-sm max-w-xs truncate" title={item.title}>
+                              {item.title || '⚠️ No Title'}
+                            </div>
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold shadow-sm ${
+                              item.statusCode === 200 ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                            }`}>
+                              {item.statusCode}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className={`text-3xl font-bold ${
+                                seoScore >= 80 ? 'text-green-600' :
+                                seoScore >= 60 ? 'text-yellow-600' :
+                                seoScore >= 40 ? 'text-orange-600' :
+                                seoScore === 'N/A' ? 'text-gray-400' :
+                                'text-red-600'
+                              }`}>
+                                {seoScore}
+                              </span>
+                              <span className="text-xs text-gray-500 font-medium">
+                                {seoScore >= 80 ? 'Excellent' :
+                                 seoScore >= 60 ? 'Good' :
+                                 seoScore >= 40 ? 'Fair' :
+                                 seoScore === 'N/A' ? 'N/A' :
+                                 'Poor'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex flex-col gap-1 items-center">
+                              {criticalIssues > 0 && (
+                                <span className="text-xs bg-red-500 text-white px-3 py-1 rounded-full font-bold shadow-md">
+                                  🔴 {criticalIssues} Critical
+                                </span>
+                              )}
+                              {opportunities > 0 && (
+                                <span className="text-xs bg-yellow-500 text-white px-3 py-1 rounded-full font-bold shadow-md">
+                                  ⚠️ {opportunities} To Fix
+                                </span>
+                              )}
+                              {criticalIssues === 0 && opportunities === 0 && (
+                                <span className="text-xs bg-green-500 text-white px-3 py-1 rounded-full font-bold shadow-md">
+                                  ✅ Clean
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-4 text-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selectPage(item.originalIndex);
+                              }}
+                              className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-bold rounded-lg transition-all shadow-md hover:shadow-lg transform hover:scale-105"
+                            >
+                              View Details →
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+```
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
-        {/* ENHANCED PAGE ANALYSIS WITH SEO OPPORTUNITIES */}
-        {audit.results?.pageAnalysis?.length > 0 && (
+        {/* SINGLE PAGE DETAIL VIEW */}
+        {viewMode === 'page-detail' && selectedPageIndex !== null && (() => {
+          const page = audit.results.discoveredPages[selectedPageIndex];
+          const pageAnalysis = audit.results?.pageAnalysis?.find(p => p.url === page.url);
+          const pageMeta = audit.results?.metaAnalysis?.find(m => m.url === page.url);
+          const pageHeading = audit.results?.headingStructure?.find(h => h.url === page.url);
+          const pageImage = audit.results?.imageAnalysis?.find(i => i.url === page.url);
+          
+          return (
+            <div className="space-y-6">
+              {/* Page Header Card - Enhanced */}
+              <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-xl shadow-2xl p-8 border-2 border-blue-200">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-sm font-bold text-blue-600 bg-blue-100 px-3 py-1 rounded-full">
+                        Page {selectedPageIndex + 1} of {audit.results.discoveredPages.length}
+                      </span>
+                      <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                        page.statusCode === 200 
+                          ? 'bg-green-500 text-white' 
+                          : 'bg-red-500 text-white'
+                      }`}>
+                        Status: {page.statusCode}
+                      </span>
+                    </div>
+                    <a
+                      href={page.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-2xl font-bold text-blue-600 hover:text-blue-800 hover:underline break-all block mb-4 transition-colors"
+                    >
+                      🔗 {page.url}
+                    </a>
+                    <div className="bg-white rounded-lg p-4 mb-3 shadow-md">
+                      <div className="text-sm text-gray-600 mb-1">Page Title:</div>
+                      <div className="text-xl font-bold text-gray-900">
+                        📄 {page.title || '⚠️ No Title'}
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 shadow-md">
+                      <div className="text-sm text-gray-600 mb-1">Meta Description:</div>
+                      <div className="text-sm text-gray-700">
+                        📝 {page.metaDescription || '⚠️ No Meta Description'}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* SEO Score Badge */}
+                  <div className="ml-6">
+                    {pageAnalysis?.seoAnalysis?.seoScore ? (
+                      <div className="bg-white rounded-2xl p-6 text-center shadow-2xl border-4 border-gray-200">
+                        <div className={`text-7xl font-black mb-2 ${
+                          pageAnalysis.seoAnalysis.seoScore >= 80 ? 'text-green-600' :
+                          pageAnalysis.seoAnalysis.seoScore >= 60 ? 'text-yellow-600' :
+                          pageAnalysis.seoAnalysis.seoScore >= 40 ? 'text-orange-600' :
+                          'text-red-600'
+                        }`}>
+                          {pageAnalysis.seoAnalysis.seoScore}
+                        </div>
+                        <div className="text-xs text-gray-600 font-bold mb-2">SEO SCORE</div>
+                        <div className={`text-sm font-bold px-3 py-1 rounded-full ${
+                          pageAnalysis.seoAnalysis.seoScore >= 80 ? 'bg-green-100 text-green-800' :
+                          pageAnalysis.seoAnalysis.seoScore >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                          pageAnalysis.seoAnalysis.seoScore >= 40 ? 'bg-orange-100 text-orange-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {pageAnalysis.seoAnalysis.seoScore >= 80 ? '✨ Excellent' :
+                           pageAnalysis.seoAnalysis.seoScore >= 60 ? '👍 Good' :
+                           pageAnalysis.seoAnalysis.seoScore >= 40 ? '⚠️ Fair' :
+                           '🔴 Needs Work'}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-gray-100 rounded-xl p-6 text-center">
+                        <div className="text-4xl text-gray-400">N/A</div>
+                        <div className="text-xs text-gray-500">No Score</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Quick Stats Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
+                  <div className="bg-white p-4 rounded-xl shadow-md text-center border-l-4 border-blue-500">
+                    <div className="text-sm text-gray-600 mb-1 font-semibold">Size</div>
+                    <div className="text-lg font-bold text-blue-900">{formatBytes(page.contentLength)}</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-md text-center border-l-4 border-purple-500">
+                    <div className="text-sm text-gray-600 mb-1 font-semibold">Load Time</div>
+                    <div className="text-lg font-bold text-purple-900">{page.loadTime || 'N/A'}</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-md text-center border-l-4 border-green-500">
+                    <div className="text-sm text-gray-600 mb-1 font-semibold">Word Count</div>
+                    <div className="text-lg font-bold text-green-900">{pageAnalysis?.content?.wordCount || 'N/A'}</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-md text-center border-l-4 border-orange-500">
+                    <div className="text-sm text-gray-600 mb-1 font-semibold">Images</div>
+                    <div className="text-lg font-bold text-orange-900">
+                      {pageImage?.withAlt || 0}/{pageImage?.totalImages || 0}
+                    </div>
+                    <div className="text-xs text-gray-500">With Alt</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-md text-center border-l-4 border-red-500">
+                    <div className="text-sm text-gray-600 mb-1 font-semibold">Total Issues</div>
+                    <div className="text-lg font-bold text-red-900">
+                      {(pageAnalysis?.seoAnalysis?.criticalIssues?.length || 0) + 
+                       (pageAnalysis?.seoAnalysis?.opportunities?.length || 0)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <a
+                    href={page.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md hover:shadow-lg transition-all flex items-center gap-2"
+                  >
+                    🌐 Visit Page
+                  </a>
+                  <button
+                    onClick={() => {
+                      const issuesList = [
+                        ...(pageAnalysis?.seoAnalysis?.criticalIssues || []).map(i => `🔴 CRITICAL: ${i}`),
+                        ...(pageAnalysis?.seoAnalysis?.opportunities || []).map(i => `⚠️ TO FIX: ${i}`),
+                      ].join('\n');
+                      navigator.clipboard.writeText(`Page: ${page.url}\n\nIssues:\n${issuesList}`);
+                      alert('Issues copied to clipboard!');
+                    }}
+                    className="px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-md hover:shadow-lg transition-all flex items-center gap-2"
+                  >
+                    📋 Copy Issues
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (selectedPageIndex > 0) selectPage(selectedPageIndex - 1);
+                    }}
+                    disabled={selectedPageIndex === 0}
+                    className={`px-5 py-3 font-bold rounded-lg shadow-md transition-all flex items-center gap-2 ${
+                      selectedPageIndex === 0
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-gray-600 hover:bg-gray-700 text-white hover:shadow-lg'
+                    }`}
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (selectedPageIndex < audit.results.discoveredPages.length - 1) {
+                        selectPage(selectedPageIndex + 1);
+                      }
+                    }}
+                    disabled={selectedPageIndex === audit.results.discoveredPages.length - 1}
+                    className={`px-5 py-3 font-bold rounded-lg shadow-md transition-all flex items-center gap-2 ${
+                      selectedPageIndex === audit.results.discoveredPages.length - 1
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-gray-600 hover:bg-gray-700 text-white hover:shadow-lg'
+                    }`}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+
+              {/* PRIORITY SUMMARY CARD */}
+              {pageAnalysis?.seoAnalysis && (
+                <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl shadow-xl p-6 border-2 border-orange-300">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                    🎯 Action Items Summary
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-red-500">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="text-sm text-gray-600 font-semibold mb-1">Critical Issues</div>
+                          <div className="text-3xl font-black text-red-600">
+                            {pageAnalysis.seoAnalysis.criticalIssues?.length || 0}
+                          </div>
+                        </div>
+                        <div className="text-4xl">🔴</div>
+                      </div>
+                      <div className="text-xs text-red-700 mt-2 font-medium">Fix immediately for best results</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-yellow-500">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="text-sm text-gray-600 font-semibold mb-1">Opportunities</div>
+                          <div className="text-3xl font-black text-yellow-600">
+                            {pageAnalysis.seoAnalysis.opportunities?.length || 0}
+                          </div>
+                        </div>
+                        <div className="text-4xl">⚠️</div>
+                      </div>
+                      <div className="text-xs text-yellow-700 mt-2 font-medium">Improvements to consider</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-green-500">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="text-sm text-gray-600 font-semibold mb-1">Good Practices</div>
+                          <div className="text-3xl font-black text-green-600">
+                            {pageAnalysis.seoAnalysis.recommendations?.length || 0}
+                          </div>
+                        </div>
+                        <div className="text-4xl">✅</div>
+                      </div>
+                      <div className="text-xs text-green-700 mt-2 font-medium">Already doing well</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SEO ISSUES FOR THIS PAGE */}
+              {pageAnalysis?.seoAnalysis && (
+                <div className="bg-white rounded-xl shadow-xl p-8">
+                  <h3 className="text-2xl font-bold text-orange-900 mb-6 flex items-center border-b-4 border-orange-500 pb-4">
+                    <ExclamationTriangleIcon className="w-7 h-7 mr-3 text-orange-600" />
+                    Detailed SEO Analysis
+                  </h3>
+
+                  {/* Critical Issues */}
+                  {pageAnalysis.seoAnalysis.criticalIssues?.length > 0 && (
+                    <div className="mb-6 bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-600 p-6 rounded-lg shadow-md">
+                      <h4 className="text-xl font-bold text-red-900 mb-4 flex items-center">
+                        🔴 Critical Issues ({pageAnalysis.seoAnalysis.criticalIssues.length}) - Fix These First!
+                      </h4>
+                      <ul className="space-y-3">
+                        {pageAnalysis.seoAnalysis.criticalIssues.map((issue, idx) => (
+                          <li key={idx} className="flex items-start gap-4 bg-white p-5 rounded-lg shadow-sm border-l-4 border-red-400 hover:shadow-md transition-shadow">
+                            <span className="text-red-600 font-bold text-2xl mt-0.5 flex-shrink-0">#{idx + 1}</span>
+                            <span className="text-red-900 font-medium text-base">{issue}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Opportunities */}
+                  {pageAnalysis.seoAnalysis.opportunities?.length > 0 && (
+                    <div className="mb-6 bg-gradient-to-r from-yellow-50 to-yellow-100 border-l-4 border-yellow-600 p-6 rounded-lg shadow-md">
+                      <h4 className="text-xl font-bold text-yellow-900 mb-4 flex items-center">
+                        ⚠️ Improvement Opportunities ({pageAnalysis.seoAnalysis.opportunities.length}) - Consider These
+                      </h4>
+                      <ul className="space-y-3">
+                        {pageAnalysis.seoAnalysis.opportunities.map((opportunity, idx) => (
+                          <li key={idx} className="flex items-start gap-4 bg-white p-5 rounded-lg shadow-sm border-l-4 border-yellow-400 hover:shadow-md transition-shadow">
+                            <span className="text-yellow-600 font-bold text-2xl mt-0.5 flex-shrink-0">#{idx + 1}</span>
+                            <span className="text-yellow-900 font-medium text-base">{opportunity}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
+                  {pageAnalysis.seoAnalysis.recommendations?.length > 0 && (
+                    <div className="bg-gradient-to-r from-green-50 to-green-100 border-l-4 border-green-600 p-6 rounded-lg shadow-md">
+                      <h4 className="text-xl font-bold text-green-900 mb-4 flex items-center">
+                        ✅ Good Practices ({pageAnalysis.seoAnalysis.recommendations.length}) - Keep It Up!
+                      </h4>
+                      <ul className="space-y-3">
+                        {pageAnalysis.seoAnalysis.recommendations.map((rec, idx) => (
+                          <li key={idx} className="flex items-start gap-4 bg-white p-5 rounded-lg shadow-sm border-l-4 border-green-400 hover:shadow-md transition-shadow">
+                            <span className="text-green-600 font-bold text-2xl mt-0.5 flex-shrink-0">✓</span>
+                            <span className="text-green-900 font-medium text-base">{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* No Issues Message */}
+                  {(!pageAnalysis.seoAnalysis.criticalIssues?.length && 
+                    !pageAnalysis.seoAnalysis.opportunities?.length && 
+                    !pageAnalysis.seoAnalysis.recommendations?.length) && (
+                    <div className="text-center py-12 bg-gray-50 rounded-lg">
+                      <div className="text-6xl mb-4">🎉</div>
+                      <div className="text-xl font-bold text-gray-700 mb-2">No SEO Analysis Available</div>
+                      <div className="text-gray-500">This page may not have been fully analyzed yet.</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* META TAGS FOR THIS PAGE */}
+              {pageMeta && (
+                <div className="bg-white rounded-xl shadow-xl p-8">
+                  <h3 className="text-2xl font-bold text-purple-900 mb-6 flex items-center border-b-4 border-purple-500 pb-4">
+                    <InformationCircleIcon className="w-7 h-7 mr-3 text-purple-600" />
+                    Meta Tags Analysis
+                  </h3>
+
+                  <div className="space-y-6">
+                    {/* Title Analysis */}
+                    <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-6 rounded-xl border-l-4 border-blue-500">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="font-bold text-blue-900 text-lg">📌 Title Tag</div>
+                        <span className={`px-4 py-2 rounded-full text-sm font-bold shadow-md ${
+                          pageMeta.title?.length >= 30 && pageMeta.title?.length <= 60 
+                            ? 'bg-green-500 text-white' 
+                            : 'bg-orange-500 text-white'
+                        }`}>
+                          {pageMeta.title?.length || 0} characters
+                        </span>
+                      </div>
+                      <div className="text-lg text-gray-900 mb-3 font-semibold bg-white p-4 rounded-lg">
+                        {pageMeta.title?.text || '❌ Missing Title'}
+                      </div>
+                      {pageMeta.title?.isTooShort && (
+                        <div className="text-sm text-orange-900 bg-orange-100 p-3 rounded-lg font-medium">
+                          ⚠️ Title is too short (recommended: 30-60 characters)
+                        </div>
+                      )}
+                      {pageMeta.title?.isTooLong && (
+                        <div className="text-sm text-orange-900 bg-orange-100 p-3 rounded-lg font-medium">
+                          ⚠️ Title is too long and may be truncated in search results
+                        </div>
+                      )}
+                      {!pageMeta.title?.text && (
+                        <div className="text-sm text-red-900 bg-red-100 p-3 rounded-lg font-medium">
+                          🔴 Critical: Missing title tag - essential for SEO
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Description Analysis */}
+                    <div className="bg-gradient-to-r from-green-50 to-green-100 p-6 rounded-xl border-l-4 border-green-500">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="font-bold text-green-900 text-lg">📝 Meta Description</div>
+                        <span className={`px-4 py-2 rounded-full text-sm font-bold shadow-md ${
+                          pageMeta.description?.length >= 120 && pageMeta.description?.length <= 160 
+                            ? 'bg-green-500 text-white' 
+                            : 'bg-orange-500 text-white'
+                        }`}>
+                          {pageMeta.description?.length || 0} characters
+                        </span>
+                      </div>
+                      <div className="text-base text-gray-900 mb-3 bg-white p-4 rounded-lg">
+                        {pageMeta.description?.text || '❌ Missing Description'}
+                      </div>
+                      {pageMeta.description?.isTooShort && (
+                        <div className="text-sm text-orange-900 bg-orange-100 p-3 rounded-lg font-medium">
+                          ⚠️ Description is too short (recommended: 120-160 characters)
+                        </div>
+                      )}
+                      {pageMeta.description?.isTooLong && (
+                        <div className="text-sm text-orange-900 bg-orange-100 p-3 rounded-lg font-medium">
+                          ⚠️ Description is too long and may be truncated
+                        </div>
+                      )}
+                      {!pageMeta.description?.text && (
+                        <div className="text-sm text-red-900 bg-red-100 p-3 rounded-lg font-medium">
+                          🟠 High Priority: Missing meta description
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* HEADING STRUCTURE FOR THIS PAGE */}
+              {pageHeading && (
+                <div className="bg-white rounded-xl shadow-xl p-8">
+                  <h3 className="text-2xl font-bold text-indigo-900 mb-6 flex items-center border-b-4 border-indigo-500 pb-4">
+                    <svg className="w-7 h-7 mr-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                    Heading Structure
+                  </h3>
+
+                  <div className="grid grid-cols-6 gap-4 mb-6">
+                    <div className="bg-indigo-50 p-4 rounded-lg text-center border-t-4 border-indigo-600">
+                      <div className="text-3xl font-bold text-indigo-900 mb-1">{pageHeading.h1Count || 0}</div>
+                      <div className="text-xs text-gray-600 font-semibold">H1</div>
+                    </div>
+                    <div className="bg-blue-50 p-4 rounded-lg text-center border-t-4 border-blue-600">
+                      <div className="text-3xl font-bold text-blue-900 mb-1">{pageHeading.h2Count || 0}</div>
+                      <div className="text-xs text-gray-600 font-semibold">H2</div>
+                    </div>
+                    <div className="bg-cyan-50 p-4 rounded-lg text-center border-t-4 border-cyan-600">
+                      <div className="text-3xl font-bold text-cyan-900 mb-1">{pageHeading.h3Count || 0}</div>
+                      <div className="text-xs text-gray-600 font-semibold">H3</div>
+                    </div>
+                    <div className="bg-teal-50 p-4 rounded-lg text-center border-t-4 border-teal-600">
+                      <div className="text-3xl font-bold text-teal-900 mb-1">{pageHeading.h4Count || 0}</div>
+                      <div className="text-xs text-gray-600 font-semibold">H4</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg text-center border-t-4 border-green-600">
+                      <div className="text-3xl font-bold text-green-900 mb-1">{pageHeading.h5Count || 0}</div>
+                      <div className="text-xs text-gray-600 font-semibold">H5</div>
+                    </div>
+                    <div className="bg-lime-50 p-4 rounded-lg text-center border-t-4 border-lime-600">
+                      <div className="text-3xl font-bold text-lime-900 mb-1">{pageHeading.h6Count || 0}</div>
+                      <div className="text-xs text-gray-600 font-semibold">H6</div>
+                    </div>
+                  </div>
+
+                  {pageHeading.headings && pageHeading.headings.length > 0 && (
+                    <div className="bg-gray-50 p-6 rounded-xl">
+                      <div className="font-bold text-gray-900 mb-4 text-lg">
+                        All Headings ({pageHeading.headings.length}):
+                      </div>
+                      <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                        {pageHeading.headings.map((h, hIdx) => {
+                          const levelDisplay = typeof h.level === 'number' 
+                            ? `H${h.level}` 
+                            : (typeof h.level === 'string' && h.level ? h.level.toUpperCase() : 'H?');
+                          
+                          return (
+                            <div key={hIdx} className="flex items-start gap-3 p-4 bg-white rounded-lg shadow-sm">
+                              <span className={`px-3 py-1 rounded-lg text-xs font-bold shadow-sm flex-shrink-0 ${
+                                h.level === 1 || h.level === 'h1' ? 'bg-indigo-600 text-white' :
+                                h.level === 2 || h.level === 'h2' ? 'bg-blue-600 text-white' :
+                                h.level === 3 || h.level === 'h3' ? 'bg-cyan-600 text-white' :
+                                h.level === 4 || h.level === 'h4' ? 'bg-teal-600 text-white' :
+                                h.level === 5 || h.level === 'h5' ? 'bg-green-600 text-white' :
+                                'bg-lime-600 text-white'
+                              }`}>
+                                {levelDisplay}
+                              </span>
+                              <span className="text-sm text-gray-900 font-medium">{h.text}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {pageHeading.issues?.length > 0 && (
+                    <div className="mt-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+                      <h4 className="font-bold text-red-900 mb-3">Issues Found:</h4>
+                      <div className="flex flex-wrap gap-3">
+                        {pageHeading.issues.map((issue, issueIdx) => (
+                          <span
+                            key={issueIdx}
+                            className={`inline-flex items-center px-4 py-2 text-sm font-bold rounded-full shadow-md ${
+                              issue.severity === 'Critical' ? 'bg-red-500 text-white' :
+                              issue.severity === 'High' ? 'bg-orange-500 text-white' :
+                              issue.severity === 'Medium' ? 'bg-yellow-500 text-white' :
+                              'bg-green-500 text-white'
+                            }`}
+                          >
+                            {issue.severity === 'Critical' && '🔴 '}
+                            {issue.severity === 'High' && '🟠 '}
+                            {issue.severity === 'Medium' && '🟡 '}
+                            {issue.severity === 'Low' && '🟢 '}
+                            {issue.type}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* IMAGE ANALYSIS FOR THIS PAGE */}
+              {pageImage && (
+                <div className="bg-white rounded-xl shadow-xl p-8">
+                  <h3 className="text-2xl font-bold text-yellow-900 mb-6 flex items-center border-b-4 border-yellow-500 pb-4">
+                    <svg className="w-7 h-7 mr-3 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Images & Alt Tags
+                  </h3>
+
+                  <div className="grid grid-cols-3 gap-6 mb-6">
+                    <div className="bg-blue-50 p-6 rounded-xl text-center border-t-4 border-blue-600">
+                      <div className="text-4xl font-bold text-blue-900 mb-2">{pageImage.totalImages || 0}</div>
+                      <div className="text-sm text-gray-600 font-semibold">Total Images</div>
+                    </div>
+                    <div className="bg-green-50 p-6 rounded-xl text-center border-t-4 border-green-600">
+                      <div className="text-4xl font-bold text-green-900 mb-2">{pageImage.withAlt || 0}</div>
+                      <div className="text-sm text-gray-600 font-semibold">With Alt Text</div>
+                    </div>
+                    <div className="bg-red-50 p-6 rounded-xl text-center border-t-4 border-red-600">
+                      <div className="text-4xl font-bold text-red-900 mb-2">{pageImage.withoutAlt || 0}</div>
+                      <div className="text-sm text-gray-600 font-semibold">Missing Alt Text</div>
+                    </div>
+                  </div>
+
+                  {pageImage.withoutAlt > 0 && (
+                    <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-lg">
+                      <div className="font-bold text-red-900 mb-2">
+                        ⚠️ {pageImage.withoutAlt} images are missing alt text
+                      </div>
+                      <div className="text-sm text-red-800">
+                        Alt text is important for accessibility and SEO. Add descriptive alt text to all images.
+                      </div>
+                    </div>
+                  )}
+
+                  {pageImage.issues?.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="font-bold text-gray-900 mb-3">Image Issues:</h4>
+                      <div className="space-y-2">
+                        {pageImage.issues.map((issue, idx) => (
+                          <div key={idx} className="flex items-start gap-3 bg-yellow-50 p-4 rounded-lg">
+                            <span className="text-yellow-600 font-bold text-xl mt-0.5">•</span>
+                            <span className="text-yellow-900">{issue.type}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Navigation to next/previous page */}
+              <div className="flex justify-between items-center bg-white rounded-xl shadow-md p-6">
+                <button
+                  onClick={() => {
+                    if (selectedPageIndex > 0) {
+                      selectPage(selectedPageIndex - 1);
+                    }
+                  }}
+                  disabled={selectedPageIndex === 0}
+                  className={`flex items-center gap-2 px-6 py-3 font-semibold rounded-lg transition-all ${
+                    selectedPageIndex === 0
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
+                  }`}
+                >
+                  ← Previous Page
+                </button>
+                <div className="text-gray-700 font-semibold">
+                  Page {selectedPageIndex + 1} of {audit.results.discoveredPages.length}
+                </div>
+                <button
+                  onClick={() => {
+                    if (selectedPageIndex < audit.results.discoveredPages.length - 1) {
+                      selectPage(selectedPageIndex + 1);
+                    }
+                  }}
+                  disabled={selectedPageIndex === audit.results.discoveredPages.length - 1}
+                  className={`flex items-center gap-2 px-6 py-3 font-semibold rounded-lg transition-all ${
+                    selectedPageIndex === audit.results.discoveredPages.length - 1
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
+                  }`}
+                >
+                  Next Page →
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* HIDE ALL OTHER SECTIONS WHEN IN PAGE DETAIL VIEW */}
+        {viewMode === 'overview' && (
+          <>
+        {/* ENHANCED PAGE ANALYSIS WITH SEO OPPORTUNITIES - HIDDEN IN NEW VIEW */}
+        {false && audit.results?.pageAnalysis?.length > 0 && (
           <div className="bg-white rounded-xl shadow-xl p-8">
             <div 
               className="flex items-center justify-between cursor-pointer border-b-4 border-orange-500 pb-4 mb-6"
@@ -1238,6 +2059,8 @@ export default function AuditDetailed() {
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
     </Layout>
   )
