@@ -4,9 +4,17 @@ const mongoose = require('mongoose');
  * @typedef {Object} Client
  * @property {string} name - Client name
  * @property {string} domain - Website domain
+ * @property {string} website - Full website URL
  * @property {string} cms - CMS type (WordPress, Shopify, etc.)
  * @property {string[]} assignedStaff - Staff user IDs
  * @property {string} industry - Business industry/niche
+ * @property {Array} locations - Business locations
+ * @property {Array} services - Services offered
+ * @property {Array} competitors - Main competitors
+ * @property {Array} primaryKeywords - High priority keywords
+ * @property {Array} secondaryKeywords - Secondary keywords
+ * @property {Array} seedKeywords - Seed keywords for research
+ * @property {Object} integrations - Third-party integrations
  * @property {Object} seoHealth - Overall SEO health score
  * @property {Object} contactInfo - Client contact details
  * @property {boolean} isActive - Client status
@@ -27,6 +35,10 @@ const clientSchema = new mongoose.Schema({
     lowercase: true,
     unique: true,
   },
+  website: {
+    type: String,
+    trim: true,
+  },
   cms: {
     type: String,
     enum: ['WordPress', 'Shopify', 'Wix', 'Webflow', 'Custom', 'Other'],
@@ -39,6 +51,123 @@ const clientSchema = new mongoose.Schema({
   industry: {
     type: String,
     trim: true,
+  },
+  locations: [{
+    city: {
+      type: String,
+      trim: true,
+    },
+    state: {
+      type: String,
+      trim: true,
+    },
+    country: {
+      type: String,
+      default: 'US',
+    },
+    zip: {
+      type: String,
+      trim: true,
+    },
+    radius: {
+      type: Number,
+      default: 25,
+    },
+    radiusUnit: {
+      type: String,
+      enum: ['miles', 'km'],
+      default: 'miles',
+    },
+  }],
+  services: [{
+    type: String,
+    trim: true,
+  }],
+  competitors: [{
+    type: String,
+    trim: true,
+  }],
+  primaryKeywords: [{
+    keyword: {
+      type: String,
+      trim: true,
+    },
+    priority: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: 1,
+    },
+    targetLocation: {
+      type: String,
+      trim: true,
+    },
+    notes: {
+      type: String,
+      trim: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
+  secondaryKeywords: [{
+    keyword: {
+      type: String,
+      trim: true,
+    },
+    targetLocation: {
+      type: String,
+      trim: true,
+    },
+    notes: {
+      type: String,
+      trim: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
+  seedKeywords: [{
+    keyword: {
+      type: String,
+      trim: true,
+    },
+    searchVolume: {
+      type: Number,
+    },
+    difficulty: {
+      type: Number,
+    },
+    intent: {
+      type: String,
+      enum: ['informational', 'transactional', 'navigational', 'local'],
+      default: 'informational',
+    },
+    source: {
+      type: String,
+      enum: ['csv', 'gsc', 'manual'],
+      default: 'manual',
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
+  integrations: {
+    googleSearchConsole: {
+      type: Boolean,
+      default: false,
+    },
+    googleAnalytics: {
+      type: Boolean,
+      default: false,
+    },
+    googleBusinessProfile: {
+      type: Boolean,
+      default: false,
+    },
   },
   seoHealth: {
     score: {

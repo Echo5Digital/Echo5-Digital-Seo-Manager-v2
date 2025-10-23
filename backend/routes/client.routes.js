@@ -82,29 +82,66 @@ router.post(
   authorize('Boss'),
   [
     body('name').trim().notEmpty().withMessage('Client name is required'),
-    body('domain').trim().notEmpty().withMessage('Domain is required'),
+    body('website').optional().trim(),
     body('industry').optional().trim(),
     body('cms').optional().isIn(['WordPress', 'Shopify', 'Wix', 'Webflow', 'Custom', 'Other']),
+    body('locations').optional().isArray(),
+    body('services').optional().isArray(),
+    body('competitors').optional().isArray(),
+    body('primaryKeywords').optional().isArray(),
+    body('secondaryKeywords').optional().isArray(),
+    body('seedKeywords').optional().isArray(),
+    body('integrations').optional().isObject(),
   ],
   validate,
   async (req, res, next) => {
     try {
-      const { name, domain, industry, cms, assignedStaff, contactInfo } = req.body;
+      const { 
+        name, 
+        website, 
+        industry, 
+        cms, 
+        assignedStaff, 
+        contactInfo, 
+        locations,
+        services,
+        competitors,
+        primaryKeywords,
+        secondaryKeywords,
+        seedKeywords,
+        integrations
+      } = req.body;
 
-      // Strip protocol and trailing slash from domain
-      const cleanDomain = domain
-        .toLowerCase()
-        .replace(/^https?:\/\//, '') // Remove http:// or https://
-        .replace(/^www\./, '')        // Remove www.
-        .replace(/\/$/, '');          // Remove trailing slash
+      // Extract domain from website URL or use website as domain
+      let domain = website || '';
+      if (domain) {
+        domain = domain
+          .toLowerCase()
+          .replace(/^https?:\/\//, '') // Remove http:// or https://
+          .replace(/^www\./, '')        // Remove www.
+          .replace(/\/$/, '')           // Remove trailing slash
+          .split('/')[0];              // Take only the domain part
+      }
 
       const client = await Client.create({
         name,
-        domain: cleanDomain,
+        domain,
+        website,
         industry,
         cms,
         assignedStaff: assignedStaff || [],
         contactInfo,
+        locations: locations || [],
+        services: services || [],
+        competitors: competitors || [],
+        primaryKeywords: primaryKeywords || [],
+        secondaryKeywords: secondaryKeywords || [],
+        seedKeywords: seedKeywords || [],
+        integrations: integrations || {
+          googleSearchConsole: false,
+          googleAnalytics: false,
+          googleBusinessProfile: false,
+        },
         createdBy: req.user._id,
       });
 
@@ -154,7 +191,7 @@ router.put(
   authorize('Boss'),
   async (req, res, next) => {
     try {
-      const { assignedStaff, domain, ...updateFields } = req.body;
+      const { assignedStaff, website, ...updateFields } = req.body;
 
       const client = await Client.findById(req.params.id);
       if (!client) {
@@ -164,13 +201,15 @@ router.put(
         });
       }
 
-      // Clean domain if provided
-      if (domain) {
-        updateFields.domain = domain
+      // Clean domain if website is provided
+      if (website) {
+        updateFields.website = website;
+        updateFields.domain = website
           .toLowerCase()
           .replace(/^https?:\/\//, '') // Remove http:// or https://
           .replace(/^www\./, '')        // Remove www.
-          .replace(/\/$/, '');          // Remove trailing slash
+          .replace(/\/$/, '')           // Remove trailing slash
+          .split('/')[0];              // Take only the domain part
       }
 
       // Update client
