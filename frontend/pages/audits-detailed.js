@@ -236,6 +236,21 @@ export default function AuditDetailed() {
     }, 0)
   }
 
+  // Aggregate priority counts across all pages for summary cards
+  const aggregatedPriority = useMemo(() => {
+    const totals = { Critical: 0, High: 0, Medium: 0, Low: 0 }
+    const pages = audit?.results?.discoveredPages || []
+    pages.forEach(p => {
+      const analysis = getFromMap(lookups.analysisMap, p.url, audit.results?.pageAnalysis)
+      const meta = getFromMap(lookups.metaMap, p.url, audit.results?.metaAnalysis)
+      const headings = getFromMap(lookups.headingsMap, p.url, audit.results?.headingStructure)
+      const images = getFromMap(lookups.imagesMap, p.url, audit.results?.imageAnalysis)
+      const issues = buildPageIssues({ analysis, meta, headings, images, page: p })
+      issues.forEach(it => { totals[it.priority] = (totals[it.priority] || 0) + 1 })
+    })
+    return totals
+  }, [audit, lookups])
+
   if (loading) {
     return (
       <Layout>
@@ -319,25 +334,25 @@ export default function AuditDetailed() {
         </div>
 
         {/* Issues Summary */}
-        {audit.summary && (
+        {(
           <div className="grid grid-cols-4 gap-6">
             <div className="bg-red-50 border-2 border-red-300 rounded-xl p-6 text-center shadow-lg">
-              <div className="text-5xl font-bold text-red-600 mb-2">{audit.summary.criticalCount || 0}</div>
+              <div className="text-5xl font-bold text-red-600 mb-2">{aggregatedPriority.Critical || 0}</div>
               <div className="text-sm font-semibold text-red-900">🔴 Critical Issues</div>
               <div className="text-xs text-red-600 mt-1">Immediate Action Required</div>
             </div>
             <div className="bg-orange-50 border-2 border-orange-300 rounded-xl p-6 text-center shadow-lg">
-              <div className="text-5xl font-bold text-orange-600 mb-2">{audit.summary.highCount || 0}</div>
+              <div className="text-5xl font-bold text-orange-600 mb-2">{aggregatedPriority.High || 0}</div>
               <div className="text-sm font-semibold text-orange-900">🟠 High Priority</div>
               <div className="text-xs text-orange-600 mt-1">Address Soon</div>
             </div>
             <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-6 text-center shadow-lg">
-              <div className="text-5xl font-bold text-yellow-600 mb-2">{audit.summary.mediumCount || 0}</div>
+              <div className="text-5xl font-bold text-yellow-600 mb-2">{aggregatedPriority.Medium || 0}</div>
               <div className="text-sm font-semibold text-yellow-900">🟡 Medium Priority</div>
               <div className="text-xs text-yellow-600 mt-1">Plan to Fix</div>
             </div>
             <div className="bg-green-50 border-2 border-green-300 rounded-xl p-6 text-center shadow-lg">
-              <div className="text-5xl font-bold text-green-600 mb-2">{audit.summary.lowCount || 0}</div>
+              <div className="text-5xl font-bold text-green-600 mb-2">{aggregatedPriority.Low || 0}</div>
               <div className="text-sm font-semibold text-green-900">🟢 Low Priority</div>
               <div className="text-xs text-green-600 mt-1">Minor Improvements</div>
             </div>
@@ -400,8 +415,11 @@ export default function AuditDetailed() {
                   className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white font-medium"
                 >
                   <option value="all">All Pages ({audit.results?.discoveredPages?.length || 0})</option>
-                  <option value="critical">Critical Issues Only</option>
-                  <option value="opportunities">Has Opportunities</option>
+                  <option value="has-issues">Has Issues</option>
+                  <option value="critical">Priority: Critical</option>
+                  <option value="high">Priority: High</option>
+                  <option value="medium">Priority: Medium</option>
+                  <option value="low">Priority: Low</option>
                   <option value="good">Good Score (80+)</option>
                   <option value="needs-work">Needs Work (&lt;60)</option>
                 </select>
@@ -414,6 +432,7 @@ export default function AuditDetailed() {
                   <option value="score-desc">Highest Score First</option>
                   <option value="score-asc">Lowest Score First</option>
                   <option value="issues-desc">Most Issues First</option>
+                  <option value="issues-asc">Fewest Issues First</option>
                 </select>
               </div>
             </div>
@@ -434,14 +453,25 @@ export default function AuditDetailed() {
                 </thead>
                 <tbody>
                   {(() => {
-                    let pages = audit.results?.discoveredPages?.map((page, index) => ({
-                      ...page,
-                      originalIndex: index,
-                      analysis: getFromMap(lookups.analysisMap, page.url, audit.results?.pageAnalysis),
-                      meta: getFromMap(lookups.metaMap, page.url, audit.results?.metaAnalysis),
-                      headings: getFromMap(lookups.headingsMap, page.url, audit.results?.headingStructure),
-                      images: getFromMap(lookups.imagesMap, page.url, audit.results?.imageAnalysis),
-                    })) || [];
+                    let pages = audit.results?.discoveredPages?.map((page, index) => {
+                      const analysis = getFromMap(lookups.analysisMap, page.url, audit.results?.pageAnalysis)
+                      const meta = getFromMap(lookups.metaMap, page.url, audit.results?.metaAnalysis)
+                      const headings = getFromMap(lookups.headingsMap, page.url, audit.results?.headingStructure)
+                      const images = getFromMap(lookups.imagesMap, page.url, audit.results?.imageAnalysis)
+                      const unifiedIssues = buildPageIssues({ analysis, meta, headings, images, page })
+                      const priorityCounts = { Critical: 0, High: 0, Medium: 0, Low: 0 }
+                      unifiedIssues.forEach(it => { priorityCounts[it.priority] = (priorityCounts[it.priority] || 0) + 1 })
+                      return {
+                        ...page,
+                        originalIndex: index,
+                        analysis,
+                        meta,
+                        headings,
+                        images,
+                        unifiedIssues,
+                        priorityCounts,
+                      }
+                    }) || [];
 
                     // Filter
                     if (searchTerm) {
@@ -451,8 +481,11 @@ export default function AuditDetailed() {
                       );
                     }
 
-                    if (filterBy === 'critical') pages = pages.filter(p => (p.analysis?.seoAnalysis?.criticalIssues?.length || 0) > 0);
-                    else if (filterBy === 'opportunities') pages = pages.filter(p => (p.analysis?.seoAnalysis?.opportunities?.length || 0) > 0);
+                    if (filterBy === 'has-issues') pages = pages.filter(p => (p.unifiedIssues?.length || 0) > 0);
+                    else if (filterBy === 'critical') pages = pages.filter(p => (p.priorityCounts?.Critical || 0) > 0);
+                    else if (filterBy === 'high') pages = pages.filter(p => (p.priorityCounts?.High || 0) > 0);
+                    else if (filterBy === 'medium') pages = pages.filter(p => (p.priorityCounts?.Medium || 0) > 0);
+                    else if (filterBy === 'low') pages = pages.filter(p => (p.priorityCounts?.Low || 0) > 0);
                     else if (filterBy === 'good') pages = pages.filter(p => (p.analysis?.seoAnalysis?.seoScore || 0) >= 80);
                     else if (filterBy === 'needs-work') pages = pages.filter(p => (p.analysis?.seoAnalysis?.seoScore || 0) < 60);
 
@@ -461,9 +494,15 @@ export default function AuditDetailed() {
                     else if (sortBy === 'score-asc') pages.sort((a, b) => (a.analysis?.seoAnalysis?.seoScore || 0) - (b.analysis?.seoAnalysis?.seoScore || 0));
                     else if (sortBy === 'issues-desc') {
                       pages.sort((a, b) => {
-                        const aIssues = (a.analysis?.seoAnalysis?.criticalIssues?.length || 0) + (a.analysis?.seoAnalysis?.opportunities?.length || 0);
-                        const bIssues = (b.analysis?.seoAnalysis?.criticalIssues?.length || 0) + (b.analysis?.seoAnalysis?.opportunities?.length || 0);
+                        const aIssues = (a.unifiedIssues?.length || 0)
+                        const bIssues = (b.unifiedIssues?.length || 0)
                         return bIssues - aIssues;
+                      });
+                    } else if (sortBy === 'issues-asc') {
+                      pages.sort((a, b) => {
+                        const aIssues = (a.unifiedIssues?.length || 0)
+                        const bIssues = (b.unifiedIssues?.length || 0)
+                        return aIssues - bIssues;
                       });
                     }
 
@@ -481,7 +520,7 @@ export default function AuditDetailed() {
 
                     return pages.map((page, idx) => {
                       const score = page.analysis?.seoAnalysis?.seoScore;
-                      const allIssues = buildPageIssues({ analysis: page.analysis, meta: page.meta, headings: page.headings, images: page.images, page });
+                      const allIssues = page.unifiedIssues || [];
                       const totalIssues = allIssues.length;
                       
                       return (
@@ -522,60 +561,76 @@ export default function AuditDetailed() {
                                 );
                               }
                               return (
-                                <div
-                                  className="relative inline-block text-left"
-                                  onMouseLeave={() => setOpenIssuesDropdown(null)}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <button
-                                    type="button"
-                                    className="inline-flex items-center gap-2 px-3 py-1 text-xs font-bold rounded bg-red-600 text-white hover:bg-red-700 shadow-sm"
-                                    onMouseEnter={() => setOpenIssuesDropdown(page.originalIndex)}
-                                    onClick={() => setOpenIssuesDropdown(openIssuesDropdown === page.originalIndex ? null : page.originalIndex)}
+                                <div className="flex flex-col items-center gap-1">
+                                  <div className="flex flex-wrap justify-center gap-1">
+                                    {page.priorityCounts?.Critical > 0 && (
+                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white font-bold">C:{page.priorityCounts.Critical}</span>
+                                    )}
+                                    {page.priorityCounts?.High > 0 && (
+                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-orange-500 text-white font-bold">H:{page.priorityCounts.High}</span>
+                                    )}
+                                    {page.priorityCounts?.Medium > 0 && (
+                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-yellow-400 text-black font-bold">M:{page.priorityCounts.Medium}</span>
+                                    )}
+                                    {page.priorityCounts?.Low > 0 && (
+                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-green-600 text-white font-bold">L:{page.priorityCounts.Low}</span>
+                                    )}
+                                  </div>
+                                  <div
+                                    className="relative inline-block text-left"
+                                    onMouseLeave={() => setOpenIssuesDropdown(null)}
+                                    onClick={(e) => e.stopPropagation()}
                                   >
-                                    {totalIssues} Issues
-                                    <span className="text-white/90">▾</span>
-                                  </button>
-                                  {openIssuesDropdown === page.originalIndex && (
-                                    <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-20 text-left" onClick={(e) => e.stopPropagation()}>
-                                      <div className="p-3 border-b font-semibold text-gray-800">Issues for this page</div>
-                                      <div className="max-h-64 overflow-auto p-3 space-y-3">
-                                        {(() => {
-                                          const grouped = { Critical: [], High: [], Medium: [], Low: [] }
-                                          allIssues.forEach(it => { (grouped[it.priority] || grouped.Low).push(it) })
-                                          const sections = [
-                                            { key: 'Critical', title: '🔴 Critical', colorClass: 'text-red-700', dot: 'bg-red-500' },
-                                            { key: 'High', title: '🟠 High', colorClass: 'text-orange-700', dot: 'bg-orange-500' },
-                                            { key: 'Medium', title: '🟡 Medium', colorClass: 'text-yellow-700', dot: 'bg-yellow-500' },
-                                            { key: 'Low', title: '🟢 Low', colorClass: 'text-green-700', dot: 'bg-green-500' },
-                                          ]
-                                          return sections.map(sec => (
-                                            grouped[sec.key].length > 0 ? (
-                                              <div key={sec.key}>
-                                                <div className={`text-sm font-bold mb-1 ${sec.colorClass}`}>{sec.title} ({grouped[sec.key].length})</div>
-                                                <ul className="space-y-1 text-sm">
-                                                  {grouped[sec.key].map((it, i) => (
-                                                    <li key={`${sec.key}-${i}`} className="flex items-center gap-2">
-                                                      <span className={`inline-block w-2 h-2 rounded-full ${sec.dot}`}></span>
-                                                      <span className="text-gray-800">{it.text}</span>
-                                                    </li>
-                                                  ))}
-                                                </ul>
-                                              </div>
-                                            ) : null
-                                          ))
-                                        })()}
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center gap-2 px-3 py-1 text-xs font-bold rounded bg-red-600 text-white hover:bg-red-700 shadow-sm"
+                                      onMouseEnter={() => setOpenIssuesDropdown(page.originalIndex)}
+                                      onClick={() => setOpenIssuesDropdown(openIssuesDropdown === page.originalIndex ? null : page.originalIndex)}
+                                    >
+                                      {totalIssues} Issues
+                                      <span className="text-white/90">▾</span>
+                                    </button>
+                                    {openIssuesDropdown === page.originalIndex && (
+                                      <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-20 text-left" onClick={(e) => e.stopPropagation()}>
+                                        <div className="p-3 border-b font-semibold text-gray-800">Issues for this page</div>
+                                        <div className="max-h-64 overflow-auto p-3 space-y-3">
+                                          {(() => {
+                                            const grouped = { Critical: [], High: [], Medium: [], Low: [] }
+                                            allIssues.forEach(it => { (grouped[it.priority] || grouped.Low).push(it) })
+                                            const sections = [
+                                              { key: 'Critical', title: '🔴 Critical', colorClass: 'text-red-700', dot: 'bg-red-500' },
+                                              { key: 'High', title: '🟠 High', colorClass: 'text-orange-700', dot: 'bg-orange-500' },
+                                              { key: 'Medium', title: '🟡 Medium', colorClass: 'text-yellow-700', dot: 'bg-yellow-500' },
+                                              { key: 'Low', title: '🟢 Low', colorClass: 'text-green-700', dot: 'bg-green-500' },
+                                            ]
+                                            return sections.map(sec => (
+                                              grouped[sec.key].length > 0 ? (
+                                                <div key={sec.key}>
+                                                  <div className={`text-sm font-bold mb-1 ${sec.colorClass}`}>{sec.title} ({grouped[sec.key].length})</div>
+                                                  <ul className="space-y-1 text-sm">
+                                                    {grouped[sec.key].map((it, i) => (
+                                                      <li key={`${sec.key}-${i}`} className="flex items-center gap-2">
+                                                        <span className={`inline-block w-2 h-2 rounded-full ${sec.dot}`}></span>
+                                                        <span className="text-gray-800">{it.text}</span>
+                                                      </li>
+                                                    ))}
+                                                  </ul>
+                                                </div>
+                                              ) : null
+                                            ))
+                                          })()}
+                                        </div>
+                                        <div className="p-2 border-t bg-gray-50 text-right">
+                                          <button
+                                            className="text-xs font-semibold text-gray-600 hover:text-gray-900 px-2 py-1"
+                                            onClick={() => setOpenIssuesDropdown(null)}
+                                          >
+                                            Close
+                                          </button>
+                                        </div>
                                       </div>
-                                      <div className="p-2 border-t bg-gray-50 text-right">
-                                        <button
-                                          className="text-xs font-semibold text-gray-600 hover:text-gray-900 px-2 py-1"
-                                          onClick={() => setOpenIssuesDropdown(null)}
-                                        >
-                                          Close
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })()}
