@@ -166,6 +166,60 @@ export default function AuditDetailed() {
     return classes[severity] || 'bg-gray-500 text-white'
   }
 
+  // Determine a priority bucket for a free-text issue description
+  const categorizeIssueText = (text) => {
+    if (!text) return 'Low'
+    const t = String(text).toLowerCase()
+    // Critical indicators
+    if (/(broken|server error|5xx|4xx|404|timeout|redirect loop|failed to load)/.test(t)) return 'Critical'
+    // High indicators
+    if (/(noindex|blocked by robots|robots.txt|canonical(\s|$)|duplicate content|multiple h1|missing h1|no meta description|missing meta description)/.test(t)) return 'High'
+    // Medium indicators
+    if (/(missing alt|alt text|title too (long|short)|description too (long|short)|slow|large)/.test(t)) return 'Medium'
+    return 'Low'
+  }
+
+  // Build unified list of issues for a page with priorities and deduplication
+  const buildPageIssues = ({ analysis, meta, headings, images, page }) => {
+    const items = []
+    const seen = new Set()
+    const pushIssue = (text, priority) => {
+      const key = String(text || '').trim().toLowerCase()
+      if (!key || seen.has(key)) return
+      seen.add(key)
+      items.push({ text, priority })
+    }
+
+    // Backend-provided issues
+    const criticalList = analysis?.seoAnalysis?.criticalIssues || []
+    criticalList.forEach(txt => pushIssue(txt, 'Critical'))
+
+    const oppList = analysis?.seoAnalysis?.opportunities || []
+    oppList.forEach(txt => pushIssue(txt, categorizeIssueText(txt)))
+
+    // Synthetic issues from page data
+    const h1Count = getHeadingCount(headings, 1)
+    if (h1Count === 0) pushIssue('Missing H1 on page', 'High')
+    if (h1Count > 1) pushIssue('Multiple H1 headings found', 'High')
+
+    // Title/meta description heuristics
+    const titleTooShort = meta?.title?.isTooShort
+    const titleTooLong = meta?.title?.isTooLong
+    if (titleTooShort) pushIssue('Title is too short (recommended 30-60 chars)', 'Low')
+    if (titleTooLong) pushIssue('Title is too long and may be truncated', 'Low')
+
+    const descText = meta?.description?.text || page?.metaDescription || ''
+    if (!descText) pushIssue('Missing meta description', 'High')
+    if (meta?.description?.isTooShort) pushIssue('Meta description is too short (recommended 120-160 chars)', 'Medium')
+    if (meta?.description?.isTooLong) pushIssue('Meta description is too long and may be truncated', 'Medium')
+
+    // Images without alt
+    const missingAlt = images?.withoutAlt || 0
+    if (missingAlt > 0) pushIssue(`${missingAlt} images missing alt text`, missingAlt >= 10 ? 'High' : 'Medium')
+
+    return items
+  }
+
   // Compute heading counts if explicit hNCount fields are missing
   const getHeadingCount = (headingsData, level) => {
     if (!headingsData) return 0
@@ -384,6 +438,9 @@ export default function AuditDetailed() {
                       ...page,
                       originalIndex: index,
                       analysis: getFromMap(lookups.analysisMap, page.url, audit.results?.pageAnalysis),
+                      meta: getFromMap(lookups.metaMap, page.url, audit.results?.metaAnalysis),
+                      headings: getFromMap(lookups.headingsMap, page.url, audit.results?.headingStructure),
+                      images: getFromMap(lookups.imagesMap, page.url, audit.results?.imageAnalysis),
                     })) || [];
 
                     // Filter
@@ -424,8 +481,8 @@ export default function AuditDetailed() {
 
                     return pages.map((page, idx) => {
                       const score = page.analysis?.seoAnalysis?.seoScore;
-                      const critical = page.analysis?.seoAnalysis?.criticalIssues?.length || 0;
-                      const opportunities = page.analysis?.seoAnalysis?.opportunities?.length || 0;
+                      const allIssues = buildPageIssues({ analysis: page.analysis, meta: page.meta, headings: page.headings, images: page.images, page });
+                      const totalIssues = allIssues.length;
                       
                       return (
                         <tr 
@@ -459,7 +516,6 @@ export default function AuditDetailed() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             {(() => {
-                              const totalIssues = critical + opportunities;
                               if (totalIssues === 0) {
                                 return (
                                   <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded font-bold">Clean</span>
@@ -484,32 +540,31 @@ export default function AuditDetailed() {
                                     <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-20 text-left" onClick={(e) => e.stopPropagation()}>
                                       <div className="p-3 border-b font-semibold text-gray-800">Issues for this page</div>
                                       <div className="max-h-64 overflow-auto p-3 space-y-3">
-                                        {critical > 0 && (
-                                          <div>
-                                            <div className="text-sm font-bold text-red-700 mb-1">🔴 Critical Issues ({critical})</div>
-                                            <ul className="space-y-1 text-sm">
-                                              {(page.analysis?.seoAnalysis?.criticalIssues || []).map((issue, i) => (
-                                                <li key={`c-${i}`} className="flex items-start gap-2">
-                                                  <span className="text-red-600 font-bold">•</span>
-                                                  <span className="text-gray-800">{issue}</span>
-                                                </li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
-                                        {opportunities > 0 && (
-                                          <div>
-                                            <div className="text-sm font-bold text-yellow-700 mb-1">⚠️ Opportunities ({opportunities})</div>
-                                            <ul className="space-y-1 text-sm">
-                                              {(page.analysis?.seoAnalysis?.opportunities || []).map((opp, i) => (
-                                                <li key={`o-${i}`} className="flex items-start gap-2">
-                                                  <span className="text-yellow-600 font-bold">•</span>
-                                                  <span className="text-gray-800">{opp}</span>
-                                                </li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
+                                        {(() => {
+                                          const grouped = { Critical: [], High: [], Medium: [], Low: [] }
+                                          allIssues.forEach(it => { (grouped[it.priority] || grouped.Low).push(it) })
+                                          const sections = [
+                                            { key: 'Critical', title: '🔴 Critical', colorClass: 'text-red-700', dot: 'bg-red-500' },
+                                            { key: 'High', title: '🟠 High', colorClass: 'text-orange-700', dot: 'bg-orange-500' },
+                                            { key: 'Medium', title: '🟡 Medium', colorClass: 'text-yellow-700', dot: 'bg-yellow-500' },
+                                            { key: 'Low', title: '🟢 Low', colorClass: 'text-green-700', dot: 'bg-green-500' },
+                                          ]
+                                          return sections.map(sec => (
+                                            grouped[sec.key].length > 0 ? (
+                                              <div key={sec.key}>
+                                                <div className={`text-sm font-bold mb-1 ${sec.colorClass}`}>{sec.title} ({grouped[sec.key].length})</div>
+                                                <ul className="space-y-1 text-sm">
+                                                  {grouped[sec.key].map((it, i) => (
+                                                    <li key={`${sec.key}-${i}`} className="flex items-center gap-2">
+                                                      <span className={`inline-block w-2 h-2 rounded-full ${sec.dot}`}></span>
+                                                      <span className="text-gray-800">{it.text}</span>
+                                                    </li>
+                                                  ))}
+                                                </ul>
+                                              </div>
+                                            ) : null
+                                          ))
+                                        })()}
                                       </div>
                                       <div className="p-2 border-t bg-gray-50 text-right">
                                         <button
@@ -549,6 +604,7 @@ export default function AuditDetailed() {
             const meta = getFromMap(lookups.metaMap, page?.url, audit.results?.metaAnalysis);
             const headings = getFromMap(lookups.headingsMap, page?.url, audit.results?.headingStructure);
             const images = getFromMap(lookups.imagesMap, page?.url, audit.results?.imageAnalysis);
+            const unifiedIssues = buildPageIssues({ analysis, meta, headings, images, page })
 
             if (!page) return null;
 
@@ -619,11 +675,7 @@ export default function AuditDetailed() {
                       <div className="text-xs text-gray-600">Headings</div>
                     </div>
                     <div className="bg-gray-50 p-3 rounded text-center">
-                      <div className={`text-2xl font-bold ${
-                        (analysis?.seoAnalysis?.criticalIssues?.length || 0) > 0 ? 'text-red-600' : 'text-green-600'
-                      }`}>
-                        {(analysis?.seoAnalysis?.criticalIssues?.length || 0) + (analysis?.seoAnalysis?.opportunities?.length || 0)}
-                      </div>
+                      <div className={`text-2xl font-bold ${unifiedIssues.length > 0 ? 'text-red-600' : 'text-green-600'}`}>{unifiedIssues.length}</div>
                       <div className="text-xs text-gray-600">Issues</div>
                     </div>
                   </div>
@@ -634,7 +686,7 @@ export default function AuditDetailed() {
                   <div className="flex border-b">
                     {[
                       { id: 'overview', label: 'Overview', count: null },
-                      { id: 'issues', label: 'Issues', count: (analysis?.seoAnalysis?.criticalIssues?.length || 0) + (analysis?.seoAnalysis?.opportunities?.length || 0) },
+                      { id: 'issues', label: 'Issues', count: unifiedIssues.length },
                       { id: 'meta', label: 'Meta Tags', count: null },
                       { id: 'headings', label: 'Headings', count: headings?.headings?.length || 0 },
                       { id: 'images', label: 'Images', count: images?.totalImages || 0 },
@@ -692,7 +744,7 @@ export default function AuditDetailed() {
                     {/* Issues Tab */}
                     {activeTab === 'issues' && (
                       <div className="space-y-4">
-                        {(!analysis?.seoAnalysis?.criticalIssues?.length && !analysis?.seoAnalysis?.opportunities?.length) ? (
+                        {unifiedIssues.length === 0 ? (
                           <div className="text-center py-12">
                             <div className="text-6xl mb-3">🎉</div>
                             <div className="text-xl font-bold text-gray-700">No issues found!</div>
@@ -700,33 +752,34 @@ export default function AuditDetailed() {
                           </div>
                         ) : (
                           <>
-                            {analysis?.seoAnalysis?.criticalIssues?.length > 0 && (
-                              <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded">
-                                <h4 className="font-bold text-red-900 mb-4 text-lg">🔴 Critical Issues ({analysis.seoAnalysis.criticalIssues.length})</h4>
-                                <ul className="space-y-3">
-                                  {analysis.seoAnalysis.criticalIssues.map((issue, idx) => (
-                                    <li key={idx} className="flex gap-3 bg-white p-4 rounded shadow-sm">
-                                      <span className="font-bold text-red-600">#{idx + 1}</span>
-                                      <span className="text-gray-900">{issue}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {analysis?.seoAnalysis?.opportunities?.length > 0 && (
-                              <div className="bg-yellow-50 border-l-4 border-yellow-500 p-6 rounded">
-                                <h4 className="font-bold text-yellow-900 mb-4 text-lg">⚠️ Opportunities ({analysis.seoAnalysis.opportunities.length})</h4>
-                                <ul className="space-y-3">
-                                  {analysis.seoAnalysis.opportunities.map((opp, idx) => (
-                                    <li key={idx} className="flex gap-3 bg-white p-4 rounded shadow-sm">
-                                      <span className="font-bold text-yellow-600">#{idx + 1}</span>
-                                      <span className="text-gray-900">{opp}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
+                            {(() => {
+                              const grouped = { Critical: [], High: [], Medium: [], Low: [] }
+                              unifiedIssues.forEach(it => { (grouped[it.priority] || grouped.Low).push(it) })
+                              const sections = [
+                                { key: 'Critical', title: '🔴 Critical Issues', wrapper: 'bg-red-50 border-l-4 border-red-500', badge: 'bg-red-600 text-white' },
+                                { key: 'High', title: '🟠 High Priority', wrapper: 'bg-orange-50 border-l-4 border-orange-500', badge: 'bg-orange-600 text-white' },
+                                { key: 'Medium', title: '🟡 Medium Priority', wrapper: 'bg-yellow-50 border-l-4 border-yellow-500', badge: 'bg-yellow-500 text-black' },
+                                { key: 'Low', title: '🟢 Low Priority', wrapper: 'bg-green-50 border-l-4 border-green-500', badge: 'bg-green-600 text-white' },
+                              ]
+                              return sections.map(sec => (
+                                grouped[sec.key].length > 0 ? (
+                                  <div key={sec.key} className={`${sec.wrapper} p-6 rounded`}>
+                                    <h4 className="font-bold mb-4 text-lg flex items-center gap-2">
+                                      {sec.title}
+                                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${sec.badge}`}>{grouped[sec.key].length}</span>
+                                    </h4>
+                                    <ul className="space-y-3">
+                                      {grouped[sec.key].map((it, idx) => (
+                                        <li key={`${sec.key}-${idx}`} className="flex gap-3 bg-white p-4 rounded shadow-sm">
+                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${sec.badge}`}>{sec.key}</span>
+                                          <span className="text-gray-900">{it.text}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null
+                              ))
+                            })()}
 
                             {analysis?.seoAnalysis?.recommendations?.length > 0 && (
                               <div className="bg-green-50 border-l-4 border-green-500 p-6 rounded">
