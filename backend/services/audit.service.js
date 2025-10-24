@@ -233,6 +233,33 @@ class AuditService {
       const toVisit = [baseUrl];
       const normalizeHost = (h) => (h || '').toLowerCase().replace(/^www\./, '');
       const baseHost = (() => { try { return normalizeHost(new URL(baseUrl).hostname) } catch { return '' } })();
+      // Protocol fallback (try both https and http to maximize discovery)
+      try {
+        const u = new URL(baseUrl)
+        const alt = new URL(baseUrl)
+        alt.protocol = u.protocol === 'https:' ? 'http:' : 'https:'
+        const altUrl = alt.href
+        if (!toVisit.includes(altUrl)) toVisit.push(altUrl)
+      } catch {}
+
+      // Seed from sitemap.xml if present
+      try {
+        const sitemapUrl = new URL('/sitemap.xml', baseUrl).href
+        const sm = await axios.get(sitemapUrl, { timeout: 8000, validateStatus: () => true })
+        if (sm.status === 200 && typeof sm.data === 'string') {
+          const locs = Array.from(sm.data.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)).map(m => m[1])
+          locs.slice(0, 150).forEach(href => {
+            try {
+              const abs = this.resolveUrl(baseUrl, href)
+              const host = normalizeHost(new URL(abs).hostname)
+              if ((host === baseHost) && !toVisit.includes(abs)) toVisit.push(abs)
+            } catch {}
+          })
+          console.log(`🗺️ Seeded ${Math.min(150, locs.length)} URLs from sitemap.xml`)
+        }
+      } catch (e) {
+        // Ignore sitemap errors
+      }
       
       // Increased limit for more comprehensive crawling
       const maxPages = 50; // Increased from 20 to 50
