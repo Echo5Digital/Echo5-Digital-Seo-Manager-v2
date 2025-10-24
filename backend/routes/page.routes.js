@@ -4,6 +4,8 @@ const Page = require('../models/Page.model');
 const { protect } = require('../middleware/auth');
 const aiService = require('../services/ai.service');
 const { default: mongoose } = require('mongoose');
+const axios = require('axios');
+const cheerio = require('cheerio');
 
 // GET /api/pages - Get all pages with filters
 router.get('/', protect, async (req, res, next) => {
@@ -430,6 +432,41 @@ router.patch('/:id/focus-keyword', protect, async (req, res, next) => {
 
     await page.save()
     res.json({ status: 'success', data: { page, keyword: kw } })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// POST /api/pages/:id/refresh-content - Fetch page HTML and store content sample/word count
+router.post('/:id/refresh-content', protect, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const page = await Page.findById(id)
+    if (!page) return res.status(404).json({ status: 'error', message: 'Page not found' })
+
+    const url = page.url
+    if (!url) return res.status(400).json({ status: 'error', message: 'Page URL missing' })
+
+    const response = await axios.get(url, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEO-Tool/1.0)' } })
+    const $ = cheerio.load(response.data)
+
+    // Extract text sample and word count
+    const bodyText = $('body').text().replace(/\s+/g, ' ').trim()
+    const sampleText = bodyText.substring(0, 2000)
+    const wordCount = bodyText ? bodyText.split(/\s+/).filter(Boolean).length : 0
+
+    // Try to infer some basics if missing
+    const h1 = page.h1 || $('h1').first().text().trim()
+    const metaDescription = page.metaDescription || $('meta[name="description"]').attr('content') || ''
+
+    page.content = page.content || {}
+    page.content.sample = sampleText
+    page.content.wordCount = wordCount
+    if (!page.h1 && h1) page.h1 = h1
+    if (!page.metaDescription && metaDescription) page.metaDescription = metaDescription
+    await page.save()
+
+    res.json({ status: 'success', data: { page } })
   } catch (error) {
     next(error)
   }

@@ -25,6 +25,29 @@ const usePagesStore = create((set, get) => ({
     }
   },
 
+  fetchPage: async (pageId) => {
+    try {
+      const token = useAuthStore.getState().token
+      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/${pageId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const data = await resp.json()
+      if (data.status === 'success') {
+        const page = data.data.page
+        set(state => {
+          const exists = state.pages.find(p => p._id === pageId)
+          return { pages: exists ? state.pages.map(p => p._id === pageId ? page : p) : [...state.pages, page] }
+        })
+        return page
+      } else {
+        throw new Error(data.message || 'Failed to fetch page')
+      }
+    } catch (e) {
+      set({ error: e.message || 'Failed to fetch page' })
+      throw e
+    }
+  },
+
   updateFocusKeyword: async (pageId, focusKeyword) => {
     try {
       const token = useAuthStore.getState().token
@@ -47,6 +70,29 @@ const usePagesStore = create((set, get) => ({
       }
     } catch (e) {
       set({ error: e.message || 'Failed to update focus keyword' })
+      throw e
+    }
+  },
+
+  refreshContent: async (pageId) => {
+    try {
+      const token = useAuthStore.getState().token
+      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/${pageId}/refresh-content`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      const data = await resp.json()
+      if (data.status === 'success') {
+        const page = data.data.page
+        set(state => ({ pages: state.pages.map(p => p._id === pageId ? page : p) }))
+        return page
+      } else {
+        throw new Error(data.message || 'Failed to refresh content')
+      }
+    } catch (e) {
+      set({ error: e.message || 'Failed to refresh content' })
       throw e
     }
   }
