@@ -231,7 +231,9 @@ class AuditService {
       const title = $('title').text().trim();
       const metaDescription = $('meta[name="description"]').attr('content') || '';
       const metaKeywords = $('meta[name="keywords"]').attr('content') || '';
-      const canonical = $('link[rel="canonical"]').attr('href') || '';
+  const canonicalTags = $('link[rel="canonical"]');
+  const canonicalCount = canonicalTags.length;
+  const canonical = canonicalCount > 0 ? (canonicalTags.first().attr('href') || '') : '';
       const robots = $('meta[name="robots"]').attr('content') || '';
       const viewport = $('meta[name="viewport"]').attr('content') || '';
       const charset = $('meta[charset]').attr('charset') || $('meta[http-equiv="Content-Type"]').attr('content') || '';
@@ -365,8 +367,8 @@ class AuditService {
         jsFiles.push($(element).attr('src'));
       });
       
-      // Content Analysis with more details
-      const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+  // Content Analysis with more details
+  const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
       const wordCount = bodyText.split(' ').filter(w => w.length > 0).length;
       const paragraphs = $('p').length;
       const lists = $('ul, ol').length;
@@ -555,6 +557,7 @@ class AuditService {
           },
           keywords: metaKeywords,
           canonical: canonical,
+          canonicalCount: canonicalCount,
           robots: robots,
           viewport: viewport,
           charset: charset,
@@ -642,6 +645,7 @@ class AuditService {
           forms: forms,
           textLength: bodyText.length,
           htmlSize: response.data.length,
+          sampleText: bodyText.substring(0, 2000),
           contentDensity: (wordCount / response.data.length * 100).toFixed(2) + '%'
         },
         
