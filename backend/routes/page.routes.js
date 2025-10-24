@@ -3,6 +3,7 @@ const router = express.Router();
 const Page = require('../models/Page.model');
 const { protect } = require('../middleware/auth');
 const aiService = require('../services/ai.service');
+const { default: mongoose } = require('mongoose');
 
 // GET /api/pages - Get all pages with filters
 router.get('/', protect, async (req, res, next) => {
@@ -371,3 +372,65 @@ function checkSEOIssues(page) {
 }
 
 module.exports = router;
+ 
+// PATCH /api/pages/:id/focus-keyword - Set focus keyword and recompute keyword-based score
+router.patch('/:id/focus-keyword', protect, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { focusKeyword } = req.body
+    if (!focusKeyword || typeof focusKeyword !== 'string') {
+      return res.status(400).json({ status: 'error', message: 'focusKeyword is required' })
+    }
+    const page = await Page.findById(id)
+    if (!page) return res.status(404).json({ status: 'error', message: 'Page not found' })
+
+    const fk = focusKeyword.trim()
+    const title = page.title || ''
+    const meta = page.metaDescription || ''
+    const h1 = page.h1 || ''
+    const sample = page.content?.sample || ''
+    const words = sample ? sample.split(/\s+/).filter(Boolean).length : 0
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(`\\b${esc(fk)}\\b`, 'gi')
+    const count = sample ? ((sample.match(re) || []).length) : 0
+    const density = words > 0 ? (count / words) * 100 : 0
+
+    const inTitle = title.toLowerCase().includes(fk.toLowerCase())
+    const inMeta = meta.toLowerCase().includes(fk.toLowerCase())
+    const inH1 = h1.toLowerCase().includes(fk.toLowerCase())
+    const inContent = count > 0
+
+    // Simple keyword score out of 100
+    let score = 0
+    if (inTitle) score += 40
+    if (inMeta) score += 15
+    if (inH1) score += 25
+    if (inContent) score += 20
+    // Penalize very high density
+    if (density > 5) score -= Math.min(20, Math.round((density - 5)))
+    score = Math.max(0, Math.min(100, score))
+
+    // Update page
+    page.seo = page.seo || {}
+    page.seo.focusKeyword = fk
+    page.seo.seoScore = score
+    // Update keywords array entry
+    const kw = {
+      keyword: fk,
+      density: Number(density.toFixed(2)),
+      position: sample ? sample.toLowerCase().indexOf(fk.toLowerCase()) : -1,
+      inTitle,
+      inMeta,
+      inH1,
+      inUrl: (page.url || '').toLowerCase().includes(fk.toLowerCase()),
+    }
+    // Replace or add
+    page.keywords = Array.isArray(page.keywords) ? page.keywords.filter(k => k.keyword !== fk) : []
+    page.keywords.push(kw)
+
+    await page.save()
+    res.json({ status: 'success', data: { page, keyword: kw } })
+  } catch (error) {
+    next(error)
+  }
+})

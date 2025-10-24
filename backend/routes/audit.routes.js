@@ -65,7 +65,7 @@ router.post('/', protect, async (req, res, next) => {
     // Start audit (async)
     auditService.performFullAudit(url || client.domain)
       .then(async (results) => {
-        const summary = auditService.calculateAuditScore(results);
+  const summary = auditService.calculateAuditScore(results);
         const aiAnalysis = await aiService.analyzeAuditResults(summary, url || client.domain);
 
         audit.results = results;
@@ -85,6 +85,13 @@ router.post('/', protect, async (req, res, next) => {
           lowIssues: summary.lowCount,
         };
         await client.save();
+
+        // Persist pages into Pages collection with latest snapshot
+        try {
+          await auditService.persistPages(audit, client._id)
+        } catch (e) {
+          console.warn('Failed to persist pages from audit:', e.message)
+        }
       })
       .catch(async (error) => {
         audit.status = 'Failed';
@@ -165,6 +172,13 @@ router.post('/run/:clientId', protect, async (req, res, next) => {
           lowIssues: summary.lowCount,
         };
         await client.save();
+
+        // Persist pages into Pages collection with latest snapshot
+        try {
+          await auditService.persistPages(audit, client._id)
+        } catch (e) {
+          console.warn('Failed to persist pages from audit:', e.message)
+        }
       })
       .catch(async (error) => {
         audit.status = 'Failed';

@@ -182,6 +182,7 @@ const pageSchema = new mongoose.Schema({
       external: Number,
       broken: Number,
     },
+    sample: String,
   },
   
   // Performance Metrics

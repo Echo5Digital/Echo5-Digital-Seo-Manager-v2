@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { logger } = require('../utils/logger');
+const Page = require('../models/Page.model');
 
 /**
  * Site Audit Service - Crawls and analyzes websites for SEO issues
@@ -91,6 +92,132 @@ class AuditService {
     } catch (error) {
       logger.error('Audit Error:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Persist audited pages into Pages collection with latest snapshot and SEO score
+   * @param {Object} auditOrResults - Audit document or audit results object containing results
+   * @param {String|Object} clientId - Client ObjectId
+   */
+  async persistPages(auditOrResults, clientId) {
+    try {
+      const results = auditOrResults?.results || auditOrResults
+      if (!results) return
+      const analyses = Array.isArray(results.pageAnalysis) ? results.pageAnalysis : []
+
+      const upserts = analyses.map(async (pa) => {
+        try {
+          const url = pa.url
+          const u = new URL(url)
+          const path = (u.pathname || '/').replace(/\/+$/,'') || '/'
+          const slug = path === '/' ? 'home' : path.replace(/^\//,'')
+
+          // Extract fields
+          const meta = pa.metaData || {}
+          const social = pa.socialTags || {}
+          const headings = pa.headings || {}
+          const images = pa.images || {}
+          const content = pa.content || {}
+          const perf = pa.performance || {}
+          const title = meta.title?.text || pa.title || u.pathname || 'Untitled'
+          const h1 = Array.isArray(headings.h1Text) ? (headings.h1Text[0] || '') : ''
+          const metaDescription = meta.description?.text || ''
+
+          const update = {
+            clientId,
+            url,
+            slug,
+            title: title?.substring(0, 60) || 'Untitled',
+            metaDescription: metaDescription?.substring(0, 160) || '',
+            h1,
+            seo: {
+              canonical: meta.canonical || undefined,
+              robots: meta.robots || 'index,follow',
+              focusKeyword: undefined,
+              readabilityScore: undefined,
+              seoScore: pa.seoAnalysis?.seoScore ?? undefined,
+            },
+            structuredData: {
+              type: (pa.structuredData?.types && pa.structuredData.types[0]) || 'WebPage',
+              schema: (pa.structuredData?.data && pa.structuredData.data[0]) || {},
+            },
+            openGraph: {
+              title: social?.openGraph?.title || '',
+              description: social?.openGraph?.description || '',
+              image: social?.openGraph?.image || '',
+              url,
+              type: social?.openGraph?.type || 'website',
+              siteName: social?.openGraph?.siteName || '',
+            },
+            twitter: {
+              card: social?.twitter?.card || 'summary_large_image',
+              title: social?.twitter?.title || '',
+              description: social?.twitter?.description || '',
+              image: social?.twitter?.image || '',
+              site: social?.twitter?.site || '',
+              creator: '',
+            },
+            content: {
+              wordCount: content.wordCount || 0,
+              readingTime: content.wordCount ? Math.max(1, Math.round(content.wordCount / 200)) : undefined,
+              paragraphs: pa.content?.paragraphs || undefined,
+              headings: {
+                h1Count: headings.h1Count || 0,
+                h2Count: Array.isArray(headings.structure) ? headings.structure.filter(h=>h.level===2).length : undefined,
+                h3Count: Array.isArray(headings.structure) ? headings.structure.filter(h=>h.level===3).length : undefined,
+              },
+              links: {
+                internal: pa.links?.internal?.count || 0,
+                external: pa.links?.external?.count || 0,
+                broken: pa.links?.potentiallyBroken || 0,
+              },
+              sample: content.sampleText || undefined,
+            },
+            images: (images.details || []).map(img => ({
+              url: img.src,
+              alt: img.alt || '',
+              width: (img.width && Number(img.width)) || undefined,
+              height: (img.height && Number(img.height)) || undefined,
+              optimized: !!img.hasLazyLoading,
+            })),
+            performance: {
+              loadTime: (typeof pa.loadTime === 'number') ? pa.loadTime / 1000 : undefined,
+              totalResources: perf.totalResources || undefined,
+              firstContentfulPaint: undefined,
+              largestContentfulPaint: undefined,
+              cumulativeLayoutShift: undefined,
+              timeToInteractive: undefined,
+            },
+            technical: {
+              hasSSL: /^https:/i.test(url),
+              isMobileFriendly: !!meta.viewport,
+              hasViewport: !!meta.viewport,
+              hasLanguage: !!meta.lang,
+              hasCharset: !!meta.charset,
+              responsiveImages: (images.withDimensions || 0) > 0,
+              lazyLoading: (images.withLazyLoading || 0) > 0,
+            },
+          }
+
+          // Upsert by clientId+slug
+          const existing = await Page.findOne({ clientId, slug })
+          if (existing) {
+            await Page.updateOne({ _id: existing._id }, { $set: update })
+            return existing._id
+          } else {
+            const created = await Page.create(update)
+            return created._id
+          }
+        } catch (e) {
+          logger.error('Page persist error:', e)
+          return null
+        }
+      })
+
+      await Promise.allSettled(upserts)
+    } catch (err) {
+      logger.error('persistPages error:', err)
     }
   }
 
