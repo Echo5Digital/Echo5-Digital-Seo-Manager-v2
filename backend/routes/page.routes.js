@@ -452,16 +452,25 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
 
     // Extract text sample and word count
     const bodyText = $('body').text().replace(/\s+/g, ' ').trim()
-    const sampleText = bodyText.substring(0, 2000)
-    const wordCount = bodyText ? bodyText.split(/\s+/).filter(Boolean).length : 0
+    const blocks = []
+    $('h1, h2, h3, h4, h5, h6, p, li').each((i, el) => {
+      if (blocks.length >= 50) return false
+      const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
+      const text = $(el).text().replace(/\s+/g, ' ').trim()
+      if (!text || text.length < 2) return
+      blocks.push({ tag, text })
+    })
+    const sampleText = (blocks.map(b => b.text).join(' ').trim() || bodyText).substring(0, 2000)
+    const wordCount = (sampleText ? sampleText.split(/\s+/).filter(Boolean).length : 0)
 
     // Try to infer some basics if missing
     const h1 = page.h1 || $('h1').first().text().trim()
     const metaDescription = page.metaDescription || $('meta[name="description"]').attr('content') || ''
 
-    page.content = page.content || {}
-    page.content.sample = sampleText
-    page.content.wordCount = wordCount
+  page.content = page.content || {}
+  page.content.sample = sampleText
+  page.content.wordCount = wordCount
+  page.content.blocks = blocks
     if (!page.h1 && h1) page.h1 = h1
     if (!page.metaDescription && metaDescription) page.metaDescription = metaDescription
     await page.save()

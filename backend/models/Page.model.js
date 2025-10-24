@@ -183,6 +183,11 @@ const pageSchema = new mongoose.Schema({
       broken: Number,
     },
     sample: String,
+    // Ordered content blocks for neat preview
+    blocks: [{
+      tag: { type: String }, // e.g., 'h1', 'p', 'li'
+      text: { type: String }
+    }],
   },
   
   // Performance Metrics

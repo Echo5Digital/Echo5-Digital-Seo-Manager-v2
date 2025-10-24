@@ -62,9 +62,25 @@ export default function PageDetail() {
                     >Capture content</button>
                   )}
                 </div>
-                <div className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 border rounded p-3 max-h-[70vh] overflow-auto">
-                  {page?.content?.sample || 'No content captured for this page.'}
-                </div>
+                {Array.isArray(page?.content?.blocks) && page.content.blocks.length > 0 ? (
+                  <div className="bg-gray-50 border rounded p-3 max-h-[70vh] overflow-auto divide-y">
+                    {page.content.blocks.map((b, idx) => (
+                      <div key={idx} className="py-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border bg-white text-gray-700">{b.tag}</span>
+                          {/^h[1-6]$/.test(b.tag || '') && (
+                            <span className="text-xs text-gray-500">Heading</span>
+                          )}
+                        </div>
+                        <div className={`text-sm ${/^h[1-6]$/.test(b.tag || '') ? 'font-semibold text-gray-900' : 'text-gray-800'}`}>{b.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 border rounded p-3 max-h-[70vh] overflow-auto">
+                    {page?.content?.sample || 'No content captured for this page.'}
+                  </div>
+                )}
               </div>
             </div>
             <div className="bg-white border rounded-lg p-4 space-y-3">
