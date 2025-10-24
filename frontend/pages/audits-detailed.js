@@ -434,10 +434,8 @@ export default function AuditDetailed() {
       }
     } catch {}
 
-        // Mobile: viewport meta tag
-        if (!analysis?.metaData?.viewport) {
-          pushIssue('Missing viewport meta tag', 'Critical', { category: 'Mobile', rec: 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> for responsive layout.' })
-        }
+        // Note: We intentionally do not surface "Missing viewport meta tag" as an issue.
+        // It remains covered in the checks section under "Technical • Mobile Optimization".
 
     // Images without alt
     const missingAlt = images?.withoutAlt || 0
