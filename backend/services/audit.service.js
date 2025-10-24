@@ -231,6 +231,8 @@ class AuditService {
       const discoveredPages = [];
       const visited = new Set();
       const toVisit = [baseUrl];
+      const normalizeHost = (h) => (h || '').toLowerCase().replace(/^www\./, '');
+      const baseHost = (() => { try { return normalizeHost(new URL(baseUrl).hostname) } catch { return '' } })();
       
       // Increased limit for more comprehensive crawling
       const maxPages = 50; // Increased from 20 to 50
@@ -302,9 +304,12 @@ class AuditService {
               try {
                 const urlObj = new URL(absoluteUrl);
                 const baseUrlObj = new URL(baseUrl);
+                const currentHost = normalizeHost(new URL(currentUrl).hostname);
+                const linkHost = normalizeHost(urlObj.hostname);
+                const baseHostN = normalizeHost(baseUrlObj.hostname);
                 
                 // Only crawl same domain, avoid fragments and common files
-                if (urlObj.hostname === baseUrlObj.hostname && 
+                if ((linkHost === baseHostN || linkHost === currentHost) && 
                     !absoluteUrl.includes('#') &&
                     !absoluteUrl.match(/\.(pdf|jpg|jpeg|png|gif|css|js|zip|xml|txt)$/i) &&
                     !visited.has(absoluteUrl) &&

@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Layout from '../components/Layout'
 import useClientStore from '../store/clients'
+import useAuditStore from '../store/audits'
 import usePagesStore from '../store/pages'
 
 export default function Pages() {
   const { clients, fetchClients } = useClientStore()
   const { pages, fetchPages, fetchPage, updateFocusKeyword, refreshContent, error, loading } = usePagesStore()
+  const { runAudit, auditProgress } = useAuditStore()
   const [clientId, setClientId] = useState('')
   const [selectedId, setSelectedId] = useState('')
 
@@ -42,7 +44,25 @@ export default function Pages() {
           ) : error ? (
             <div className="p-4 bg-red-50 text-red-700 rounded">{error}</div>
           ) : pages.length === 0 ? (
-            <div className="p-12 text-center text-gray-500">No pages found. Run an audit to populate pages.</div>
+            <div className="p-12 text-center">
+              <div className="text-gray-700 mb-3">No pages found for this client.</div>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
+                  disabled={!clientId || auditProgress.isRunning}
+                  onClick={async () => {
+                    try {
+                      await runAudit(clientId)
+                      // Poll pages list a few times to reflect persisted pages
+                      setTimeout(() => fetchPages(clientId), 4000)
+                      setTimeout(() => fetchPages(clientId), 8000)
+                      setTimeout(() => fetchPages(clientId), 15000)
+                    } catch {}
+                  }}
+                >{auditProgress.isRunning ? 'Audit running…' : 'Run audit now'}</button>
+              </div>
+              <div className="text-xs text-gray-500 mt-2">Audits run async and may take a minute. This page will refresh automatically.</div>
+            </div>
           ) : (
             <>
             <div className="overflow-x-auto">
