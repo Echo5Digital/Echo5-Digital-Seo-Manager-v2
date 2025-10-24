@@ -111,7 +111,8 @@ class AuditService {
           const url = pa.url
           const u = new URL(url)
           const path = (u.pathname || '/').replace(/\/+$/,'') || '/'
-          const slug = path === '/' ? 'home' : path.replace(/^\//,'')
+          // Use a special slug for the root path to avoid collisions with "/home" pages
+          const slug = path === '/' ? '__root__' : path.replace(/^\//,'')
 
           // Extract fields
           const meta = pa.metaData || {}

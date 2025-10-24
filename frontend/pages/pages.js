@@ -55,7 +55,20 @@ export default function Pages() {
                   {pages.map(p => (
                     <tr key={p._id}>
                       <td className="px-4 py-3 text-sm text-blue-600 underline"><a href={p.url} target="_blank" rel="noreferrer">{p.url}</a></td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{p.title}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        <div className="flex items-center gap-2">
+                          <span>{p.title}</span>
+                          {(() => {
+                            let isHome = p.slug === '__root__';
+                            if (!isHome && p.slug === 'home') {
+                              try { isHome = new URL(p.url).pathname.replace(/\/+$/,'') === '' || new URL(p.url).pathname.replace(/\/+$/,'') === '/'; } catch {}
+                            }
+                            return isHome ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border">Homepage</span>
+                            ) : null;
+                          })()}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-sm font-bold">
                         <span className={`px-2 py-1 rounded ${
                           (p.seo?.seoScore || 0) >= 80 ? 'bg-green-100 text-green-800' :
