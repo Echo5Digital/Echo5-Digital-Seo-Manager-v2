@@ -32,6 +32,7 @@ export default function AuditDetailed() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterBy, setFilterBy] = useState('all')
   const [sortBy, setSortBy] = useState('index')
+  const [groupBy, setGroupBy] = useState('page') // 'page' | 'category'
   const [expandedIssues, setExpandedIssues] = useState({})
   const [openIssuesDropdown, setOpenIssuesDropdown] = useState(null)
 
@@ -217,6 +218,39 @@ export default function AuditDetailed() {
     const missingAlt = images?.withoutAlt || 0
     if (missingAlt > 0) pushIssue(`${missingAlt} images missing alt text`, missingAlt >= 10 ? 'High' : 'Medium')
 
+    // Include failing checks from computePageChecks (avoid duplicating on-page items we already add)
+    try {
+      const checks = computePageChecks({ page, analysis, meta, headings, images })
+      const excludedGroups = new Set([
+        'On-Page • Meta Tags',
+        'On-Page • Headings',
+        'On-Page • Content',
+        'On-Page • Images',
+      ])
+      const mapPriority = (groupTitle, label) => {
+        const g = groupTitle.toLowerCase()
+        const l = String(label || '').toLowerCase()
+        if (g.includes('security') || l.includes('https')) return 'Critical'
+        if (g.includes('crawlability') || g.includes('indexing')) return 'High'
+        if (g.includes('performance')) return 'Medium'
+        if (g.includes('mobile')) return 'Medium'
+        if (g.includes('links')) return l.includes('broken') ? 'High' : 'Medium'
+        if (g.includes('schema')) return 'Medium'
+        if (g.includes('off-page') || g.includes('ux')) return 'Low'
+        if (g.includes('content & keyword')) return 'Low'
+        return 'Low'
+      }
+      ;(checks.categories || []).forEach(cat => {
+        if (excludedGroups.has(cat.title)) return
+        ;(cat.items || []).forEach(it => {
+          if (it.status === 'fail') {
+            const text = `${it.label}${it.note ? ` (${it.note})` : ''}`
+            pushIssue(text, mapPriority(cat.title, it.label))
+          }
+        })
+      })
+    } catch {}
+
     return items
   }
 
@@ -236,6 +270,123 @@ export default function AuditDetailed() {
     }, 0)
   }
 
+  // Build page-level checks based on available data; returns { categories: [...], failCount }
+  const computePageChecks = ({ page, analysis, meta, headings, images }) => {
+    const checks = []
+    let failCount = 0
+
+    const push = (group, label, status, note) => {
+      const grp = checks.find(g => g.title === group) || (() => { const g = { title: group, items: [] }; checks.push(g); return g })()
+      grp.items.push({ label, status, note })
+      if (status === 'fail') failCount += 1
+    }
+
+    // Helpers
+    const isHttps = (url) => /^https:/i.test(url || '')
+    const loadTimeMs = (() => {
+      const v = page?.loadTime
+      if (v == null) return undefined
+      if (typeof v === 'number') return v
+      const s = String(v).trim()
+      const m = s.match(/([0-9]*\.?[0-9]+)/)
+      if (!m) return undefined
+      const num = parseFloat(m[1])
+      return /s/i.test(s) ? num * 1000 : num
+    })()
+    const canonical = meta?.canonical || meta?.canonicalUrl || meta?.linkCanonical
+    const robots = meta?.robots || {}
+    const urlPath = (() => { try { const u = new URL(page?.url); return u.pathname || '/'; } catch { return String(page?.url || '/'); } })()
+    const urlOk = (() => {
+      const path = urlPath
+      if (!path) return false
+      // heuristic: lowercase, hyphen separated, short segments, avoid underscores and query
+      const hasUnderscore = /_/ .test(path)
+      const hasUpper = /[A-Z]/.test(path)
+      const tooLong = path.length > 75
+      const hasQuery = /[?]/.test(path)
+      const goodHyphens = /\//.test(path) ? path.split('/').every(seg => seg.length === 0 || /^[a-z0-9-]+$/.test(seg)) : true
+      return !hasUnderscore && !hasUpper && !tooLong && !hasQuery && goodHyphens
+    })()
+
+    // 1) Technical SEO Checks
+    push('Technical • Crawlability & Indexing', 'Robots.txt present and configured', 'unknown')
+    push('Technical • Crawlability & Indexing', 'XML sitemap exists and submitted', 'unknown')
+    push('Technical • Crawlability & Indexing', 'Page is indexable (no noindex/canonical/disallow issues)', robots?.noindex ? 'fail' : 'pass')
+    push('Technical • Crawlability & Indexing', 'Canonical tag correctly set', canonical ? 'pass' : 'fail')
+    push('Technical • Crawlability & Indexing', 'Proper URL structure', urlOk ? 'pass' : 'fail')
+    push('Technical • Crawlability & Indexing', 'No orphan pages (internally linked)', 'unknown')
+
+    push('Technical • Performance', 'Core Web Vitals passing (mobile & desktop)', 'unknown')
+    push('Technical • Performance', 'Fast page load (<2.5s)', typeof loadTimeMs === 'number' ? (loadTimeMs <= 2500 ? 'pass' : 'fail') : 'unknown', typeof loadTimeMs === 'number' ? `${Math.round(loadTimeMs)}ms` : undefined)
+    push('Technical • Performance', 'Optimized images (WebP, compressed)', 'unknown')
+    push('Technical • Performance', 'Minified CSS/JS, minimal render-blocking', 'unknown')
+    push('Technical • Performance', 'Lazy load for below-the-fold images', 'unknown')
+    push('Technical • Performance', 'Effective caching (browser & server)', 'unknown')
+
+    push('Technical • Mobile Optimization', 'Mobile-friendly & responsive', 'unknown')
+    push('Technical • Mobile Optimization', 'Touch elements well spaced', 'unknown')
+    push('Technical • Mobile Optimization', 'Readable font sizes', 'unknown')
+    push('Technical • Mobile Optimization', 'No viewport/overflow issues', 'unknown')
+
+    push('Technical • Links', 'No broken links (404)', (page?.statusCode && page.statusCode !== 404) ? 'pass' : (page?.statusCode === 404 ? 'fail' : 'unknown'))
+    push('Technical • Links', 'Internal linking logical', 'unknown')
+    push('Technical • Links', 'External links target _blank and rel nofollow where needed', 'unknown')
+    push('Technical • Links', 'Redirects configured; no chains', 'unknown')
+
+    push('Technical • Security', 'HTTPS enabled', isHttps(page?.url) ? 'pass' : 'fail')
+    push('Technical • Security', 'No mixed content', 'unknown')
+    push('Technical • Security', 'Secure canonical URLs', canonical ? (isHttps(canonical) ? 'pass' : 'fail') : 'unknown')
+
+    // 2) On-Page SEO Checks
+    const titleLen = meta?.title?.text?.length ?? page?.title?.length ?? 0
+    const descLen = meta?.description?.text?.length ?? page?.metaDescription?.length ?? 0
+    push('On-Page • Meta Tags', 'Unique & descriptive Title (50–60 chars)', titleLen ? (titleLen >= 50 && titleLen <= 60 ? 'pass' : 'fail') : 'fail', `${titleLen} chars`)
+    push('On-Page • Meta Tags', 'Compelling Meta description (120–160 chars)', descLen ? (descLen >= 120 && descLen <= 160 ? 'pass' : 'fail') : 'fail', `${descLen} chars`)
+    push('On-Page • Meta Tags', 'Focus keyword in title & description', 'unknown')
+    push('On-Page • Meta Tags', 'Proper use of meta robots', (robots && typeof robots === 'object') ? 'pass' : 'unknown')
+
+    const h1Count = getHeadingCount(headings, 1)
+    push('On-Page • Headings', 'Only one H1', h1Count === 1 ? 'pass' : 'fail', `H1 count: ${h1Count}`)
+    // Hierarchy heuristic: levels do not jump by >1
+    const headingLevels = (Array.isArray(headings?.headings) ? headings.headings : []).map(h => {
+      let l = h?.level; if (typeof l === 'string') { const m = l.toLowerCase().match(/^h(\d)$/); if (m) l = parseInt(m[1], 10) }
+      return typeof l === 'number' ? l : undefined
+    }).filter(Boolean)
+    const badJump = headingLevels.some((lvl, i, arr) => i > 0 && lvl - arr[i-1] > 1)
+    push('On-Page • Headings', 'Proper heading hierarchy', headingLevels.length ? (badJump ? 'fail' : 'pass') : 'unknown')
+    push('On-Page • Headings', 'Keywords used naturally in headings', 'unknown')
+
+    const wordCount = analysis?.content?.wordCount
+    push('On-Page • Content', 'No thin content (≥300 words)', typeof wordCount === 'number' ? (wordCount >= 300 ? 'pass' : 'fail') : 'unknown', typeof wordCount === 'number' ? `${wordCount} words` : undefined)
+    push('On-Page • Content', 'Unique, high-quality, relevant', 'unknown')
+    push('On-Page • Content', 'Keyword density 1–2% (natural)', 'unknown')
+    push('On-Page • Content', 'Use of related (LSI) keywords', 'unknown')
+    push('On-Page • Content', 'Internal links to related pages', 'unknown')
+    push('On-Page • Content', 'Readable structure (short paras, bullets, headings)', 'unknown')
+
+    const withoutAlt = images?.withoutAlt ?? 0
+    push('On-Page • Images', 'Descriptive filenames', 'unknown')
+    push('On-Page • Images', 'ALT text includes keyword contextually', withoutAlt === 0 ? 'pass' : 'fail', `${withoutAlt} missing alt`)
+    push('On-Page • Images', 'Compressed and properly scaled', 'unknown')
+    push('On-Page • Images', 'Lazy loading applied', 'unknown')
+
+    push('On-Page • Schema', 'Structured data (JSON-LD) implemented', 'unknown')
+    push('On-Page • Schema', 'Validated in Google Rich Results Test', 'unknown')
+
+    // 3) Off-Page & UX – largely unknown at page-level
+    push('Off-Page & UX • Backlinks', 'Healthy backlink profile (no toxic links)', 'unknown')
+    push('Off-Page & UX • User Experience', 'Clear navigation, no intrusive popups, breadcrumbs', 'unknown')
+    push('Off-Page & UX • Analytics', 'Analytics/Search Console/Conversions tracking', 'unknown')
+
+    // 4) Content & Keyword Strategy – largely unknown
+    push('Content & Keyword Strategy', 'Keyword mapping per page', 'unknown')
+    push('Content & Keyword Strategy', 'Content updated/refreshed periodically', 'unknown')
+    push('Content & Keyword Strategy', 'Use of FAQ/How-To schema where applicable', 'unknown')
+    push('Content & Keyword Strategy', 'Avoid keyword cannibalization', 'unknown')
+
+    return { categories: checks, failCount }
+  }
+
   // Aggregate priority counts across all pages for summary cards
   const aggregatedPriority = useMemo(() => {
     const totals = { Critical: 0, High: 0, Medium: 0, Low: 0 }
@@ -249,6 +400,48 @@ export default function AuditDetailed() {
       issues.forEach(it => { totals[it.priority] = (totals[it.priority] || 0) + 1 })
     })
     return totals
+  }, [audit, lookups])
+
+  // Aggregate categories and compute simple scores across all pages
+  const aggregatedCategories = useMemo(() => {
+    const totals = {}
+    const pages = audit?.results?.discoveredPages || []
+    pages.forEach(p => {
+      const analysis = getFromMap(lookups.analysisMap, p.url, audit.results?.pageAnalysis)
+      const meta = getFromMap(lookups.metaMap, p.url, audit.results?.metaAnalysis)
+      const headings = getFromMap(lookups.headingsMap, p.url, audit.results?.headingStructure)
+      const images = getFromMap(lookups.imagesMap, p.url, audit.results?.imageAnalysis)
+      const checks = computePageChecks({ page: p, analysis, meta, headings, images })
+      ;(checks.categories || []).forEach(cat => {
+        if (!totals[cat.title]) totals[cat.title] = { pass: 0, fail: 0, unknown: 0 }
+        cat.items.forEach(it => {
+          totals[cat.title][it.status] = (totals[cat.title][it.status] || 0) + 1
+        })
+      })
+    })
+
+    // Compute section scores: Technical, On-Page, Performance
+    const sectionMap = {
+      Technical: ['Technical • Crawlability & Indexing','Technical • Performance','Technical • Mobile Optimization','Technical • Links','Technical • Security'],
+      'On-Page': ['On-Page • Meta Tags','On-Page • Headings','On-Page • Content','On-Page • Images','On-Page • Schema'],
+      Performance: ['Technical • Performance']
+    }
+    const sectionScores = {}
+    Object.keys(sectionMap).forEach(sec => {
+      const cats = sectionMap[sec]
+      let pass=0, fail=0, unknown=0
+      cats.forEach(c => { const t = totals[c]; if (t){ pass+=t.pass||0; fail+=t.fail||0; unknown+=t.unknown||0 }})
+      const total = pass+fail+unknown
+      const score = total>0 ? Math.max(0, Math.round(100 - (fail/(pass+fail+unknown))*100)) : null
+      sectionScores[sec] = { score, pass, fail, unknown }
+    })
+    const overall = (()=>{
+      const vals = Object.values(sectionScores).map(v=>v.score).filter(v=>typeof v==='number')
+      const score = vals.length? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length): null
+      return score
+    })()
+
+    return { totals, sectionScores, overall }
   }, [audit, lookups])
 
   if (loading) {
@@ -395,13 +588,112 @@ export default function AuditDetailed() {
           </div>
         </div>
 
+        {/* Site-level Checks (from backend signals) */}
+        <div className="bg-white rounded-xl shadow-lg border p-6">
+          <h3 className="text-xl font-bold text-gray-900 mb-4">🧭 Site-level Checks</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Robots.txt */}
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-gray-900">robots.txt</span>
+                {Array.isArray(audit.results?.robotsTxtIssues) && audit.results.robotsTxtIssues.length === 0 ? (
+                  <span className="px-2 py-0.5 text-xs rounded bg-green-100 text-green-800 font-bold">PASS</span>
+                ) : Array.isArray(audit.results?.robotsTxtIssues) ? (
+                  <span className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-800 font-bold">{audit.results.robotsTxtIssues.length} ISSUES</span>
+                ) : (
+                  <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 font-bold">UNKNOWN</span>
+                )}
+              </div>
+              <div className="text-sm text-gray-700">
+                {Array.isArray(audit.results?.robotsTxtIssues) && audit.results.robotsTxtIssues.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1">
+                    {audit.results.robotsTxtIssues.slice(0,3).map((it, i) => (
+                      <li key={i}>{it.issue || it.message || 'Issue'}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-gray-500">No problems detected or not evaluated.</span>
+                )}
+              </div>
+            </div>
+
+            {/* Sitemap */}
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-gray-900">XML sitemap</span>
+                {Array.isArray(audit.results?.sitemapIssues) && audit.results.sitemapIssues.length === 0 ? (
+                  <span className="px-2 py-0.5 text-xs rounded bg-green-100 text-green-800 font-bold">PASS</span>
+                ) : Array.isArray(audit.results?.sitemapIssues) ? (
+                  <span className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-800 font-bold">{audit.results.sitemapIssues.length} ISSUES</span>
+                ) : (
+                  <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 font-bold">UNKNOWN</span>
+                )}
+              </div>
+              <div className="text-sm text-gray-700">
+                {Array.isArray(audit.results?.sitemapIssues) && audit.results.sitemapIssues.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1">
+                    {audit.results.sitemapIssues.slice(0,3).map((it, i) => (
+                      <li key={i}>{it.issue || it.message || 'Issue'}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-gray-500">No problems detected or not evaluated.</span>
+                )}
+              </div>
+            </div>
+
+            {/* Core Web Vitals (placeholder) */}
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-gray-900">Core Web Vitals</span>
+                {Array.isArray(audit.results?.coreWebVitals) && audit.results.coreWebVitals.length > 0 ? (
+                  <span className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-800 font-bold">INFO</span>
+                ) : (
+                  <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 font-bold">UNKNOWN</span>
+                )}
+              </div>
+              <div className="text-sm text-gray-700">
+                {Array.isArray(audit.results?.coreWebVitals) && audit.results.coreWebVitals.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1">
+                    {audit.results.coreWebVitals.slice(0,3).map((it, i) => (
+                      <li key={i}>{it.message || it.recommendation || it.type}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-gray-500">Integrate PageSpeed Insights API for detailed CWV metrics.</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* MAIN CONTENT - Ahrefs-style Interface */}
         {selectedPageIndex === null ? (
           /* ============ ALL PAGES VIEW ============ */
           <div className="bg-white rounded-xl shadow-xl overflow-hidden">
+            {/* Category Scores Summary */}
+            <div className="bg-white p-6 border-b grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="rounded-lg p-4 bg-blue-50 border">
+                <div className="text-xs text-blue-700 font-semibold">Technical SEO</div>
+                <div className="text-3xl font-bold text-blue-900">{aggregatedCategories.sectionScores.Technical.score ?? 'N/A'}</div>
+              </div>
+              <div className="rounded-lg p-4 bg-purple-50 border">
+                <div className="text-xs text-purple-700 font-semibold">On-Page SEO</div>
+                <div className="text-3xl font-bold text-purple-900">{aggregatedCategories.sectionScores['On-Page'].score ?? 'N/A'}</div>
+              </div>
+              <div className="rounded-lg p-4 bg-amber-50 border">
+                <div className="text-xs text-amber-700 font-semibold">Performance</div>
+                <div className="text-3xl font-bold text-amber-900">{aggregatedCategories.sectionScores.Performance.score ?? 'N/A'}</div>
+              </div>
+              <div className="rounded-lg p-4 bg-gray-50 border">
+                <div className="text-xs text-gray-700 font-semibold">Overall Score</div>
+                <div className="text-3xl font-bold text-gray-900">{aggregatedCategories.overall ?? 'N/A'}</div>
+              </div>
+            </div>
+
             {/* Search and Filters Bar */}
             <div className="bg-gray-50 border-b-2 border-gray-200 p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <input
                   type="text"
                   placeholder="🔍 Search by URL or title..."
@@ -416,10 +708,21 @@ export default function AuditDetailed() {
                 >
                   <option value="all">All Pages ({audit.results?.discoveredPages?.length || 0})</option>
                   <option value="has-issues">Has Issues</option>
+                  <option value="has-failed-checks">Has Failed Checks</option>
                   <option value="critical">Priority: Critical</option>
                   <option value="high">Priority: High</option>
                   <option value="medium">Priority: Medium</option>
                   <option value="low">Priority: Low</option>
+                  <option value="warnings">Warnings Only (High + Medium)</option>
+                  <option value="info">Info Only (Low)</option>
+                  <optgroup label="Failing Categories">
+                    <option value="cat-tech-indexing">Technical • Crawlability & Indexing</option>
+                    <option value="cat-tech-performance">Technical • Performance</option>
+                    <option value="cat-onpage-meta">On-Page • Meta Tags</option>
+                    <option value="cat-onpage-headings">On-Page • Headings</option>
+                    <option value="cat-onpage-content">On-Page • Content</option>
+                    <option value="cat-onpage-images">On-Page • Images</option>
+                  </optgroup>
                   <option value="good">Good Score (80+)</option>
                   <option value="needs-work">Needs Work (&lt;60)</option>
                 </select>
@@ -434,10 +737,34 @@ export default function AuditDetailed() {
                   <option value="issues-desc">Most Issues First</option>
                   <option value="issues-asc">Fewest Issues First</option>
                 </select>
+                <select
+                  value={groupBy}
+                  onChange={(e) => setGroupBy(e.target.value)}
+                  className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white font-medium"
+                >
+                  <option value="page">Group by: Page</option>
+                  <option value="category">Group by: Category</option>
+                </select>
               </div>
             </div>
 
-            {/* Pages Table */}
+            {/* Main Content: Group by Page or Category */}
+            {groupBy === 'category' ? (
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {Object.entries(aggregatedCategories.totals).map(([title, t]) => (
+                    <div key={title} className="bg-white border rounded-lg shadow-sm p-4">
+                      <div className="font-bold text-gray-900 mb-2">{title}</div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">PASS {t.pass||0}</span>
+                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">FAIL {t.fail||0}</span>
+                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-700">UNKNOWN {t.unknown||0}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-gray-700 to-gray-800 text-white text-sm">
@@ -461,6 +788,12 @@ export default function AuditDetailed() {
                       const unifiedIssues = buildPageIssues({ analysis, meta, headings, images, page })
                       const priorityCounts = { Critical: 0, High: 0, Medium: 0, Low: 0 }
                       unifiedIssues.forEach(it => { priorityCounts[it.priority] = (priorityCounts[it.priority] || 0) + 1 })
+                      const checks = computePageChecks({ page, analysis, meta, headings, images })
+                      const catFail = {}
+                      ;(checks.categories || []).forEach(c => {
+                        const fails = (c.items || []).filter(it => it.status === 'fail').length
+                        if (fails > 0) catFail[c.title] = fails
+                      })
                       return {
                         ...page,
                         originalIndex: index,
@@ -470,6 +803,8 @@ export default function AuditDetailed() {
                         images,
                         unifiedIssues,
                         priorityCounts,
+                        checksFailCount: checks.failCount || 0,
+                        checksFailedCategories: catFail,
                       }
                     }) || [];
 
@@ -482,10 +817,19 @@ export default function AuditDetailed() {
                     }
 
                     if (filterBy === 'has-issues') pages = pages.filter(p => (p.unifiedIssues?.length || 0) > 0);
+                    else if (filterBy === 'has-failed-checks') pages = pages.filter(p => (p.checksFailCount || 0) > 0);
                     else if (filterBy === 'critical') pages = pages.filter(p => (p.priorityCounts?.Critical || 0) > 0);
                     else if (filterBy === 'high') pages = pages.filter(p => (p.priorityCounts?.High || 0) > 0);
                     else if (filterBy === 'medium') pages = pages.filter(p => (p.priorityCounts?.Medium || 0) > 0);
                     else if (filterBy === 'low') pages = pages.filter(p => (p.priorityCounts?.Low || 0) > 0);
+                    else if (filterBy === 'cat-tech-indexing') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Crawlability & Indexing'] > 0);
+                    else if (filterBy === 'cat-tech-performance') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Performance'] > 0);
+                    else if (filterBy === 'cat-onpage-meta') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Meta Tags'] > 0);
+                    else if (filterBy === 'cat-onpage-headings') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Headings'] > 0);
+                    else if (filterBy === 'cat-onpage-content') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Content'] > 0);
+                    else if (filterBy === 'cat-onpage-images') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Images'] > 0);
+                    else if (filterBy === 'warnings') pages = pages.filter(p => ((p.priorityCounts?.High || 0) + (p.priorityCounts?.Medium || 0)) > 0 && (p.priorityCounts?.Critical || 0) === 0);
+                    else if (filterBy === 'info') pages = pages.filter(p => (p.priorityCounts?.Low || 0) > 0 && ((p.priorityCounts?.Critical || 0) + (p.priorityCounts?.High || 0) + (p.priorityCounts?.Medium || 0)) === 0);
                     else if (filterBy === 'good') pages = pages.filter(p => (p.analysis?.seoAnalysis?.seoScore || 0) >= 80);
                     else if (filterBy === 'needs-work') pages = pages.filter(p => (p.analysis?.seoAnalysis?.seoScore || 0) < 60);
 
@@ -561,76 +905,60 @@ export default function AuditDetailed() {
                                 );
                               }
                               return (
-                                <div className="flex flex-col items-center gap-1">
-                                  <div className="flex flex-wrap justify-center gap-1">
-                                    {page.priorityCounts?.Critical > 0 && (
-                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white font-bold">C:{page.priorityCounts.Critical}</span>
-                                    )}
-                                    {page.priorityCounts?.High > 0 && (
-                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-orange-500 text-white font-bold">H:{page.priorityCounts.High}</span>
-                                    )}
-                                    {page.priorityCounts?.Medium > 0 && (
-                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-yellow-400 text-black font-bold">M:{page.priorityCounts.Medium}</span>
-                                    )}
-                                    {page.priorityCounts?.Low > 0 && (
-                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-green-600 text-white font-bold">L:{page.priorityCounts.Low}</span>
-                                    )}
-                                  </div>
-                                  <div
-                                    className="relative inline-block text-left"
-                                    onMouseLeave={() => setOpenIssuesDropdown(null)}
-                                    onClick={(e) => e.stopPropagation()}
+                                <div
+                                  className="relative inline-block text-left"
+                                  onMouseLeave={() => setOpenIssuesDropdown(null)}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-2 px-3 py-1 text-xs font-bold rounded bg-red-600 text-white hover:bg-red-700 shadow-sm"
+                                    onMouseEnter={() => setOpenIssuesDropdown(page.originalIndex)}
+                                    onClick={() => setOpenIssuesDropdown(openIssuesDropdown === page.originalIndex ? null : page.originalIndex)}
                                   >
-                                    <button
-                                      type="button"
-                                      className="inline-flex items-center gap-2 px-3 py-1 text-xs font-bold rounded bg-red-600 text-white hover:bg-red-700 shadow-sm"
-                                      onMouseEnter={() => setOpenIssuesDropdown(page.originalIndex)}
-                                      onClick={() => setOpenIssuesDropdown(openIssuesDropdown === page.originalIndex ? null : page.originalIndex)}
-                                    >
-                                      {totalIssues} Issues
-                                      <span className="text-white/90">▾</span>
-                                    </button>
-                                    {openIssuesDropdown === page.originalIndex && (
-                                      <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-20 text-left" onClick={(e) => e.stopPropagation()}>
-                                        <div className="p-3 border-b font-semibold text-gray-800">Issues for this page</div>
-                                        <div className="max-h-64 overflow-auto p-3 space-y-3">
-                                          {(() => {
-                                            const grouped = { Critical: [], High: [], Medium: [], Low: [] }
-                                            allIssues.forEach(it => { (grouped[it.priority] || grouped.Low).push(it) })
-                                            const sections = [
-                                              { key: 'Critical', title: '🔴 Critical', colorClass: 'text-red-700', dot: 'bg-red-500' },
-                                              { key: 'High', title: '🟠 High', colorClass: 'text-orange-700', dot: 'bg-orange-500' },
-                                              { key: 'Medium', title: '🟡 Medium', colorClass: 'text-yellow-700', dot: 'bg-yellow-500' },
-                                              { key: 'Low', title: '🟢 Low', colorClass: 'text-green-700', dot: 'bg-green-500' },
-                                            ]
-                                            return sections.map(sec => (
-                                              grouped[sec.key].length > 0 ? (
-                                                <div key={sec.key}>
-                                                  <div className={`text-sm font-bold mb-1 ${sec.colorClass}`}>{sec.title} ({grouped[sec.key].length})</div>
-                                                  <ul className="space-y-1 text-sm">
-                                                    {grouped[sec.key].map((it, i) => (
-                                                      <li key={`${sec.key}-${i}`} className="flex items-center gap-2">
-                                                        <span className={`inline-block w-2 h-2 rounded-full ${sec.dot}`}></span>
-                                                        <span className="text-gray-800">{it.text}</span>
-                                                      </li>
-                                                    ))}
-                                                  </ul>
-                                                </div>
-                                              ) : null
-                                            ))
-                                          })()}
-                                        </div>
-                                        <div className="p-2 border-t bg-gray-50 text-right">
-                                          <button
-                                            className="text-xs font-semibold text-gray-600 hover:text-gray-900 px-2 py-1"
-                                            onClick={() => setOpenIssuesDropdown(null)}
-                                          >
-                                            Close
-                                          </button>
-                                        </div>
+                                    {totalIssues} Issues
+                                    <span className="text-white/90">▾</span>
+                                  </button>
+                                  {openIssuesDropdown === page.originalIndex && (
+                                    <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-20 text-left" onClick={(e) => e.stopPropagation()}>
+                                      <div className="p-3 border-b font-semibold text-gray-800">Issues for this page</div>
+                                      <div className="max-h-64 overflow-auto p-3 space-y-3">
+                                        {(() => {
+                                          const grouped = { Critical: [], High: [], Medium: [], Low: [] }
+                                          allIssues.forEach(it => { (grouped[it.priority] || grouped.Low).push(it) })
+                                          const sections = [
+                                            { key: 'Critical', title: '🔴 Critical', colorClass: 'text-red-700', dot: 'bg-red-500' },
+                                            { key: 'High', title: '🟠 High', colorClass: 'text-orange-700', dot: 'bg-orange-500' },
+                                            { key: 'Medium', title: '🟡 Medium', colorClass: 'text-yellow-700', dot: 'bg-yellow-500' },
+                                            { key: 'Low', title: '🟢 Low', colorClass: 'text-green-700', dot: 'bg-green-500' },
+                                          ]
+                                          return sections.map(sec => (
+                                            grouped[sec.key].length > 0 ? (
+                                              <div key={sec.key}>
+                                                <div className={`text-sm font-bold mb-1 ${sec.colorClass}`}>{sec.title} ({grouped[sec.key].length})</div>
+                                                <ul className="space-y-1 text-sm">
+                                                  {grouped[sec.key].map((it, i) => (
+                                                    <li key={`${sec.key}-${i}`} className="flex items-center gap-2">
+                                                      <span className={`inline-block w-2 h-2 rounded-full ${sec.dot}`}></span>
+                                                      <span className="text-gray-800">{it.text}</span>
+                                                    </li>
+                                                  ))}
+                                                </ul>
+                                              </div>
+                                            ) : null
+                                          ))
+                                        })()}
                                       </div>
-                                    )}
-                                  </div>
+                                      <div className="p-2 border-t bg-gray-50 text-right">
+                                        <button
+                                          className="text-xs font-semibold text-gray-600 hover:text-gray-900 px-2 py-1"
+                                          onClick={() => setOpenIssuesDropdown(null)}
+                                        >
+                                          Close
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })()}
@@ -650,6 +978,7 @@ export default function AuditDetailed() {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         ) : (
           /* ============ SINGLE PAGE DETAIL VIEW ============ */
@@ -736,15 +1065,17 @@ export default function AuditDetailed() {
                   </div>
                 </div>
 
-                {/* Tabs Navigation */}
-                <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                  <div className="flex border-b">
-                    {[
+                {/* Tabs + Checks Summary Sidebar */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                  <div className="lg:col-span-3 bg-white rounded-xl shadow-lg overflow-hidden">
+                    <div className="flex border-b">
+                    {[ 
                       { id: 'overview', label: 'Overview', count: null },
                       { id: 'issues', label: 'Issues', count: unifiedIssues.length },
                       { id: 'meta', label: 'Meta Tags', count: null },
                       { id: 'headings', label: 'Headings', count: headings?.headings?.length || 0 },
                       { id: 'images', label: 'Images', count: images?.totalImages || 0 },
+                      { id: 'checks', label: 'Checks', count: (() => computePageChecks({ page, analysis, meta, headings, images }).failCount)() },
                     ].map(tab => (
                       <button
                         key={tab.id}
@@ -765,10 +1096,10 @@ export default function AuditDetailed() {
                         )}
                       </button>
                     ))}
-                  </div>
+                    </div>
 
-                  {/* Tab Content */}
-                  <div className="p-6">
+                    {/* Tab Content */}
+                    <div className="p-6">
                     {/* Overview Tab */}
                     {activeTab === 'overview' && (
                       <div className="space-y-6">
@@ -983,6 +1314,80 @@ export default function AuditDetailed() {
                         )}
                       </div>
                     )}
+
+                    {/* Checks Tab */}
+                    {activeTab === 'checks' && (() => {
+                      const { categories, failCount } = computePageChecks({ page, analysis, meta, headings, images })
+                      return (
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between bg-gray-50 p-4 rounded">
+                            <div className="text-sm text-gray-700">Automated checks based on available crawl/meta data. Many items may be Unknown without site-wide metrics.</div>
+                            <div className="text-sm font-semibold">
+                              <span className="mr-3">Fails: <span className="text-red-600">{failCount}</span></span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {categories.map((cat, idx) => (
+                              <div key={idx} className="bg-white border rounded-lg shadow-sm">
+                                <div className="px-4 py-3 border-b font-bold text-gray-900">{cat.title}</div>
+                                <ul className="divide-y">
+                                  {cat.items.map((it, i) => (
+                                    <li key={i} className="flex items-start gap-3 px-4 py-3">
+                                      <span className={`mt-1 px-2 py-0.5 rounded text-xs font-bold ${
+                                        it.status === 'pass' ? 'bg-green-100 text-green-800' : it.status === 'fail' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'
+                                      }`}>
+                                        {it.status === 'pass' ? 'PASS' : it.status === 'fail' ? 'FAIL' : 'UNKNOWN'}
+                                      </span>
+                                      <div className="flex-1">
+                                        <div className="text-gray-900 font-medium">{it.label}</div>
+                                        {it.note && <div className="text-xs text-gray-500 mt-0.5">{it.note}</div>}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="text-xs text-gray-500">Legend: PASS = criteria met, FAIL = needs attention, UNKNOWN = not evaluated from current dataset.</div>
+                        </div>
+                      )
+                    })()}
+                    </div>
+                  </div>
+
+                  {/* Compact Checks Summary Sidebar */}
+                  <div className="lg:col-span-1">
+                    {(() => {
+                      const { categories } = computePageChecks({ page, analysis, meta, headings, images })
+                      let pass = 0, fail = 0, unknown = 0
+                      categories.forEach(c => c.items.forEach(it => {
+                        if (it.status === 'pass') pass++
+                        else if (it.status === 'fail') fail++
+                        else unknown++
+                      }))
+                      return (
+                        <div className="bg-white rounded-xl shadow-lg p-4 border sticky top-6">
+                          <div className="font-bold text-gray-900 mb-3">Checks Summary</div>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">PASS</span>
+                              <span className="font-semibold text-gray-900">{pass}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">FAIL</span>
+                              <span className="font-semibold text-gray-900">{fail}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-700">UNKNOWN</span>
+                              <span className="font-semibold text-gray-900">{unknown}</span>
+                            </div>
+                          </div>
+                          <div className="mt-4 text-xs text-gray-500">Computed from current page’s available signals.</div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
 
