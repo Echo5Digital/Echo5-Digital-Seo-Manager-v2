@@ -184,11 +184,11 @@ export default function AuditDetailed() {
   const buildPageIssues = ({ analysis, meta, headings, images, page }) => {
     const items = []
     const seen = new Set()
-    const pushIssue = (text, priority) => {
+    const pushIssue = (text, priority, extra = {}) => {
       const key = String(text || '').trim().toLowerCase()
       if (!key || seen.has(key)) return
       seen.add(key)
-      items.push({ text, priority })
+      items.push({ text, priority, category: extra.category, rec: extra.rec })
     }
 
     // Backend-provided issues
@@ -199,24 +199,36 @@ export default function AuditDetailed() {
     oppList.forEach(txt => pushIssue(txt, categorizeIssueText(txt)))
 
     // Synthetic issues from page data
-    const h1Count = getHeadingCount(headings, 1)
-    if (h1Count === 0) pushIssue('Missing H1 on page', 'High')
-    if (h1Count > 1) pushIssue('Multiple H1 headings found', 'High')
+  const h1Count = getHeadingCount(headings, 1)
+  if (h1Count === 0) pushIssue('Missing H1 on page', 'High', { category: 'On-Page • Headings', rec: 'Add a single, descriptive H1 that reflects the page topic.' })
+  if (h1Count > 1) pushIssue('Multiple H1 headings found', 'High', { category: 'On-Page • Headings', rec: 'Use only one H1; demote additional headings to H2/H3.' })
 
-    // Title/meta description heuristics
-    const titleTooShort = meta?.title?.isTooShort
-    const titleTooLong = meta?.title?.isTooLong
-    if (titleTooShort) pushIssue('Title is too short (recommended 30-60 chars)', 'Low')
-    if (titleTooLong) pushIssue('Title is too long and may be truncated', 'Low')
+    // Title/meta description heuristics (compute lengths from available sources)
+    const titleText = analysis?.metaData?.title?.text ?? meta?.title ?? page?.title ?? ''
+    const titleLen = (titleText || '').length
+    if (titleLen > 0 && titleLen < 30) {
+      pushIssue(`Title is too short (${titleLen}/30 chars)`, 'Low', { category: 'On-Page • Meta Tags', rec: 'Expand the title to 50–60 characters with primary keyword.' })
+    }
+    if (titleLen > 60) {
+      pushIssue(`Title is too long (${titleLen}/60 chars)`, 'Low', { category: 'On-Page • Meta Tags', rec: 'Shorten the title to under ~60 characters to avoid truncation.' })
+    }
 
-    const descText = meta?.description?.text || page?.metaDescription || ''
-    if (!descText) pushIssue('Missing meta description', 'High')
-    if (meta?.description?.isTooShort) pushIssue('Meta description is too short (recommended 120-160 chars)', 'Medium')
-    if (meta?.description?.isTooLong) pushIssue('Meta description is too long and may be truncated', 'Medium')
+    const descText = analysis?.metaData?.description?.text ?? meta?.description ?? page?.metaDescription ?? ''
+    const descLen = (descText || '').length
+    if (descLen === 0) {
+      pushIssue('Missing meta description', 'High', { category: 'On-Page • Meta Tags', rec: 'Add a compelling 120–160 character description to improve CTR.' })
+    } else {
+      if (descLen < 120) {
+        pushIssue(`Meta description is too short (${descLen}/120 chars)`, 'Medium', { category: 'On-Page • Meta Tags', rec: 'Expand to 120–160 characters and include value proposition.' })
+      }
+      if (descLen > 160) {
+        pushIssue(`Meta description is too long (${descLen}/160 chars)`, 'Medium', { category: 'On-Page • Meta Tags', rec: 'Trim to 120–160 characters to avoid truncation.' })
+      }
+    }
 
     // Images without alt
     const missingAlt = images?.withoutAlt || 0
-    if (missingAlt > 0) pushIssue(`${missingAlt} images missing alt text`, missingAlt >= 10 ? 'High' : 'Medium')
+  if (missingAlt > 0) pushIssue(`${missingAlt} images missing alt text`, missingAlt >= 10 ? 'High' : 'Medium', { category: 'On-Page • Images', rec: 'Add descriptive ALT text to all images for accessibility and SEO.' })
 
     // Include failing checks from computePageChecks (avoid duplicating on-page items we already add)
     try {
@@ -245,7 +257,7 @@ export default function AuditDetailed() {
         ;(cat.items || []).forEach(it => {
           if (it.status === 'fail') {
             const text = `${it.label}${it.note ? ` (${it.note})` : ''}`
-            pushIssue(text, mapPriority(cat.title, it.label))
+            pushIssue(text, mapPriority(cat.title, it.label), { category: cat.title, rec: it.recommendation })
           }
         })
       })
@@ -275,10 +287,23 @@ export default function AuditDetailed() {
     const checks = []
     let failCount = 0
 
-    const push = (group, label, status, note) => {
+    // Index backend-provided explicit checks (if available)
+    const overrides = new Map()
+    if (Array.isArray(analysis?.checks)) {
+      analysis.checks.forEach(ch => {
+        const k = `${ch.category}|${ch.label}`
+        overrides.set(k, ch)
+      })
+    }
+
+    const push = (group, label, status, note, recommendation) => {
       const grp = checks.find(g => g.title === group) || (() => { const g = { title: group, items: [] }; checks.push(g); return g })()
-      grp.items.push({ label, status, note })
-      if (status === 'fail') failCount += 1
+      const ov = overrides.get(`${group}|${label}`)
+      const finalStatus = ov?.status ? String(ov.status).toLowerCase() : status
+      const rec = ov?.recommendation || recommendation
+      const noteOut = ov?.note || note
+      grp.items.push({ label, status: finalStatus, note: noteOut, recommendation: rec })
+      if (finalStatus === 'fail') failCount += 1
     }
 
     // Helpers
@@ -293,8 +318,8 @@ export default function AuditDetailed() {
       const num = parseFloat(m[1])
       return /s/i.test(s) ? num * 1000 : num
     })()
-    const canonical = meta?.canonical || meta?.canonicalUrl || meta?.linkCanonical
-    const robots = meta?.robots || {}
+  const canonical = analysis?.metaData?.canonical || meta?.canonical || meta?.canonicalUrl || meta?.linkCanonical
+  const robotsVal = analysis?.metaData?.robots || meta?.robots || ''
     const urlPath = (() => { try { const u = new URL(page?.url); return u.pathname || '/'; } catch { return String(page?.url || '/'); } })()
     const urlOk = (() => {
       const path = urlPath
@@ -311,7 +336,8 @@ export default function AuditDetailed() {
     // 1) Technical SEO Checks
     push('Technical • Crawlability & Indexing', 'Robots.txt present and configured', 'unknown')
     push('Technical • Crawlability & Indexing', 'XML sitemap exists and submitted', 'unknown')
-    push('Technical • Crawlability & Indexing', 'Page is indexable (no noindex/canonical/disallow issues)', robots?.noindex ? 'fail' : 'pass')
+  const robotsNoindex = typeof robotsVal === 'string' ? /noindex/i.test(robotsVal) : !!robotsVal?.noindex
+  push('Technical • Crawlability & Indexing', 'Page is indexable (no noindex/canonical/disallow issues)', robotsNoindex ? 'fail' : 'pass')
     push('Technical • Crawlability & Indexing', 'Canonical tag correctly set', canonical ? 'pass' : 'fail')
     push('Technical • Crawlability & Indexing', 'Proper URL structure', urlOk ? 'pass' : 'fail')
     push('Technical • Crawlability & Indexing', 'No orphan pages (internally linked)', 'unknown')
@@ -343,7 +369,7 @@ export default function AuditDetailed() {
     push('On-Page • Meta Tags', 'Unique & descriptive Title (50–60 chars)', titleLen ? (titleLen >= 50 && titleLen <= 60 ? 'pass' : 'fail') : 'fail', `${titleLen} chars`)
     push('On-Page • Meta Tags', 'Compelling Meta description (120–160 chars)', descLen ? (descLen >= 120 && descLen <= 160 ? 'pass' : 'fail') : 'fail', `${descLen} chars`)
     push('On-Page • Meta Tags', 'Focus keyword in title & description', 'unknown')
-    push('On-Page • Meta Tags', 'Proper use of meta robots', (robots && typeof robots === 'object') ? 'pass' : 'unknown')
+  push('On-Page • Meta Tags', 'Proper use of meta robots', robotsVal ? 'pass' : 'unknown')
 
     const h1Count = getHeadingCount(headings, 1)
     push('On-Page • Headings', 'Only one H1', h1Count === 1 ? 'pass' : 'fail', `H1 count: ${h1Count}`)
@@ -370,8 +396,8 @@ export default function AuditDetailed() {
     push('On-Page • Images', 'Compressed and properly scaled', 'unknown')
     push('On-Page • Images', 'Lazy loading applied', 'unknown')
 
-    push('On-Page • Schema', 'Structured data (JSON-LD) implemented', 'unknown')
-    push('On-Page • Schema', 'Validated in Google Rich Results Test', 'unknown')
+  push('On-Page • Schema', 'Structured data (JSON-LD) implemented', 'unknown')
+  push('On-Page • Schema', 'Structured data is valid JSON-LD', 'unknown')
 
     // 3) Off-Page & UX – largely unknown at page-level
     push('Off-Page & UX • Backlinks', 'Healthy backlink profile (no toxic links)', 'unknown')
@@ -693,7 +719,7 @@ export default function AuditDetailed() {
 
             {/* Search and Filters Bar */}
             <div className="bg-gray-50 border-b-2 border-gray-200 p-6">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
                 <input
                   type="text"
                   placeholder="🔍 Search by URL or title..."
@@ -718,10 +744,16 @@ export default function AuditDetailed() {
                   <optgroup label="Failing Categories">
                     <option value="cat-tech-indexing">Technical • Crawlability & Indexing</option>
                     <option value="cat-tech-performance">Technical • Performance</option>
+                    <option value="cat-tech-mobile">Technical • Mobile Optimization</option>
+                    <option value="cat-tech-security">Technical • Security</option>
+                    <option value="cat-tech-links">Technical • Links</option>
                     <option value="cat-onpage-meta">On-Page • Meta Tags</option>
                     <option value="cat-onpage-headings">On-Page • Headings</option>
                     <option value="cat-onpage-content">On-Page • Content</option>
                     <option value="cat-onpage-images">On-Page • Images</option>
+                    <option value="cat-onpage-schema">On-Page • Schema</option>
+                    <option value="cat-offpage-analytics">Off-Page & UX • Analytics</option>
+                    <option value="cat-content-strategy">Content & Keyword Strategy</option>
                   </optgroup>
                   <option value="good">Good Score (80+)</option>
                   <option value="needs-work">Needs Work (&lt;60)</option>
@@ -745,6 +777,11 @@ export default function AuditDetailed() {
                   <option value="page">Group by: Page</option>
                   <option value="category">Group by: Category</option>
                 </select>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => setFilterBy('all')} className={`px-3 py-2 text-xs font-semibold rounded ${filterBy==='all'?'bg-gray-900 text-white':'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>All</button>
+                  <button onClick={() => setFilterBy('critical')} className={`px-3 py-2 text-xs font-semibold rounded ${filterBy==='critical'?'bg-red-600 text-white':'bg-red-100 text-red-800 hover:bg-red-200'}`}>Show Critical Only</button>
+                  <button onClick={() => setFilterBy('warnings')} className={`px-3 py-2 text-xs font-semibold rounded ${filterBy==='warnings'?'bg-orange-600 text-white':'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}>Show Warnings</button>
+                </div>
               </div>
             </div>
 
@@ -753,7 +790,32 @@ export default function AuditDetailed() {
               <div className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {Object.entries(aggregatedCategories.totals).map(([title, t]) => (
-                    <div key={title} className="bg-white border rounded-lg shadow-sm p-4">
+                    <div
+                      key={title}
+                      className="bg-white border rounded-lg shadow-sm p-4 cursor-pointer hover:shadow transition"
+                      onClick={() => {
+                        const map = {
+                          'Technical • Crawlability & Indexing': 'cat-tech-indexing',
+                          'Technical • Performance': 'cat-tech-performance',
+                          'Technical • Mobile Optimization': 'cat-tech-mobile',
+                          'Technical • Security': 'cat-tech-security',
+                          'Technical • Links': 'cat-tech-links',
+                          'On-Page • Meta Tags': 'cat-onpage-meta',
+                          'On-Page • Headings': 'cat-onpage-headings',
+                          'On-Page • Content': 'cat-onpage-content',
+                          'On-Page • Images': 'cat-onpage-images',
+                          'On-Page • Schema': 'cat-onpage-schema',
+                          'Off-Page & UX • Analytics': 'cat-offpage-analytics',
+                          'Content & Keyword Strategy': 'cat-content-strategy',
+                        }
+                        const v = map[title]
+                        if (v) {
+                          setGroupBy('page')
+                          setFilterBy(v)
+                          window.scrollTo({ top: 0, behavior: 'smooth' })
+                        }
+                      }}
+                    >
                       <div className="font-bold text-gray-900 mb-2">{title}</div>
                       <div className="flex items-center gap-2 text-sm">
                         <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">PASS {t.pass||0}</span>
@@ -828,6 +890,12 @@ export default function AuditDetailed() {
                     else if (filterBy === 'cat-onpage-headings') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Headings'] > 0);
                     else if (filterBy === 'cat-onpage-content') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Content'] > 0);
                     else if (filterBy === 'cat-onpage-images') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Images'] > 0);
+                    else if (filterBy === 'cat-onpage-schema') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Schema'] > 0);
+                    else if (filterBy === 'cat-tech-mobile') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Mobile Optimization'] > 0);
+                    else if (filterBy === 'cat-tech-security') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Security'] > 0);
+                    else if (filterBy === 'cat-tech-links') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Links'] > 0);
+                    else if (filterBy === 'cat-offpage-analytics') pages = pages.filter(p => p.checksFailedCategories?.['Off-Page & UX • Analytics'] > 0);
+                    else if (filterBy === 'cat-content-strategy') pages = pages.filter(p => p.checksFailedCategories?.['Content & Keyword Strategy'] > 0);
                     else if (filterBy === 'warnings') pages = pages.filter(p => ((p.priorityCounts?.High || 0) + (p.priorityCounts?.Medium || 0)) > 0 && (p.priorityCounts?.Critical || 0) === 0);
                     else if (filterBy === 'info') pages = pages.filter(p => (p.priorityCounts?.Low || 0) > 0 && ((p.priorityCounts?.Critical || 0) + (p.priorityCounts?.High || 0) + (p.priorityCounts?.Medium || 0)) === 0);
                     else if (filterBy === 'good') pages = pages.filter(p => (p.analysis?.seoAnalysis?.seoScore || 0) >= 80);
@@ -938,9 +1006,15 @@ export default function AuditDetailed() {
                                                 <div className={`text-sm font-bold mb-1 ${sec.colorClass}`}>{sec.title} ({grouped[sec.key].length})</div>
                                                 <ul className="space-y-1 text-sm">
                                                   {grouped[sec.key].map((it, i) => (
-                                                    <li key={`${sec.key}-${i}`} className="flex items-center gap-2">
-                                                      <span className={`inline-block w-2 h-2 rounded-full ${sec.dot}`}></span>
-                                                      <span className="text-gray-800">{it.text}</span>
+                                                    <li key={`${sec.key}-${i}`} className="space-y-1">
+                                                      <div className="flex items-center gap-2">
+                                                        <span className={`inline-block w-2 h-2 rounded-full ${sec.dot}`}></span>
+                                                        <span className="text-gray-800">{it.text}</span>
+                                                      </div>
+                                                      <div className="flex items-center gap-2 text-xs text-gray-600 ml-4">
+                                                        {it.category && (<span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">{it.category}</span>)}
+                                                        {it.rec && (<span className="italic">Recommendation: {it.rec}</span>)}
+                                                      </div>
                                                     </li>
                                                   ))}
                                                 </ul>
@@ -1156,9 +1230,15 @@ export default function AuditDetailed() {
                                     </h4>
                                     <ul className="space-y-3">
                                       {grouped[sec.key].map((it, idx) => (
-                                        <li key={`${sec.key}-${idx}`} className="flex gap-3 bg-white p-4 rounded shadow-sm">
-                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${sec.badge}`}>{sec.key}</span>
-                                          <span className="text-gray-900">{it.text}</span>
+                                        <li key={`${sec.key}-${idx}`} className="bg-white p-4 rounded shadow-sm">
+                                          <div className="flex items-start gap-3">
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${sec.badge}`}>{sec.key}</span>
+                                            <span className="text-gray-900">{it.text}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2 text-xs text-gray-600 mt-2 ml-7">
+                                            {it.category && (<span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">{it.category}</span>)}
+                                            {it.rec && (<span className="italic">Recommendation: {it.rec}</span>)}
+                                          </div>
                                         </li>
                                       ))}
                                     </ul>
@@ -1342,6 +1422,7 @@ export default function AuditDetailed() {
                                       <div className="flex-1">
                                         <div className="text-gray-900 font-medium">{it.label}</div>
                                         {it.note && <div className="text-xs text-gray-500 mt-0.5">{it.note}</div>}
+                                        {it.recommendation && <div className="text-xs text-gray-600 mt-0.5 italic">Recommendation: {it.recommendation}</div>}
                                       </div>
                                     </li>
                                   ))}

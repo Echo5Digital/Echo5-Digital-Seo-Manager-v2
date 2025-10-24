@@ -480,6 +480,56 @@ class AuditService {
         seoOpportunities.push(`⚙️ ${jsFiles.length} JS files loaded - consider combining and minifying`);
       }
       
+      // Build explicit per-page checks to expose PASS/FAIL/UNKNOWN
+      const isHttps = (() => { try { return new URL(url).protocol === 'https:' } catch (e) { return false } })();
+      const htmlRaw = response.data || '';
+      const hasAnalytics = /googletagmanager\.com|google-analytics\.com|gtag\(|dataLayer\s*=|gtm\.js/i.test(htmlRaw);
+      const totalJsonLdTags = $('script[type="application/ld+json"]').length;
+      const invalidJsonLdCount = Math.max(0, totalJsonLdTags - (structuredData.length || 0));
+
+      // Mixed content on HTTPS pages
+      const httpJs = jsFiles.map(src => this.resolveUrl(baseUrl, src || '')).filter(u => /^http:/.test(u));
+      const httpCss = cssFiles.map(href => this.resolveUrl(baseUrl, href || '')).filter(u => /^http:/.test(u));
+      const httpImgs = images.map(img => img.src || '').filter(u => /^http:/.test(u));
+      const mixedContentCount = isHttps ? (httpJs.length + httpCss.length + httpImgs.length) : 0;
+
+      // Page responds with redirect?
+      let pageRedirects = null;
+      try {
+        const noRedirect = await axios.get(url, { timeout: 5000, maxRedirects: 0, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0; +https://seo-audit.example.com)'} });
+        pageRedirects = (noRedirect.status >= 300 && noRedirect.status < 400) ? true : false;
+      } catch (e) {
+        pageRedirects = null;
+      }
+
+      // Sample a few links for broken status
+      const sampleLinks = [...internalLinks.slice(0, 5), ...externalLinks.slice(0, 5)];
+      let brokenSampleCount = 0;
+      await Promise.allSettled(sampleLinks.map(async (l) => {
+        try {
+          const head = await axios.head(l.href, { timeout: 5000, validateStatus: () => true });
+          if (head.status >= 400) brokenSampleCount += 1;
+        } catch (e) {
+          brokenSampleCount += 1;
+        }
+      }));
+
+      // Mobile-friendly (viewport)
+      const hasViewport = !!$('meta[name="viewport"]').attr('content');
+      const mobileFriendly = hasViewport && /width\s*=\s*device-width/i.test(viewport || '');
+
+      // Compose checks array
+      const checks = [];
+      const pushCheck = (key, category, label, status, recommendation, note) => { checks.push({ key, category, label, status, recommendation, note }); };
+      pushCheck('https', 'Technical • Security', 'HTTPS enabled', isHttps ? 'PASS' : 'FAIL', 'Serve all pages over HTTPS with valid certificate');
+      pushCheck('mixed-content', 'Technical • Security', 'No mixed content', !isHttps ? 'UNKNOWN' : (mixedContentCount > 0 ? 'FAIL' : 'PASS'), 'Ensure all scripts, styles, and images load over HTTPS', mixedContentCount > 0 ? `${mixedContentCount} HTTP resources` : undefined);
+      pushCheck('mobile-friendly', 'Technical • Mobile Optimization', 'Mobile-friendly & responsive', mobileFriendly ? 'PASS' : 'FAIL', 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> and use responsive CSS');
+      pushCheck('page-redirects', 'Technical • Links', 'Redirects configured; no chains', pageRedirects === null ? 'UNKNOWN' : (pageRedirects ? 'FAIL' : 'PASS'), 'Avoid unnecessary redirects to reduce latency');
+      pushCheck('broken-links', 'Technical • Links', 'No broken links (404)', brokenSampleCount > 0 ? 'FAIL' : 'PASS', 'Remove or update broken links', brokenSampleCount > 0 ? `${brokenSampleCount} broken of ${sampleLinks.length} sampled` : `Sampled ${sampleLinks.length}`);
+      pushCheck('schema-present', 'On-Page • Schema', 'Structured data (JSON-LD) implemented', structuredData.length > 0 ? 'PASS' : 'FAIL', 'Add relevant Schema.org JSON-LD to qualify for rich results');
+      pushCheck('schema-valid', 'On-Page • Schema', 'Structured data is valid JSON-LD', structuredData.length === 0 ? 'UNKNOWN' : (invalidJsonLdCount > 0 ? 'FAIL' : 'PASS'), 'Validate JSON-LD in Google Rich Results Test', invalidJsonLdCount > 0 ? `${invalidJsonLdCount} invalid blocks` : undefined);
+      pushCheck('analytics-present', 'Off-Page & UX • Analytics', 'Analytics/Search Console/Conversions tracking', hasAnalytics ? 'PASS' : 'FAIL', 'Install Google Analytics or Tag Manager to measure performance');
+      
       return {
         url: url,
         statusCode: response.status,
@@ -615,6 +665,8 @@ class AuditService {
           })
         },
         
+        // Explicit checks for frontend consumption
+        checks,
         analyzedAt: new Date()
       };
       
