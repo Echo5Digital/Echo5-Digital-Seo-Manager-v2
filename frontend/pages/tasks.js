@@ -16,6 +16,7 @@ export default function Tasks() {
   const [groupByStaff, setGroupByStaff] = useState(user?.role === 'Boss' || user?.role === 'Manager')
   const [expandedStaff, setExpandedStaff] = useState({})
   const [expandedClients, setExpandedClients] = useState({})
+  const [expandedStaffClients, setExpandedStaffClients] = useState({}) // For staff's client groups
 
   useEffect(() => {
     if (token) {
@@ -40,6 +41,13 @@ export default function Tasks() {
     setExpandedClients(prev => ({
       ...prev,
       [key]: !prev[key]
+    }))
+  }
+
+  const toggleStaffClientGroup = (clientName) => {
+    setExpandedStaffClients(prev => ({
+      ...prev,
+      [clientName]: !prev[clientName]
     }))
   }
 
@@ -121,6 +129,18 @@ export default function Tasks() {
         groupedTasks[staffName][clientName] = []
       }
       groupedTasks[staffName][clientName].push(task)
+    })
+  }
+
+  // Group tasks by client for staff view
+  const groupedByClient = {}
+  if (!groupByStaff) {
+    filteredTasks.forEach(task => {
+      const clientName = task.clientId?.name || 'No Client'
+      if (!groupedByClient[clientName]) {
+        groupedByClient[clientName] = []
+      }
+      groupedByClient[clientName].push(task)
     })
   }
 
@@ -492,82 +512,136 @@ export default function Tasks() {
               )})}
             </div>
           ) : (
-            // Regular table view (for Staff)
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredTasks.map((task) => (
-                    <tr key={task._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium text-gray-900">{task.title}</span>
-                          <span className="text-xs text-gray-500 line-clamp-1">{task.description}</span>
+            // Client-grouped view (for Staff)
+            <div className="space-y-4">
+              {Object.keys(groupedByClient).length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+                  <p className="text-gray-500">No tasks found</p>
+                </div>
+              ) : (
+                Object.entries(groupedByClient).map(([clientName, clientTasks]) => {
+                  const isExpanded = expandedStaffClients[clientName]
+                  const taskCounts = {
+                    pending: clientTasks.filter(t => t.status === 'Pending').length,
+                    inProgress: clientTasks.filter(t => t.status === 'In Progress').length,
+                    completed: clientTasks.filter(t => t.status === 'Completed').length,
+                  }
+
+                  return (
+                    <div key={clientName} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      {/* Client Header */}
+                      <div
+                        className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 cursor-pointer hover:from-blue-100 hover:to-indigo-100 transition-colors"
+                        onClick={() => toggleStaffClientGroup(clientName)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <svg
+                              className={`w-5 h-5 text-gray-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                            <h3 className="text-lg font-semibold text-gray-900">{clientName}</h3>
+                            <span className="text-sm text-gray-600">({clientTasks.length} {clientTasks.length === 1 ? 'task' : 'tasks'})</span>
+                          </div>
+                          <div className="flex gap-2">
+                            {taskCounts.pending > 0 && (
+                              <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-700 border border-gray-300">
+                                {taskCounts.pending} Pending
+                              </span>
+                            )}
+                            {taskCounts.inProgress > 0 && (
+                              <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 border border-blue-300">
+                                {taskCounts.inProgress} In Progress
+                              </span>
+                            )}
+                            {taskCounts.completed > 0 && (
+                              <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 border border-green-300">
+                                {taskCounts.completed} Completed
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-900">{task.clientId?.name || 'N/A'}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-600">{task.type}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityColor(task.priority)}`}>
-                          {task.priority}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={task.status}
-                          onChange={(e) => handleStatusChange(task._id, e.target.value)}
-                          className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(task.status)} cursor-pointer`}
-                        >
-                          <option value="Pending">Pending</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Completed">Completed</option>
-                        </select>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-900">{task.assignedTo?.name || 'Unassigned'}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {task.dueDate ? (
-                          <span className="text-sm text-gray-600">
-                            {new Date(task.dueDate).toLocaleDateString()}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-gray-400">No due date</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => {
-                            setSelectedTask(task)
-                            setShowModal(true)
-                          }}
-                          className="text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 px-3 py-1 rounded transition-colors"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+
+                      {/* Client Tasks Table */}
+                      {isExpanded && (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {clientTasks.map((task) => (
+                                <tr key={task._id} className="hover:bg-gray-50 transition-colors">
+                                  <td className="px-6 py-4">
+                                    <div className="flex flex-col">
+                                      <span className="text-sm font-medium text-gray-900">{task.title}</span>
+                                      <span className="text-xs text-gray-500 line-clamp-1">{task.description}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className="text-sm text-gray-600">{task.type}</span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityColor(task.priority)}`}>
+                                      {task.priority}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <select
+                                      value={task.status}
+                                      onChange={(e) => handleStatusChange(task._id, e.target.value)}
+                                      className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(task.status)} cursor-pointer`}
+                                    >
+                                      <option value="Pending">Pending</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="Completed">Completed</option>
+                                    </select>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    {task.dueDate ? (
+                                      <span className="text-sm text-gray-600">
+                                        {new Date(task.dueDate).toLocaleDateString()}
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm text-gray-400">No due date</span>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedTask(task)
+                                        setShowModal(true)
+                                      }}
+                                      className="text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 px-3 py-1 rounded transition-colors"
+                                    >
+                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                      </svg>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
             </div>
           )}
         </div>
