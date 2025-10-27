@@ -11,13 +11,14 @@ const useAuditStore = create((set, get) => ({
     progress: 0,
     steps: [
       'Initializing audit...',
+      'Discovering pages...',
       'Analyzing page structure...',
       'Checking SEO metadata...',
       'Scanning for technical issues...',
       'Analyzing content quality...',
       'Checking mobile responsiveness...',
       'Measuring page performance...',
-      'Generating recommendations...',
+      'Generating AI recommendations...',
       'Finalizing audit report...'
     ]
   },
@@ -58,26 +59,13 @@ const useAuditStore = create((set, get) => ({
       auditProgress: {
         ...get().auditProgress,
         isRunning: true,
-        progress: 0
+        progress: 10,
+        step: 'Starting audit...'
       }
     })
 
     try {
-      // Simulate progress through steps
-      const steps = get().auditProgress.steps
-      for (let i = 0; i < steps.length; i++) {
-        set(state => ({
-          auditProgress: {
-            ...state.auditProgress,
-            step: steps[i],
-            progress: ((i + 1) / steps.length) * 100
-          }
-        }))
-        
-        // Add delay to show progress
-        await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000))
-      }
-
+      // Start the audit on backend
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/audits`, {
         method: 'POST',
         headers: {
@@ -90,16 +78,115 @@ const useAuditStore = create((set, get) => ({
       const data = await response.json()
 
       if (data.status === 'success') {
+        const auditId = data.data._id
+        
+        // Add audit to list immediately
         set(state => ({
-          audits: [data.data, ...state.audits],
-          loading: false,
-          auditProgress: {
-            ...state.auditProgress,
-            isRunning: false,
-            progress: 0,
-            step: ''
-          }
+          audits: [data.data, ...state.audits]
         }))
+
+        // Poll for audit status
+        let pollCount = 0
+        const pollInterval = setInterval(async () => {
+          try {
+            pollCount++
+            const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/audits/${auditId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            })
+            
+            const statusData = await statusResponse.json()
+            
+            if (statusData.status === 'success') {
+              const audit = statusData.data.audit
+              
+              // Update audit in list
+              set(state => ({
+                audits: state.audits.map(a => a._id === auditId ? audit : a)
+              }))
+
+              // Update progress based on status
+              if (audit.status === 'In Progress') {
+                const steps = get().auditProgress.steps
+                // Progress through steps based on poll count
+                const stepIndex = Math.min(Math.floor(pollCount / 2), steps.length - 2)
+                const baseProgress = (stepIndex / (steps.length - 1)) * 90
+                const randomProgress = Math.random() * 10
+                
+                set(state => ({
+                  auditProgress: {
+                    ...state.auditProgress,
+                    step: steps[stepIndex],
+                    progress: Math.min(baseProgress + randomProgress, 95)
+                  }
+                }))
+              } else if (audit.status === 'Completed') {
+                // Audit completed
+                clearInterval(pollInterval)
+                set(state => ({
+                  loading: false,
+                  auditProgress: {
+                    ...state.auditProgress,
+                    isRunning: false,
+                    progress: 100,
+                    step: 'Audit completed successfully!'
+                  }
+                }))
+                
+                // Reset progress after 2 seconds
+                setTimeout(() => {
+                  set(state => ({
+                    auditProgress: {
+                      ...state.auditProgress,
+                      progress: 0,
+                      step: ''
+                    }
+                  }))
+                }, 2000)
+              } else if (audit.status === 'Failed') {
+                // Audit failed
+                clearInterval(pollInterval)
+                set(state => ({
+                  loading: false,
+                  error: audit.error || 'Audit failed',
+                  auditProgress: {
+                    ...state.auditProgress,
+                    isRunning: false,
+                    progress: 0,
+                    step: 'Audit failed - please try again'
+                  }
+                }))
+                
+                // Reset after 3 seconds
+                setTimeout(() => {
+                  set(state => ({
+                    auditProgress: {
+                      ...state.auditProgress,
+                      step: ''
+                    },
+                    error: null
+                  }))
+                }, 3000)
+              }
+            }
+          } catch (error) {
+            console.error('Error polling audit status:', error)
+          }
+        }, 3000) // Poll every 3 seconds
+
+        // Stop polling after 10 minutes (safety timeout)
+        setTimeout(() => {
+          clearInterval(pollInterval)
+          set(state => ({
+            loading: false,
+            auditProgress: {
+              ...state.auditProgress,
+              isRunning: false
+            }
+          }))
+        }, 600000)
+
         return data.data
       }
     } catch (error) {

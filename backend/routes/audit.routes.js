@@ -142,6 +142,28 @@ router.get('/', protect, async (req, res, next) => {
   }
 });
 
+// GET /api/audits/:id - Get single audit by ID
+router.get('/:id', protect, async (req, res, next) => {
+  try {
+    const audit = await Audit.findById(req.params.id)
+      .populate('clientId', 'name domain');
+
+    if (!audit) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Audit not found',
+      });
+    }
+
+    res.json({
+      status: 'success',
+      data: { audit },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/audits/run/:clientId - Run audit for client
 router.post('/run/:clientId', protect, async (req, res, next) => {
   try {

@@ -201,15 +201,14 @@ class AuditService {
             },
           }
 
-          // Upsert by clientId+slug
-          const existing = await Page.findOne({ clientId, slug })
-          if (existing) {
-            await Page.updateOne({ _id: existing._id }, { $set: update })
-            return existing._id
-          } else {
-            const created = await Page.create(update)
-            return created._id
-          }
+          // Upsert by clientId+slug using findOneAndUpdate
+          await Page.findOneAndUpdate(
+            { clientId, slug },
+            { $set: update },
+            { upsert: true, new: true }
+          )
+          
+          return true
         } catch (e) {
           logger.error('Page persist error:', e)
           return null

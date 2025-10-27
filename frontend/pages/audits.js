@@ -22,6 +22,7 @@ export default function Audits() {
   const runAudit = useAuditStore(state => state.runAudit)
   const getAuditDetails = useAuditStore(state => state.getAuditDetails)
   const deleteAudit = useAuditStore(state => state.deleteAudit)
+  const auditProgress = useAuditStore(state => state.auditProgress)
   
   const clients = useClientStore(state => state.clients)
   const fetchClients = useClientStore(state => state.fetchClients)
@@ -148,10 +149,9 @@ export default function Audits() {
     e.preventDefault()
     setSubmitting(true)
     try {
-      setShowRunModal(false)
       await runAudit(newAudit.clientId, newAudit.url)
       setNewAudit({ clientId: '', url: '' })
-      await fetchAudits()
+      setShowRunModal(false)
     } catch (error) {
       console.error('Error running audit:', error)
       alert('Failed to run audit. Please try again.')
@@ -650,6 +650,77 @@ export default function Audits() {
             </div>
           )}
         </Modal>
+
+        {/* Real-time Audit Progress Modal */}
+        {auditProgress.isRunning && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div className="flex min-h-screen items-center justify-center p-4">
+              <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"></div>
+              
+              <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                <div className="text-center">
+                  {/* Spinner */}
+                  <div className="mb-4 flex justify-center">
+                    <div className="relative">
+                      <div className="w-20 h-20 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <DocumentMagnifyingGlassIcon className="w-8 h-8 text-indigo-600" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Running Audit</h3>
+                  <p className="text-sm text-gray-600 mb-4">{auditProgress.step}</p>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-indigo-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${auditProgress.progress}%` }}
+                    ></div>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mb-4">
+                    {Math.round(auditProgress.progress)}% Complete
+                  </p>
+
+                  {/* Status Steps */}
+                  <div className="text-left bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
+                    {auditProgress.steps.map((step, index) => {
+                      const currentStepIndex = auditProgress.steps.indexOf(auditProgress.step)
+                      const isCompleted = index < currentStepIndex
+                      const isCurrent = index === currentStepIndex
+                      
+                      return (
+                        <div
+                          key={index}
+                          className={`flex items-center gap-2 mb-2 text-sm ${
+                            isCompleted ? 'text-green-600' : isCurrent ? 'text-indigo-600 font-semibold' : 'text-gray-400'
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          ) : isCurrent ? (
+                            <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <div className="w-4 h-4 border-2 border-gray-300 rounded-full"></div>
+                          )}
+                          <span>{step}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-4">
+                    Please wait while we analyze your website...
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <AuditProgressBar />
       </div>
