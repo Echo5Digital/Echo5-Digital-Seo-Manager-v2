@@ -27,15 +27,19 @@ export default function Navbar() {
 
   useEffect(() => {
     if (token) {
-      fetchNotifications(token)
+      fetchNotifications(token).catch(err => {
+        console.error('Failed to fetch notifications:', err)
+      })
       // Poll for new notifications every 5 seconds for real-time updates
       const interval = setInterval(() => {
-        fetchNotifications(token)
+        fetchNotifications(token).catch(err => {
+          console.error('Failed to fetch notifications:', err)
+        })
       }, 5000)
       
       return () => clearInterval(interval)
     }
-  }, [token])
+  }, [token, fetchNotifications])
 
   // Detect new notifications and trigger animation
   useEffect(() => {

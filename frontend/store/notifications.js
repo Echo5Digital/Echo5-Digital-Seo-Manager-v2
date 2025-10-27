@@ -18,12 +18,17 @@ const useNotificationsStore = create((set, get) => ({
           },
         }
       )
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
       if (data.status === 'success') {
         set({ 
-          notifications: data.data.notifications,
-          unreadCount: data.data.unreadCount,
+          notifications: data.data.notifications || [],
+          unreadCount: data.data.unreadCount || 0,
           loading: false 
         })
         return data.data
@@ -31,8 +36,15 @@ const useNotificationsStore = create((set, get) => ({
         throw new Error(data.message || 'Failed to fetch notifications')
       }
     } catch (error) {
-      set({ error: error.message, loading: false })
-      throw error
+      console.error('Fetch notifications error:', error)
+      set({ 
+        error: error.message, 
+        loading: false,
+        notifications: [],
+        unreadCount: 0
+      })
+      // Don't throw - just log and set empty state
+      return { notifications: [], unreadCount: 0 }
     }
   },
 
