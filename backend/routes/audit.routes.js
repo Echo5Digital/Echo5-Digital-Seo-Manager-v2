@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Audit = require('../models/Audit.model');
 const Client = require('../models/Client.model');
+const Notification = require('../models/Notification.model');
 const { protect } = require('../middleware/auth');
 const auditService = require('../services/audit.service');
 const aiService = require('../services/ai.service');
@@ -92,6 +93,18 @@ router.post('/', protect, async (req, res, next) => {
         } catch (e) {
           console.warn('Failed to persist pages from audit:', e.message)
         }
+
+        // Create notification for user who triggered the audit
+        await Notification.create({
+          userId: audit.triggeredBy,
+          type: 'Audit Complete',
+          title: 'Audit Completed',
+          message: `Site audit for ${client.name} has been completed with a score of ${summary.overallScore}/100`,
+          priority: summary.overallScore < 50 ? 'High' : summary.overallScore < 70 ? 'Medium' : 'Low',
+          relatedModel: 'Audit',
+          relatedId: audit._id,
+          actionUrl: '/audits',
+        });
       })
       .catch(async (error) => {
         audit.status = 'Failed';

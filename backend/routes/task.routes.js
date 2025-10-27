@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Task = require('../models/Task.model');
+const Notification = require('../models/Notification.model');
 const { protect, authorize } = require('../middleware/auth');
 
 // GET /api/tasks - Get tasks (filtered by user role)
@@ -44,6 +45,24 @@ router.post('/', protect, async (req, res, next) => {
         timestamp: new Date(),
       }],
     });
+
+    await task.populate('clientId', 'name domain');
+    await task.populate('assignedTo', 'name email');
+    await task.populate('createdBy', 'name');
+
+    // Create notification for assigned user
+    if (task.assignedTo && task.assignedTo._id.toString() !== req.user._id.toString()) {
+      await Notification.create({
+        userId: task.assignedTo._id,
+        type: 'Task Assigned',
+        title: 'New Task Assigned',
+        message: `You have been assigned: ${task.title}`,
+        priority: task.priority === 'High' || task.priority === 'Critical' ? 'High' : 'Medium',
+        relatedModel: 'Task',
+        relatedId: task._id,
+        actionUrl: '/tasks',
+      });
+    }
 
     res.status(201).json({
       status: 'success',
