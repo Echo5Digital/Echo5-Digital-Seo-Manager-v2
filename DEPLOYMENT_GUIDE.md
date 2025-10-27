@@ -21,16 +21,21 @@ git push origin main
 ### Step 2: Create Render Service
 1. Go to [Render.com](https://render.com) and sign in
 2. Click **"New +"** → **"Web Service"**
-3. Connect your GitHub repository
+3. Connect your GitHub repository: `Echo5-digital-Seo-Ops-v2`
 4. Configure:
    - **Name**: `echo5-seo-backend`
    - **Region**: Choose closest to your users
    - **Branch**: `main`
-   - **Root Directory**: `backend`
+   - **Root Directory**: `backend` ⭐ IMPORTANT - points to backend folder
    - **Runtime**: `Node`
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
+   - **Build Command**: `bash build.sh` or `npm install --production`
+   - **Start Command**: `node server.js`
    - **Instance Type**: Free (or paid for better performance)
+
+**💡 If build gets stuck**:
+- Try Build Command: `npm install --production --quiet`
+- Or use the optimized: `bash build.sh`
+- Free tier has memory limits - upgrade to Starter ($7/mo) if issues persist
 
 ### Step 3: Add Environment Variables
 Copy from `backend/.env.render` and add these in Render Dashboard:

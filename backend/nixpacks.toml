@@ -2,7 +2,7 @@
 nixPkgs = ["nodejs_20"]
 
 [phases.install]
-cmds = ["npm install --production"]
+cmds = ["npm install --omit=dev --prefer-offline"]
 
 [phases.build]
 cmds = ["echo 'Build complete'"]
