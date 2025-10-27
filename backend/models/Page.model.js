@@ -72,6 +72,7 @@ const pageSchema = new mongoose.Schema({
       default: 'index,follow',
     },
     focusKeyword: String,
+    secondaryKeywords: [String],
     readabilityScore: {
       type: Number,
       min: 0,

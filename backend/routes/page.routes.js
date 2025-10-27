@@ -439,6 +439,29 @@ router.patch('/:id/focus-keyword', protect, async (req, res, next) => {
   }
 })
 
+// PATCH /api/pages/:id/secondary-keywords - Set secondary keywords
+router.patch('/:id/secondary-keywords', protect, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { secondaryKeywords } = req.body
+    
+    if (!Array.isArray(secondaryKeywords)) {
+      return res.status(400).json({ status: 'error', message: 'secondaryKeywords must be an array' })
+    }
+    
+    const page = await Page.findById(id)
+    if (!page) return res.status(404).json({ status: 'error', message: 'Page not found' })
+
+    page.seo = page.seo || {}
+    page.seo.secondaryKeywords = secondaryKeywords.filter(k => k && k.trim()).map(k => k.trim())
+    
+    await page.save()
+    res.json({ status: 'success', data: { page } })
+  } catch (error) {
+    next(error)
+  }
+})
+
 // POST /api/pages/:id/check-seo - Comprehensive SEO check based on all SEO concepts
 router.post('/:id/check-seo', protect, async (req, res, next) => {
   try {

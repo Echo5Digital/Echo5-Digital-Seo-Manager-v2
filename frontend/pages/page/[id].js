@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 import Layout from '../../components/Layout'
 import usePagesStore from '../../store/pages'
+import useAuthStore from '../../store/auth'
 
 export default function PageDetail() {
   const router = useRouter()
@@ -81,6 +82,18 @@ export default function PageDetail() {
                     >Capture content</button>
                   )}
                 </div>
+                
+                {/* Show H1 First */}
+                {page.h1 && (
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-3 mb-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] uppercase tracking-wide px-2 py-1 rounded-full bg-indigo-600 text-white font-bold">H1</span>
+                      <span className="text-xs text-indigo-600 font-semibold">Main Heading</span>
+                    </div>
+                    <div className="text-base font-bold text-gray-900">{page.h1}</div>
+                  </div>
+                )}
+                
                 {Array.isArray(page?.content?.blocks) && page.content.blocks.length > 0 ? (
                   <div className="bg-gray-50 border rounded p-3 max-h-[70vh] overflow-auto divide-y">
                     {page.content.blocks.map((b, idx) => (
@@ -734,7 +747,50 @@ function ScoreBadge({ value }) {
 function FocusEditor({ page, onSave, onCheckSEO, checkingState }) {
   const [value, setValue] = useState(page?.seo?.focusKeyword || '')
   const [saving, setSaving] = useState(false)
-  useEffect(() => { setValue(page?.seo?.focusKeyword || '') }, [page?._id])
+  const [secondaryKeywords, setSecondaryKeywords] = useState(page?.seo?.secondaryKeywords || [])
+  const [secondaryInput, setSecondaryInput] = useState('')
+  
+  useEffect(() => { 
+    setValue(page?.seo?.focusKeyword || '')
+    setSecondaryKeywords(page?.seo?.secondaryKeywords || [])
+  }, [page?._id])
+  
+  const handleSecondaryKeyDown = (e) => {
+    if (e.key === 'Enter' || (e.key === ' ' && secondaryInput.endsWith(' '))) {
+      e.preventDefault()
+      const keyword = secondaryInput.trim()
+      if (keyword && !secondaryKeywords.includes(keyword)) {
+        const newKeywords = [...secondaryKeywords, keyword]
+        setSecondaryKeywords(newKeywords)
+        setSecondaryInput('')
+        // Auto-save secondary keywords
+        saveSecondaryKeywords(newKeywords)
+      }
+    }
+  }
+  
+  const removeSecondaryKeyword = (keyword) => {
+    const newKeywords = secondaryKeywords.filter(k => k !== keyword)
+    setSecondaryKeywords(newKeywords)
+    saveSecondaryKeywords(newKeywords)
+  }
+  
+  const saveSecondaryKeywords = async (keywords) => {
+    try {
+      const token = useAuthStore.getState().token
+      await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/${page._id}/secondary-keywords`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ secondaryKeywords: keywords })
+      })
+    } catch (error) {
+      console.error('Failed to save secondary keywords:', error)
+    }
+  }
+  
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -757,6 +813,39 @@ function FocusEditor({ page, onSave, onCheckSEO, checkingState }) {
           }}
         >{saving ? 'Saving…' : 'Save'}</button>
       </div>
+      
+      {/* Secondary Keywords */}
+      <div className="space-y-2">
+        <label className="text-xs text-gray-600 font-medium">Secondary Keywords</label>
+        <input
+          className="px-3 py-1.5 border rounded w-full text-sm"
+          value={secondaryInput}
+          onChange={e => setSecondaryInput(e.target.value)}
+          onKeyDown={handleSecondaryKeyDown}
+          placeholder="Type keyword and press Enter or double space"
+        />
+        {secondaryKeywords.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {secondaryKeywords.map((keyword, idx) => (
+              <div
+                key={idx}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium"
+              >
+                <span>{keyword}</span>
+                <button
+                  onClick={() => removeSecondaryKeyword(keyword)}
+                  className="hover:bg-indigo-200 rounded-full p-0.5 transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      
       {page?.seo?.focusKeyword && (
         <button
           className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white text-sm font-bold disabled:opacity-50 hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
