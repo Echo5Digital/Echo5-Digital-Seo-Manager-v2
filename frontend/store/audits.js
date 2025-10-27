@@ -101,6 +101,13 @@ const useAuditStore = create((set, get) => ({
             if (statusData.status === 'success') {
               const audit = statusData.data.audit
               
+              console.log('🔄 Polling received audit:', {
+                id: audit._id,
+                status: audit.status,
+                hasSummary: !!audit.summary,
+                summary: audit.summary
+              })
+              
               // Update audit in list
               set(state => ({
                 audits: state.audits.map(a => a._id === auditId ? audit : a)

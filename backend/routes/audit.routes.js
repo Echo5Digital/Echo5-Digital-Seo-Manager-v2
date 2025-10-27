@@ -55,6 +55,21 @@ router.post('/', protect, async (req, res, next) => {
       });
     }
 
+    // Delete old audits for this client (keep only the 5 most recent)
+    try {
+      const oldAudits = await Audit.find({ clientId: client._id })
+        .sort('-createdAt')
+        .skip(5); // Keep 5 most recent
+      
+      if (oldAudits.length > 0) {
+        const oldAuditIds = oldAudits.map(a => a._id);
+        await Audit.deleteMany({ _id: { $in: oldAuditIds } });
+        console.log(`🗑️ Cleaned up ${oldAudits.length} old audits for client: ${client.name}`);
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup old audits:', cleanupError.message);
+    }
+
     // Create audit record
     const audit = await Audit.create({
       clientId: client._id,
@@ -67,6 +82,7 @@ router.post('/', protect, async (req, res, next) => {
     auditService.performFullAudit(url || client.domain)
       .then(async (results) => {
   const summary = auditService.calculateAuditScore(results);
+        console.log('📊 Calculated Summary:', JSON.stringify(summary, null, 2));
         const aiAnalysis = await aiService.analyzeAuditResults(summary, url || client.domain);
 
         audit.results = results;
@@ -75,6 +91,7 @@ router.post('/', protect, async (req, res, next) => {
         audit.status = 'Completed';
         audit.completedAt = new Date();
         await audit.save();
+        console.log('✅ Audit saved with summary:', JSON.stringify(audit.summary, null, 2));
 
         // Update client SEO health
         client.seoHealth = {
@@ -154,6 +171,13 @@ router.get('/:id', protect, async (req, res, next) => {
         message: 'Audit not found',
       });
     }
+
+    console.log('📤 Returning audit:', {
+      id: audit._id,
+      status: audit.status,
+      hasSummary: !!audit.summary,
+      summary: audit.summary
+    });
 
     res.json({
       status: 'success',
