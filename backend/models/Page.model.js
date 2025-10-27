@@ -187,6 +187,12 @@ const pageSchema = new mongoose.Schema({
       tag: { type: String }, // e.g., 'h1', 'p', 'li'
       text: { type: String }
     }],
+    // Internal links with anchor text
+    internalLinks: [{
+      url: { type: String },
+      anchorText: { type: String },
+      isNofollow: { type: Boolean, default: false }
+    }],
   },
   
   // Performance Metrics

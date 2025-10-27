@@ -8,9 +8,10 @@ import usePagesStore from '../store/pages'
 
 export default function Pages() {
   const { clients, fetchClients } = useClientStore()
-  const { pages, fetchPages, fetchPage, updateFocusKeyword, refreshContent, error, loading } = usePagesStore()
+  const { pages, fetchPages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage, error, loading } = usePagesStore()
   const { runAudit, auditProgress } = useAuditStore()
   const [syncing, setSyncing] = useState(false)
+  const [recrawling, setRecrawling] = useState({})
   const [clientId, setClientId] = useState('')
   const [selectedId, setSelectedId] = useState('')
 
@@ -134,6 +135,19 @@ export default function Pages() {
                           <Link href={`/page/${p._id}`} legacyBehavior>
                             <a className="text-blue-600 underline" onClick={e => e.stopPropagation()}>View</a>
                           </Link>
+                          <button
+                            className="text-green-600 underline disabled:opacity-50"
+                            disabled={recrawling[p._id]}
+                            onClick={async (e) => {
+                              e.stopPropagation()
+                              try {
+                                setRecrawling(prev => ({ ...prev, [p._id]: true }))
+                                await recrawlPage(p._id)
+                              } finally {
+                                setRecrawling(prev => ({ ...prev, [p._id]: false }))
+                              }
+                            }}
+                          >{recrawling[p._id] ? 'Recrawling…' : 'Recrawl'}</button>
                           <span className="text-xs text-gray-500">Updated {new Date(p.updatedAt).toLocaleString()}</span>
                         </div>
                       </td>
@@ -181,6 +195,24 @@ export default function Pages() {
                       </div>
                     )}
                   </div>
+                  {Array.isArray(selectedPage?.content?.internalLinks) && selectedPage.content.internalLinks.length > 0 && (
+                    <div className="mt-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-2">Internal Links ({selectedPage.content.internalLinks.length})</h3>
+                      <div className="bg-gray-50 border rounded p-3 max-h-64 overflow-auto space-y-2">
+                        {selectedPage.content.internalLinks.map((link, idx) => (
+                          <div key={idx} className="text-xs border-b border-gray-200 pb-2 last:border-b-0">
+                            <div className="font-medium text-gray-900 mb-1">"{link.anchorText}"</div>
+                            <div className="flex items-center gap-2">
+                              <a href={link.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all flex-1">{link.url}</a>
+                              {link.isNofollow && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border">nofollow</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="bg-white border rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">

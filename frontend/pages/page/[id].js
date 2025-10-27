@@ -6,8 +6,9 @@ import usePagesStore from '../../store/pages'
 export default function PageDetail() {
   const router = useRouter()
   const { id } = router.query
-  const { pages, fetchPage, updateFocusKeyword, refreshContent } = usePagesStore()
+  const { pages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage } = usePagesStore()
   const [loading, setLoading] = useState(false)
+  const [recrawling, setRecrawling] = useState(false)
   const page = useMemo(() => pages.find(p => p._id === id), [pages, id])
 
   useEffect(() => {
@@ -36,6 +37,20 @@ export default function PageDetail() {
           </div>
           <div className="flex items-center gap-3">
             <button className="text-sm text-gray-700 underline" onClick={() => router.push('/pages')}>Back to list</button>
+            {page?._id && (
+              <button
+                className="px-3 py-1.5 rounded bg-green-600 text-white text-sm disabled:opacity-50"
+                disabled={recrawling}
+                onClick={async () => {
+                  try {
+                    setRecrawling(true)
+                    await recrawlPage(page._id)
+                  } finally {
+                    setRecrawling(false)
+                  }
+                }}
+              >{recrawling ? 'Recrawling…' : 'Recrawl Page'}</button>
+            )}
             {page?.url && (
               <a className="text-sm text-blue-600 underline" href={page.url} target="_blank" rel="noreferrer">Open page</a>
             )}
@@ -82,6 +97,24 @@ export default function PageDetail() {
                   </div>
                 )}
               </div>
+              {Array.isArray(page?.content?.internalLinks) && page.content.internalLinks.length > 0 && (
+                <div className="mt-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Internal Links ({page.content.internalLinks.length})</h3>
+                  <div className="bg-gray-50 border rounded p-3 max-h-96 overflow-auto space-y-2">
+                    {page.content.internalLinks.map((link, idx) => (
+                      <div key={idx} className="text-xs border-b border-gray-200 pb-2 last:border-b-0">
+                        <div className="font-medium text-gray-900 mb-1">"{link.anchorText}"</div>
+                        <div className="flex items-center gap-2">
+                          <a href={link.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all flex-1">{link.url}</a>
+                          {link.isNofollow && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border">nofollow</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="bg-white border rounded-lg p-4 space-y-3">
               <ScoreBadge value={page?.seo?.seoScore} />

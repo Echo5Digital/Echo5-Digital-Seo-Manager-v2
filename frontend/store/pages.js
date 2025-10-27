@@ -95,6 +95,29 @@ const usePagesStore = create((set, get) => ({
       set({ error: e.message || 'Failed to refresh content' })
       throw e
     }
+  },
+
+  recrawlPage: async (pageId) => {
+    try {
+      const token = useAuthStore.getState().token
+      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/${pageId}/recrawl`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      const data = await resp.json()
+      if (data.status === 'success') {
+        const page = data.data.page
+        set(state => ({ pages: state.pages.map(p => p._id === pageId ? page : p) }))
+        return page
+      } else {
+        throw new Error(data.message || 'Failed to recrawl page')
+      }
+    } catch (e) {
+      set({ error: e.message || 'Failed to recrawl page' })
+      throw e
+    }
   }
 }))
 

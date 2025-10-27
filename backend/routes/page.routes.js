@@ -455,6 +455,27 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     // Remove scripts, styles, and other non-content elements
     $('script, style, noscript, iframe, svg').remove()
 
+    // Extract internal links with anchor text
+    const internalLinks = []
+    const pageHost = (() => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' } })()
+    $('a[href]').each((i, el) => {
+      const href = $(el).attr('href')
+      const anchorText = $(el).text().replace(/\s+/g, ' ').trim()
+      const rel = $(el).attr('rel') || ''
+      if (!href || !anchorText) return
+      try {
+        const absoluteUrl = new URL(href, url).href
+        const linkHost = new URL(absoluteUrl).hostname.toLowerCase().replace(/^www\./, '')
+        if (linkHost === pageHost && !absoluteUrl.includes('#') && internalLinks.length < 100) {
+          internalLinks.push({
+            url: absoluteUrl,
+            anchorText: anchorText.substring(0, 200),
+            isNofollow: rel.includes('nofollow')
+          })
+        }
+      } catch {}
+    })
+
     // Extract text sample and word count from clean content
     const bodyText = $('body').text().replace(/\s+/g, ' ').trim()
     const blocks = []
@@ -480,10 +501,11 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     const h1 = page.h1 || $('h1').first().text().trim()
     const metaDescription = page.metaDescription || $('meta[name="description"]').attr('content') || ''
 
-  page.content = page.content || {}
-  page.content.sample = sampleText
-  page.content.wordCount = wordCount
-  page.content.blocks = blocks
+    page.content = page.content || {}
+    page.content.sample = sampleText
+    page.content.wordCount = wordCount
+    page.content.blocks = blocks
+    page.content.internalLinks = internalLinks
     if (!page.h1 && h1) page.h1 = h1
     if (!page.metaDescription && metaDescription) page.metaDescription = metaDescription
     await page.save()
@@ -506,6 +528,100 @@ router.post('/sync-from-audits', protect, async (req, res, next) => {
     await auditService.persistPages(audit, clientId)
     const count = await Page.countDocuments({ clientId })
     res.json({ status: 'success', data: { synced: true, pagesCount: count } })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// POST /api/pages/:id/recrawl - Recrawl a specific page and update all its data
+router.post('/:id/recrawl', protect, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const page = await Page.findById(id)
+    if (!page) return res.status(404).json({ status: 'error', message: 'Page not found' })
+
+    const url = page.url
+    if (!url) return res.status(400).json({ status: 'error', message: 'Page URL missing' })
+
+    // Use audit service to analyze this page comprehensively
+    const baseUrl = (() => { try { const u = new URL(url); return `${u.protocol}//${u.host}` } catch { return url } })()
+    const analysis = await auditService.analyzePageSEO(url, baseUrl)
+
+    // Update page with fresh data from analysis
+    const meta = analysis.metaData || {}
+    const social = analysis.socialTags || {}
+    const headings = analysis.headings || {}
+    const images = analysis.images || {}
+    const content = analysis.content || {}
+
+    page.title = (meta.title?.text || page.title || 'Untitled').substring(0, 60)
+    page.metaDescription = (meta.description?.text || '').substring(0, 160)
+    page.h1 = Array.isArray(headings.h1Text) ? (headings.h1Text[0] || '') : ''
+    
+    page.seo = page.seo || {}
+    page.seo.canonical = meta.canonical || undefined
+    page.seo.robots = meta.robots || 'index,follow'
+    page.seo.seoScore = analysis.seoAnalysis?.seoScore ?? undefined
+
+    page.structuredData = page.structuredData || {}
+    page.structuredData.type = (analysis.structuredData?.types && analysis.structuredData.types[0]) || 'WebPage'
+    page.structuredData.schema = (analysis.structuredData?.data && analysis.structuredData.data[0]) || {}
+
+    page.openGraph = {
+      title: social?.openGraph?.title || '',
+      description: social?.openGraph?.description || '',
+      image: social?.openGraph?.image || '',
+      url,
+      type: social?.openGraph?.type || 'website',
+      siteName: social?.openGraph?.siteName || '',
+    }
+
+    page.twitter = {
+      card: social?.twitter?.card || 'summary_large_image',
+      title: social?.twitter?.title || '',
+      description: social?.twitter?.description || '',
+      image: social?.twitter?.image || '',
+      site: social?.twitter?.site || '',
+      creator: '',
+    }
+
+    page.content = page.content || {}
+    page.content.wordCount = content.wordCount || 0
+    page.content.readingTime = content.wordCount ? Math.max(1, Math.round(content.wordCount / 200)) : undefined
+    page.content.paragraphs = content.paragraphs || undefined
+    page.content.headings = {
+      h1Count: headings.h1Count || 0,
+      h2Count: Array.isArray(headings.structure) ? headings.structure.filter(h=>h.level===2).length : undefined,
+      h3Count: Array.isArray(headings.structure) ? headings.structure.filter(h=>h.level===3).length : undefined,
+    }
+    page.content.links = {
+      internal: analysis.links?.internal?.count || 0,
+      external: analysis.links?.external?.count || 0,
+      broken: analysis.links?.potentiallyBroken || 0,
+    }
+    page.content.sample = content.sampleText || undefined
+
+    page.images = (images.details || []).map(img => ({
+      url: img.src,
+      alt: img.alt || '',
+      width: (img.width && Number(img.width)) || undefined,
+      height: (img.height && Number(img.height)) || undefined,
+      optimized: !!img.hasLazyLoading,
+    }))
+
+    page.technical = {
+      hasSSL: /^https:/i.test(url),
+      isMobileFriendly: !!meta.viewport,
+      hasViewport: !!meta.viewport,
+      hasLanguage: !!meta.lang,
+      hasCharset: !!meta.charset,
+      responsiveImages: (images.withDimensions || 0) > 0,
+      lazyLoading: (images.withLazyLoading || 0) > 0,
+    }
+
+    await page.save()
+
+    res.json({ status: 'success', data: { page } })
   } catch (error) {
     next(error)
   }
