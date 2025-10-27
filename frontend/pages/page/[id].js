@@ -122,6 +122,117 @@ export default function PageDetail() {
             </div>
             <div className="bg-white border rounded-lg p-4 space-y-3">
               <ScoreBadge value={page?.seo?.seoScore} />
+              
+              {/* Individual Score Components */}
+              {page && (
+                <div className="border-t pt-3 space-y-2">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">Score Breakdown</div>
+                  
+                  <ScoreItem 
+                    label="Title" 
+                    score={page.title ? (page.title.length >= 30 && page.title.length <= 60 ? 100 : page.title.length < 30 ? 50 : 70) : 0}
+                    icon={
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 1h6v4H7V5zm6 6H7v2h6v-2z" clipRule="evenodd" />
+                      </svg>
+                    }
+                  />
+                  
+                  <ScoreItem 
+                    label="Meta Desc" 
+                    score={page.metaDescription ? (page.metaDescription.length >= 120 && page.metaDescription.length <= 160 ? 100 : page.metaDescription.length < 120 ? 60 : 80) : 0}
+                    icon={
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    }
+                  />
+                  
+                  <ScoreItem 
+                    label="H1 Tag" 
+                    score={page.h1 ? 100 : 0}
+                    icon={
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M2 6a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm2 0v8h12V6H4z" />
+                      </svg>
+                    }
+                  />
+                  
+                  <ScoreItem 
+                    label="Content" 
+                    score={page.content?.wordCount ? (page.content.wordCount >= 300 ? 100 : Math.round((page.content.wordCount / 300) * 100)) : 0}
+                    icon={
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                      </svg>
+                    }
+                  />
+                  
+                  <ScoreItem 
+                    label="Images Alt" 
+                    score={
+                      Array.isArray(page.images) && page.images.length > 0
+                        ? Math.round((page.images.filter(img => img.alt && img.alt.trim()).length / page.images.length) * 100)
+                        : page.images?.length === 0 ? 50 : 0
+                    }
+                    icon={
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                      </svg>
+                    }
+                  />
+                  
+                  <ScoreItem 
+                    label="Links" 
+                    score={
+                      page.content?.links?.internal 
+                        ? (page.content.links.internal >= 3 ? 100 : Math.round((page.content.links.internal / 3) * 100))
+                        : 0
+                    }
+                    icon={
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
+                      </svg>
+                    }
+                  />
+                  
+                  {page.seo?.focusKeyword && (
+                    <ScoreItem 
+                      label="Keyword" 
+                      score={
+                        page.keywords?.find(k => k.keyword === page.seo.focusKeyword)
+                          ? Math.min(100, Math.round(
+                              (page.keywords.find(k => k.keyword === page.seo.focusKeyword).inTitle ? 40 : 0) +
+                              (page.keywords.find(k => k.keyword === page.seo.focusKeyword).inH1 ? 30 : 0) +
+                              (page.keywords.find(k => k.keyword === page.seo.focusKeyword).inMeta ? 20 : 0) +
+                              (page.keywords.find(k => k.keyword === page.seo.focusKeyword).density > 0 && page.keywords.find(k => k.keyword === page.seo.focusKeyword).density <= 2.5 ? 10 : 0)
+                            ))
+                          : 0
+                      }
+                      icon={
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                        </svg>
+                      }
+                    />
+                  )}
+                  
+                  <ScoreItem 
+                    label="Technical" 
+                    score={
+                      ((page.technical?.https ? 40 : 0) +
+                       (page.technical?.mobile ? 30 : 0) +
+                       (page.seo?.canonical ? 30 : 0))
+                    }
+                    icon={
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                      </svg>
+                    }
+                  />
+                </div>
+              )}
+              
               <div>
                 <div className="text-xs text-gray-500 mb-1">Focus keyword</div>
                 <FocusEditor 
@@ -670,6 +781,39 @@ function FocusEditor({ page, onSave, onCheckSEO, checkingState }) {
           )}
         </button>
       )}
+    </div>
+  )
+}
+
+function ScoreItem({ label, score, icon }) {
+  const getColor = (s) => {
+    if (s >= 80) return { bg: 'bg-green-100', text: 'text-green-700', fill: 'bg-green-500' }
+    if (s >= 60) return { bg: 'bg-yellow-100', text: 'text-yellow-700', fill: 'bg-yellow-500' }
+    if (s >= 40) return { bg: 'bg-orange-100', text: 'text-orange-700', fill: 'bg-orange-500' }
+    return { bg: 'bg-red-100', text: 'text-red-700', fill: 'bg-red-500' }
+  }
+  
+  const colors = getColor(score)
+  
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2 flex-1">
+        <div className={`${colors.bg} rounded p-1`}>
+          {icon}
+        </div>
+        <span className="text-xs text-gray-700">{label}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="w-16 bg-gray-200 rounded-full h-1.5">
+          <div 
+            className={`h-1.5 rounded-full ${colors.fill}`}
+            style={{ width: `${score}%` }}
+          ></div>
+        </div>
+        <span className={`text-xs font-bold ${colors.text} w-8 text-right`}>
+          {score}
+        </span>
+      </div>
     </div>
   )
 }
