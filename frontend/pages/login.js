@@ -26,8 +26,11 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-4xl font-extrabold text-gray-900">
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <img src="/echo5-logo.png" alt="Echo5" className="h-auto w-40" />
+          </div>
+          <h2 className="text-center text-4xl font-extrabold text-gray-900">
             Echo5 SEO Platform
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">

@@ -42,7 +42,7 @@ export default function Sidebar() {
       <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
         <div className="flex items-center flex-shrink-0 px-4 gap-3">
           <img src="/echo5-logo.png" alt="Echo5" className="h-10 w-auto" />
-          <h1 className="text-2xl font-bold text-blue-600">SEO OPS</h1>
+          <h1 className="text-2xl font-bold text-black">SEO OPS</h1>
         </div>
         <nav className="mt-8 flex-1 px-2 space-y-1">
           {navigation.map((item) => {
