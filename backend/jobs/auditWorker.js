@@ -11,7 +11,10 @@ auditQueue.process(async (job) => {
   const { auditId, clientId, url } = job.data;
   
   try {
-    logger.info(`Starting audit job ${job.id} for ${url}`);
+    // Format URL to ensure it has protocol
+    const formattedUrl = url.startsWith('http') ? url : `https://${url}`;
+    
+    logger.info(`Starting audit job ${job.id} for ${formattedUrl}`);
     
     // Update audit status to 'Running'
     await Audit.findByIdAndUpdate(auditId, { status: 'Running' });
@@ -19,7 +22,7 @@ auditQueue.process(async (job) => {
     // Step 1: Page Discovery (10%)
     job.progress(10);
     await job.progress(10);
-    const discoveredPages = await auditService.discoverPages(url);
+    const discoveredPages = await auditService.discoverPages(formattedUrl);
     logger.info(`Discovered ${discoveredPages.length} pages`);
     
     // Update progress: 20%
@@ -39,7 +42,7 @@ auditQueue.process(async (job) => {
       
       // Analyze batch
       const batchPromises = batch.map(page => 
-        auditService.analyzePageSEO(page.url, url)
+        auditService.analyzePageSEO(page.url, formattedUrl)
       );
       
       const batchResults = await Promise.allSettled(batchPromises);
@@ -79,12 +82,14 @@ auditQueue.process(async (job) => {
     
     logger.info('Running additional SEO checks...');
     await Promise.allSettled([
-      auditService.checkBrokenLinks(url).then(data => results.brokenLinks = data),
-      auditService.checkMetaTags(url).then(data => results.metaIssues = data),
-      auditService.checkAltTags(url).then(data => results.missingAltTags = data),
-      auditService.checkRobotsTxt(url).then(data => results.robotsTxtIssues = data),
-      auditService.checkSitemap(url).then(data => results.sitemapIssues = data),
-      auditService.checkSSL(url).then(data => results.sslIssues = data),
+      auditService.checkBrokenLinks(formattedUrl).then(data => results.brokenLinks = data),
+      auditService.checkMetaTags(formattedUrl).then(data => results.metaIssues = data),
+      auditService.checkAltTags(formattedUrl).then(data => results.missingAltTags = data),
+      auditService.checkRobotsTxt(formattedUrl).then(data => results.robotsTxtIssues = data),
+      auditService.checkSitemap(formattedUrl).then(data => results.sitemapIssues = data),
+      auditService.checkSSL(formattedUrl).then(data => results.sslIssues = data),
+      auditService.checkSchema(formattedUrl).then(data => results.schemaIssues = data),
+      auditService.analyzeCoreWebVitals(formattedUrl).then(data => results.coreWebVitals = data),
       auditService.checkSchema(url).then(data => results.schemaIssues = data),
       auditService.analyzeCoreWebVitals(url).then(data => results.coreWebVitals = data),
     ]);
