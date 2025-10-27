@@ -40,12 +40,12 @@ const io = socketIO(server, {
     origin: function (origin, callback) {
       const allowedOrigins = [
         'http://localhost:3000',
-        process.env.FRONTEND_URL,
-        'https://echo5-digital-seo-ops-v2-1pany1sa7-manu-amarnaths-projects.vercel.app',
         'https://echo5-digital-seo-ops-v2.vercel.app',
+        'https://echo5-digital-seo-ops-v2-1pany1sa7-manu-amarnaths-projects.vercel.app',
+        process.env.FRONTEND_URL,
       ].filter(Boolean);
       
-      if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.includes('.vercel.app')) {
+      if (!origin || allowedOrigins.indexOf(origin) !== -1 || (origin && origin.includes('.vercel.app'))) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -88,9 +88,9 @@ app.use('/api/', limiter);
 // CORS - Allow multiple origins
 const allowedOrigins = [
   'http://localhost:3000',
-  process.env.FRONTEND_URL,
-  'https://echo5-digital-seo-ops-v2-1pany1sa7-manu-amarnaths-projects.vercel.app',
   'https://echo5-digital-seo-ops-v2.vercel.app',
+  'https://echo5-digital-seo-ops-v2-1pany1sa7-manu-amarnaths-projects.vercel.app',
+  process.env.FRONTEND_URL,
 ].filter(Boolean); // Remove undefined values
 
 app.use(cors({
@@ -99,7 +99,7 @@ app.use(cors({
     if (!origin) return callback(null, true);
     
     // Check if origin is in allowed list or is a Vercel preview URL
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('.vercel.app')) {
+    if (allowedOrigins.indexOf(origin) !== -1 || (origin && origin.includes('.vercel.app'))) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
