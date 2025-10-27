@@ -659,14 +659,13 @@ export default function Audits() {
               
               <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
                 <div className="text-center">
-                  {/* Spinner */}
+                  {/* Loading GIF */}
                   <div className="mb-4 flex justify-center">
-                    <div className="relative">
-                      <div className="w-20 h-20 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <DocumentMagnifyingGlassIcon className="w-8 h-8 text-indigo-600" />
-                      </div>
-                    </div>
+                    <img 
+                      src="/echo5-loading.gif" 
+                      alt="Loading..." 
+                      className="w-32 h-32 object-contain"
+                    />
                   </div>
 
                   <h3 className="text-xl font-bold text-gray-900 mb-2">Running Audit</h3>
