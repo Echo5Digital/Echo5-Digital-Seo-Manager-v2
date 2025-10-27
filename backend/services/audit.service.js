@@ -53,33 +53,16 @@ class AuditService {
       results.discoveredPages = discoveredPages;
       console.log('📋 Step 1 completed. Pages discovered:', discoveredPages.length);
       
-      // Step 2: Analyze each discovered page in batches to prevent memory issues
+      // Step 2: Analyze each discovered page
       console.log('🔍 Step 2: Starting comprehensive page analysis...');
-      const pagesToAnalyze = discoveredPages.slice(0, 500); // Analyze up to 500 pages
-      const batchSize = 50; // Process 50 pages at a time
-      const allPageAnalyses = [];
+      const pageAnalysisPromises = discoveredPages.slice(0, 100).map(page => // Analyze up to 100 pages
+        this.analyzePageSEO(page.url, baseUrl)
+      );
       
-      for (let i = 0; i < pagesToAnalyze.length; i += batchSize) {
-        const batch = pagesToAnalyze.slice(i, i + batchSize);
-        console.log(`📄 Analyzing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(pagesToAnalyze.length / batchSize)} (${batch.length} pages)...`);
-        
-        const batchPromises = batch.map(page => this.analyzePageSEO(page.url, baseUrl));
-        const batchResults = await Promise.allSettled(batchPromises);
-        
-        const successfulResults = batchResults
-          .filter(result => result.status === 'fulfilled')
-          .map(result => result.value);
-        
-        allPageAnalyses.push(...successfulResults);
-        console.log(`✅ Batch completed. Total analyzed so far: ${allPageAnalyses.length}`);
-        
-        // Small delay between batches to prevent overwhelming the server
-        if (i + batchSize < pagesToAnalyze.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-      
-      results.pageAnalysis = allPageAnalyses;
+      const pageAnalyses = await Promise.allSettled(pageAnalysisPromises);
+      results.pageAnalysis = pageAnalyses
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value);
       console.log('📊 Step 2 completed. Page analyses:', results.pageAnalysis.length);
 
       // Step 3: Run all other audit checks in parallel
