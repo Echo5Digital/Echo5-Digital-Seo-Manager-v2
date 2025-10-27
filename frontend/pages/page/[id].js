@@ -1,14 +1,17 @@
 import { useRouter } from 'next/router'
 import { useEffect, useMemo, useState } from 'react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 import Layout from '../../components/Layout'
 import usePagesStore from '../../store/pages'
 
 export default function PageDetail() {
   const router = useRouter()
   const { id } = router.query
-  const { pages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage } = usePagesStore()
+  const { pages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage, checkSEO } = usePagesStore()
   const [loading, setLoading] = useState(false)
   const [recrawling, setRecrawling] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [seoReport, setSeoReport] = useState(null)
   const page = useMemo(() => pages.find(p => p._id === id), [pages, id])
 
   useEffect(() => {
@@ -62,7 +65,8 @@ export default function PageDetail() {
         )}
 
         {page && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-white border rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-semibold text-gray-900">{page.title}</h2>
@@ -120,7 +124,22 @@ export default function PageDetail() {
               <ScoreBadge value={page?.seo?.seoScore} />
               <div>
                 <div className="text-xs text-gray-500 mb-1">Focus keyword</div>
-                <FocusEditor page={page} onSave={updateFocusKeyword} />
+                <FocusEditor 
+                  page={page} 
+                  onSave={updateFocusKeyword}
+                  checkingState={checking}
+                  onCheckSEO={async () => {
+                    try {
+                      setChecking(true)
+                      const result = await checkSEO(page._id)
+                      setSeoReport(result.seoReport)
+                    } catch (err) {
+                      console.error('SEO check failed:', err)
+                    } finally {
+                      setChecking(false)
+                    }
+                  }}
+                />
               </div>
               <Meta label="H1" value={page?.h1} />
               <Meta label="Meta description" value={page?.metaDescription} long />
@@ -132,6 +151,352 @@ export default function PageDetail() {
                 <Stat label="Images" value={Array.isArray(page?.images) ? page.images.length : '—'} />
               </div>
             </div>
+          </div>
+
+          {seoReport && (
+            <div className="bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">SEO Analysis Report</h2>
+                  <p className="text-indigo-100 text-sm mt-1">Comprehensive analysis based on industry best practices</p>
+                </div>
+                <button
+                  onClick={() => setSeoReport(null)}
+                  className="text-white hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors"
+                >✕</button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Score Overview with Pie Charts */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* SEO Score Pie Chart */}
+                  <div className="bg-white rounded-xl border-2 border-indigo-100 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4 text-center">Overall SEO Score</h3>
+                    <div className="flex items-center justify-center">
+                      <div className="relative" style={{ width: 220, height: 220 }}>
+                        <PieChart width={220} height={220}>
+                          <Pie
+                            data={[
+                              { name: 'Score', value: seoReport.score },
+                              { name: 'Missing', value: 100 - seoReport.score }
+                            ]}
+                            cx={110}
+                            cy={110}
+                            innerRadius={60}
+                            outerRadius={80}
+                            startAngle={90}
+                            endAngle={-270}
+                            dataKey="value"
+                          >
+                            <Cell fill={
+                              seoReport.score >= 80 ? '#10b981' :
+                              seoReport.score >= 60 ? '#f59e0b' :
+                              seoReport.score >= 40 ? '#f97316' : '#ef4444'
+                            } />
+                            <Cell fill="#e5e7eb" />
+                          </Pie>
+                        </PieChart>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="text-center">
+                            <div className={`text-4xl font-bold ${
+                              seoReport.score >= 80 ? 'text-green-600' :
+                              seoReport.score >= 60 ? 'text-yellow-600' :
+                              seoReport.score >= 40 ? 'text-orange-600' : 'text-red-600'
+                            }`}>{seoReport.score}</div>
+                            <div className="text-xs text-gray-500 font-medium">out of 100</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className={`mt-4 flex items-center justify-center gap-2 px-4 py-2 rounded-lg ${
+                      seoReport.score >= 80 ? 'bg-green-50 text-green-700' :
+                      seoReport.score >= 60 ? 'bg-yellow-50 text-yellow-700' :
+                      seoReport.score >= 40 ? 'bg-orange-50 text-orange-700' : 'bg-red-50 text-red-700'
+                    }`}>
+                      {seoReport.score >= 80 ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      ) : seoReport.score >= 60 ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
+                        </svg>
+                      ) : seoReport.score >= 40 ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                      <p className="font-semibold">
+                        {seoReport.score >= 80 ? 'Excellent!' :
+                         seoReport.score >= 60 ? 'Good Progress' :
+                         seoReport.score >= 40 ? 'Needs Improvement' : 'Critical Issues'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Issues Breakdown Pie Chart */}
+                  <div className="bg-white rounded-xl border-2 border-indigo-100 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4 text-center">What's Missing</h3>
+                    <div className="flex items-center justify-center" style={{ width: '100%', height: 220 }}>
+                      <PieChart width={300} height={220}>
+                        <Pie
+                          data={[
+                            { name: 'Passed', value: seoReport.summary.passedChecks, color: '#10b981' },
+                            { name: 'Critical', value: seoReport.summary.criticalIssues, color: '#ef4444' },
+                            { name: 'High', value: seoReport.summary.highIssues, color: '#f97316' },
+                            { name: 'Medium', value: seoReport.summary.mediumIssues, color: '#f59e0b' },
+                            { name: 'Low', value: seoReport.summary.lowIssues, color: '#94a3b8' }
+                          ].filter(item => item.value > 0)}
+                          cx={150}
+                          cy={110}
+                          outerRadius={80}
+                          dataKey="value"
+                          label={({ name, value }) => `${name}: ${value}`}
+                          labelLine={false}
+                        >
+                          {[
+                            { name: 'Passed', value: seoReport.summary.passedChecks, color: '#10b981' },
+                            { name: 'Critical', value: seoReport.summary.criticalIssues, color: '#ef4444' },
+                            { name: 'High', value: seoReport.summary.highIssues, color: '#f97316' },
+                            { name: 'Medium', value: seoReport.summary.mediumIssues, color: '#f59e0b' },
+                            { name: 'Low', value: seoReport.summary.lowIssues, color: '#94a3b8' }
+                          ].filter(item => item.value > 0).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-4">
+                      {seoReport.summary.passedChecks > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                          <span className="text-gray-700">Passed: {seoReport.summary.passedChecks}</span>
+                        </div>
+                      )}
+                      {seoReport.summary.criticalIssues > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                          <span className="text-gray-700">Critical: {seoReport.summary.criticalIssues}</span>
+                        </div>
+                      )}
+                      {seoReport.summary.highIssues > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                          <span className="text-gray-700">High: {seoReport.summary.highIssues}</span>
+                        </div>
+                      )}
+                      {seoReport.summary.mediumIssues > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                          <span className="text-gray-700">Medium: {seoReport.summary.mediumIssues}</span>
+                        </div>
+                      )}
+                      {seoReport.summary.lowIssues > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-3 h-3 rounded-full bg-gray-400"></div>
+                          <span className="text-gray-700">Low: {seoReport.summary.lowIssues}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-lg p-3 text-center transform hover:scale-105 transition-transform">
+                    <div className="text-2xl font-bold text-green-700">{seoReport.summary.passedChecks}</div>
+                    <div className="flex items-center justify-center gap-1 text-xs text-green-600 font-medium mt-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      <span>Passed</span>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200 rounded-lg p-3 text-center transform hover:scale-105 transition-transform">
+                    <div className="text-2xl font-bold text-red-700">{seoReport.summary.criticalIssues}</div>
+                    <div className="flex items-center justify-center gap-1 text-xs text-red-600 font-medium mt-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                      <span>Critical</span>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200 rounded-lg p-3 text-center transform hover:scale-105 transition-transform">
+                    <div className="text-2xl font-bold text-orange-700">{seoReport.summary.highIssues}</div>
+                    <div className="flex items-center justify-center gap-1 text-xs text-orange-600 font-medium mt-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <span>High</span>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-2 border-yellow-200 rounded-lg p-3 text-center transform hover:scale-105 transition-transform">
+                    <div className="text-2xl font-bold text-yellow-700">{seoReport.summary.mediumIssues}</div>
+                    <div className="flex items-center justify-center gap-1 text-xs text-yellow-600 font-medium mt-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <span>Medium</span>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-gray-200 rounded-lg p-3 text-center transform hover:scale-105 transition-transform">
+                    <div className="text-2xl font-bold text-gray-700">{seoReport.summary.lowIssues}</div>
+                    <div className="flex items-center justify-center gap-1 text-xs text-gray-600 font-medium mt-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <span>Low</span>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 rounded-lg p-3 text-center transform hover:scale-105 transition-transform">
+                    <div className="text-2xl font-bold text-purple-700">{seoReport.summary.recommendations}</div>
+                    <div className="flex items-center justify-center gap-1 text-xs text-purple-600 font-medium mt-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z" />
+                      </svg>
+                      <span>Tips</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Issues Section */}
+                {seoReport.issues.length > 0 && (
+                  <div className="bg-white rounded-xl border-2 border-red-100 p-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="bg-red-100 rounded-full p-2">
+                        <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900">Issues Found ({seoReport.issues.length})</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {seoReport.issues.map((issue, idx) => (
+                        <div 
+                          key={idx}
+                          className={`p-4 border-l-4 rounded-lg shadow-sm transform hover:scale-[1.02] transition-transform ${
+                            issue.severity === 'critical' ? 'bg-red-50 border-red-500' :
+                            issue.severity === 'high' ? 'bg-orange-50 border-orange-500' :
+                            issue.severity === 'medium' ? 'bg-yellow-50 border-yellow-500' :
+                            'bg-gray-50 border-gray-400'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`mt-0.5 rounded-full p-1.5 flex items-center justify-center ${
+                              issue.severity === 'critical' ? 'bg-red-200 text-red-700' :
+                              issue.severity === 'high' ? 'bg-orange-200 text-orange-700' :
+                              issue.severity === 'medium' ? 'bg-yellow-200 text-yellow-700' : 'bg-gray-200 text-gray-700'
+                            }`}>
+                              {issue.severity === 'critical' ? (
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                </svg>
+                              ) : issue.severity === 'high' ? (
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                              ) : issue.severity === 'medium' ? (
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                              ) : (
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-bold text-gray-900">{issue.category}</span>
+                                <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide ${
+                                  issue.severity === 'critical' ? 'bg-red-600 text-white' :
+                                  issue.severity === 'high' ? 'bg-orange-600 text-white' :
+                                  issue.severity === 'medium' ? 'bg-yellow-600 text-white' :
+                                  'bg-gray-600 text-white'
+                                }`}>{issue.severity}</span>
+                              </div>
+                              <div className="text-sm text-gray-700 leading-relaxed">{issue.message}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Passed Checks Section */}
+                {seoReport.checks.length > 0 && (
+                  <div className="bg-white rounded-xl border-2 border-green-100 p-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="bg-green-100 rounded-full p-2">
+                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900">Passed Checks ({seoReport.checks.length})</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {seoReport.checks.map((check, idx) => (
+                        <div 
+                          key={idx}
+                          className="p-3 bg-green-50 border-2 border-green-200 rounded-lg flex items-start gap-2 hover:bg-green-100 transition-colors"
+                        >
+                          <div className="bg-green-500 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <span className="text-xs font-bold text-green-800 uppercase tracking-wide">{check.category}:</span>
+                            <span className="text-xs text-gray-700 ml-1">{check.message}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recommendations Section */}
+                {seoReport.recommendations.length > 0 && (
+                  <div className="bg-white rounded-xl border-2 border-purple-100 p-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="bg-purple-100 rounded-full p-2">
+                        <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900">Recommendations ({seoReport.recommendations.length})</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {seoReport.recommendations.map((rec, idx) => (
+                        <div 
+                          key={idx}
+                          className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-lg hover:shadow-md transition-shadow"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="bg-purple-200 rounded-full p-1.5 flex-shrink-0">
+                              <svg className="w-4 h-4 text-purple-700" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1">
+                              <span className="text-sm font-bold text-purple-900">{rec.category}:</span>
+                              <span className="text-sm text-gray-700 ml-1">{rec.message}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           </div>
         )}
       </div>
@@ -150,39 +515,161 @@ function Meta({ label, value, long }) {
 
 function ScoreBadge({ value }) {
   const v = value || 0
-  const cls = v >= 80 ? 'bg-green-100 text-green-800' : v >= 60 ? 'bg-yellow-100 text-yellow-800' : v >= 40 ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'
+  const bgColor = v >= 80 ? 'bg-green-50' : v >= 60 ? 'bg-yellow-50' : v >= 40 ? 'bg-orange-50' : 'bg-red-50'
+  const textColor = v >= 80 ? 'text-green-700' : v >= 60 ? 'text-yellow-700' : v >= 40 ? 'text-orange-700' : 'text-red-700'
+  const borderColor = v >= 80 ? 'border-green-200' : v >= 60 ? 'border-yellow-200' : v >= 40 ? 'border-orange-200' : 'border-red-200'
+  
+  // Create gradient segments for more visual interest
+  const segments = [
+    { name: 'Excellent', value: Math.min(v, 20), fill: '#10b981', range: '80-100' },
+    { name: 'Good', value: Math.min(Math.max(v - 20, 0), 20), fill: '#22c55e', range: '60-80' },
+    { name: 'Fair', value: Math.min(Math.max(v - 40, 0), 20), fill: '#84cc16', range: '40-60' },
+    { name: 'Weak', value: Math.min(Math.max(v - 60, 0), 20), fill: '#eab308', range: '20-40' },
+    { name: 'Poor', value: Math.min(Math.max(v - 80, 0), 20), fill: '#f59e0b', range: '0-20' },
+    { name: 'Missing', value: 100 - v, fill: '#e5e7eb', range: 'Gap' }
+  ].filter(seg => seg.value > 0)
+  
+  const StatusIcon = () => {
+    if (v >= 80) {
+      return (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </svg>
+      )
+    } else if (v >= 60) {
+      return (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
+        </svg>
+      )
+    } else if (v >= 40) {
+      return (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+        </svg>
+      )
+    } else if (v > 0) {
+      return (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+        </svg>
+      )
+    }
+    return null
+  }
+  
   return (
-    <div className="flex items-center justify-between">
-      <div className="text-sm text-gray-600">SEO Score</div>
-      <div className={`px-2 py-1 rounded text-sm ${cls}`}>{Number.isFinite(value) ? value : 'N/A'}</div>
+    <div className={`${bgColor} border-2 ${borderColor} rounded-lg p-4`}>
+      <div className="text-sm font-semibold text-gray-700 mb-3">SEO Performance</div>
+      <div className="flex items-center justify-center">
+        <div className="relative" style={{ width: 140, height: 140 }}>
+          <PieChart width={140} height={140}>
+            <Pie
+              data={segments}
+              cx={70}
+              cy={70}
+              innerRadius={40}
+              outerRadius={60}
+              startAngle={90}
+              endAngle={-270}
+              dataKey="value"
+            >
+              {segments.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} />
+              ))}
+            </Pie>
+          </PieChart>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${textColor}`}>
+                {Number.isFinite(value) ? v : 'N/A'}
+              </div>
+              {Number.isFinite(value) && (
+                <div className="text-[10px] text-gray-500 font-medium">/ 100</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Score breakdown */}
+      {Number.isFinite(value) && (
+        <div className="mt-3 space-y-1">
+          <div className="flex items-center justify-between text-[10px]">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10b981' }}></div>
+              <span className="text-gray-600">Achieved</span>
+            </div>
+            <span className="font-semibold text-gray-700">{v}%</span>
+          </div>
+          <div className="flex items-center justify-between text-[10px]">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-gray-300"></div>
+              <span className="text-gray-600">Potential</span>
+            </div>
+            <span className="font-semibold text-gray-700">{100 - v}%</span>
+          </div>
+        </div>
+      )}
+      
+      <div className={`mt-3 flex items-center justify-center gap-1 text-xs font-semibold ${textColor} pt-2 border-t ${borderColor}`}>
+        <StatusIcon />
+        <span>{v >= 80 ? 'Excellent' : v >= 60 ? 'Good' : v >= 40 ? 'Fair' : v > 0 ? 'Poor' : 'Not Analyzed'}</span>
+      </div>
     </div>
   )
 }
 
-function FocusEditor({ page, onSave }) {
+function FocusEditor({ page, onSave, onCheckSEO, checkingState }) {
   const [value, setValue] = useState(page?.seo?.focusKeyword || '')
   const [saving, setSaving] = useState(false)
   useEffect(() => { setValue(page?.seo?.focusKeyword || '') }, [page?._id])
   return (
-    <div className="flex items-center gap-2">
-      <input
-        className="px-3 py-1.5 border rounded w-full"
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        placeholder="Focus keyword"
-      />
-      <button
-        className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-semibold disabled:opacity-50"
-        disabled={saving || !value.trim()}
-        onClick={async () => {
-          try {
-            setSaving(true)
-            await onSave(page._id, value.trim())
-          } finally {
-            setSaving(false)
-          }
-        }}
-      >{saving ? 'Saving…' : 'Save'}</button>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          className="px-3 py-1.5 border rounded w-full"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          placeholder="Focus keyword"
+        />
+        <button
+          className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-semibold disabled:opacity-50 whitespace-nowrap"
+          disabled={saving || !value.trim()}
+          onClick={async () => {
+            try {
+              setSaving(true)
+              await onSave(page._id, value.trim())
+            } finally {
+              setSaving(false)
+            }
+          }}
+        >{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+      {page?.seo?.focusKeyword && (
+        <button
+          className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white text-sm font-bold disabled:opacity-50 hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
+          disabled={checkingState}
+          onClick={onCheckSEO}
+        >
+          {checkingState ? (
+            <>
+              <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>Analyzing SEO…</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <span>Analyze SEO Performance</span>
+            </>
+          )}
+        </button>
+      )}
     </div>
   )
 }

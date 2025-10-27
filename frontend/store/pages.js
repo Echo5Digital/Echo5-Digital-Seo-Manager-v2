@@ -118,6 +118,29 @@ const usePagesStore = create((set, get) => ({
       set({ error: e.message || 'Failed to recrawl page' })
       throw e
     }
+  },
+
+  checkSEO: async (pageId) => {
+    try {
+      const token = useAuthStore.getState().token
+      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/${pageId}/check-seo`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      const data = await resp.json()
+      if (data.status === 'success') {
+        const page = data.data.page
+        set(state => ({ pages: state.pages.map(p => p._id === pageId ? page : p) }))
+        return data.data
+      } else {
+        throw new Error(data.message || 'Failed to check SEO')
+      }
+    } catch (e) {
+      set({ error: e.message || 'Failed to check SEO' })
+      throw e
+    }
   }
 }))
 

@@ -439,6 +439,243 @@ router.patch('/:id/focus-keyword', protect, async (req, res, next) => {
   }
 })
 
+// POST /api/pages/:id/check-seo - Comprehensive SEO check based on all SEO concepts
+router.post('/:id/check-seo', protect, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const page = await Page.findById(id)
+    if (!page) return res.status(404).json({ status: 'error', message: 'Page not found' })
+
+    // Run comprehensive SEO checks
+    const issues = []
+    const checks = []
+    const recommendations = []
+
+    // 1. Title SEO
+    if (!page.title) {
+      issues.push({ category: 'Title', severity: 'critical', message: 'Missing page title', impact: 'high' })
+    } else {
+      if (page.title.length < 30) {
+        issues.push({ category: 'Title', severity: 'high', message: `Title too short (${page.title.length} chars, recommended 30-60)`, impact: 'medium' })
+      } else if (page.title.length > 60) {
+        issues.push({ category: 'Title', severity: 'medium', message: `Title too long (${page.title.length} chars, recommended 30-60)`, impact: 'medium' })
+      } else {
+        checks.push({ category: 'Title', status: 'pass', message: `Title length optimal (${page.title.length} chars)` })
+      }
+      
+      // Check for focus keyword in title
+      if (page.seo?.focusKeyword) {
+        const fk = page.seo.focusKeyword.toLowerCase()
+        if (page.title.toLowerCase().includes(fk)) {
+          checks.push({ category: 'Title', status: 'pass', message: 'Focus keyword found in title' })
+        } else {
+          recommendations.push({ category: 'Title', message: `Add focus keyword "${page.seo.focusKeyword}" to title` })
+        }
+      }
+    }
+
+    // 2. Meta Description SEO
+    if (!page.metaDescription) {
+      issues.push({ category: 'Meta', severity: 'high', message: 'Missing meta description', impact: 'high' })
+    } else {
+      if (page.metaDescription.length < 120) {
+        issues.push({ category: 'Meta', severity: 'medium', message: `Meta description too short (${page.metaDescription.length} chars, recommended 120-160)`, impact: 'medium' })
+      } else if (page.metaDescription.length > 160) {
+        issues.push({ category: 'Meta', severity: 'low', message: `Meta description too long (${page.metaDescription.length} chars, recommended 120-160)`, impact: 'low' })
+      } else {
+        checks.push({ category: 'Meta', status: 'pass', message: `Meta description length optimal (${page.metaDescription.length} chars)` })
+      }
+
+      // Check for focus keyword in meta
+      if (page.seo?.focusKeyword) {
+        const fk = page.seo.focusKeyword.toLowerCase()
+        if (page.metaDescription.toLowerCase().includes(fk)) {
+          checks.push({ category: 'Meta', status: 'pass', message: 'Focus keyword found in meta description' })
+        } else {
+          recommendations.push({ category: 'Meta', message: `Add focus keyword "${page.seo.focusKeyword}" to meta description` })
+        }
+      }
+    }
+
+    // 3. H1 Heading SEO
+    if (!page.h1) {
+      issues.push({ category: 'Content', severity: 'high', message: 'Missing H1 heading', impact: 'high' })
+    } else {
+      checks.push({ category: 'Content', status: 'pass', message: 'H1 heading present' })
+      
+      // Check for focus keyword in H1
+      if (page.seo?.focusKeyword) {
+        const fk = page.seo.focusKeyword.toLowerCase()
+        if (page.h1.toLowerCase().includes(fk)) {
+          checks.push({ category: 'Content', status: 'pass', message: 'Focus keyword found in H1' })
+        } else {
+          recommendations.push({ category: 'Content', message: `Add focus keyword "${page.seo.focusKeyword}" to H1 heading` })
+        }
+      }
+    }
+
+    // 4. Content Quality
+    const wordCount = page.content?.wordCount || 0
+    if (wordCount === 0) {
+      issues.push({ category: 'Content', severity: 'critical', message: 'No content found on page', impact: 'high' })
+    } else if (wordCount < 300) {
+      issues.push({ category: 'Content', severity: 'medium', message: `Low word count (${wordCount} words, recommended 300+)`, impact: 'medium' })
+    } else {
+      checks.push({ category: 'Content', status: 'pass', message: `Good word count (${wordCount} words)` })
+    }
+
+    // 5. Keyword Density (if focus keyword set)
+    if (page.seo?.focusKeyword && page.content?.sample) {
+      const fk = page.seo.focusKeyword.trim()
+      const sample = page.content.sample
+      const words = sample.split(/\s+/).filter(Boolean).length
+      const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const re = new RegExp(`\\b${esc(fk)}\\b`, 'gi')
+      const count = (sample.match(re) || []).length
+      const density = words > 0 ? (count / words) * 100 : 0
+
+      if (density === 0) {
+        issues.push({ category: 'Keywords', severity: 'high', message: `Focus keyword "${fk}" not found in content`, impact: 'high' })
+      } else if (density < 0.5) {
+        recommendations.push({ category: 'Keywords', message: `Low keyword density (${density.toFixed(2)}%, recommended 0.5-2.5%)` })
+      } else if (density > 2.5) {
+        issues.push({ category: 'Keywords', severity: 'medium', message: `Keyword density too high (${density.toFixed(2)}%, may be keyword stuffing)`, impact: 'medium' })
+      } else {
+        checks.push({ category: 'Keywords', status: 'pass', message: `Optimal keyword density (${density.toFixed(2)}%)` })
+      }
+    }
+
+    // 6. Images & Alt Tags
+    const totalImages = Array.isArray(page.images) ? page.images.length : 0
+    const imagesWithoutAlt = totalImages > 0 ? page.images.filter(img => !img.alt || img.alt.trim() === '').length : 0
+    
+    if (totalImages === 0) {
+      recommendations.push({ category: 'Images', message: 'No images found - consider adding relevant images' })
+    } else {
+      if (imagesWithoutAlt > 0) {
+        issues.push({ category: 'Images', severity: 'medium', message: `${imagesWithoutAlt} of ${totalImages} images missing alt tags`, impact: 'medium' })
+      } else {
+        checks.push({ category: 'Images', status: 'pass', message: `All ${totalImages} images have alt tags` })
+      }
+    }
+
+    // 7. Internal Links
+    const internalLinks = page.content?.links?.internal || 0
+    if (internalLinks === 0) {
+      recommendations.push({ category: 'Links', message: 'No internal links found - add links to related pages' })
+    } else if (internalLinks < 3) {
+      recommendations.push({ category: 'Links', message: `Only ${internalLinks} internal links - consider adding more (3-10 recommended)` })
+    } else {
+      checks.push({ category: 'Links', status: 'pass', message: `Good internal linking (${internalLinks} links)` })
+    }
+
+    // 8. External Links
+    const externalLinks = page.content?.links?.external || 0
+    if (externalLinks > 0) {
+      checks.push({ category: 'Links', status: 'pass', message: `${externalLinks} external links for authority` })
+    }
+
+    // 9. Technical SEO
+    if (!page.seo?.canonical) {
+      recommendations.push({ category: 'Technical', message: 'Set canonical URL to avoid duplicate content' })
+    } else {
+      checks.push({ category: 'Technical', status: 'pass', message: 'Canonical URL set' })
+    }
+
+    const robots = page.seo?.robots || 'index,follow'
+    if (robots.includes('noindex')) {
+      issues.push({ category: 'Technical', severity: 'critical', message: 'Page set to noindex - will not appear in search results', impact: 'critical' })
+    } else {
+      checks.push({ category: 'Technical', status: 'pass', message: 'Page is indexable' })
+    }
+
+    if (page.technical?.https === false) {
+      issues.push({ category: 'Technical', severity: 'high', message: 'Page not served over HTTPS', impact: 'high' })
+    } else if (page.technical?.https === true) {
+      checks.push({ category: 'Technical', status: 'pass', message: 'Page served over HTTPS' })
+    }
+
+    if (page.technical?.mobile) {
+      checks.push({ category: 'Technical', status: 'pass', message: 'Mobile-friendly viewport configured' })
+    } else {
+      issues.push({ category: 'Technical', severity: 'medium', message: 'Missing mobile viewport meta tag', impact: 'medium' })
+    }
+
+    // 10. Structured Data
+    const hasStructuredData = page.structuredData?.schema && Object.keys(page.structuredData.schema).length > 0
+    if (!hasStructuredData) {
+      recommendations.push({ category: 'Technical', message: 'Add structured data (JSON-LD) for rich snippets' })
+    } else {
+      checks.push({ category: 'Technical', status: 'pass', message: 'Structured data implemented' })
+    }
+
+    // 11. Open Graph
+    const hasOG = page.openGraph?.title && page.openGraph?.description
+    if (!hasOG) {
+      recommendations.push({ category: 'Social', message: 'Add Open Graph tags for better social sharing' })
+    } else {
+      checks.push({ category: 'Social', status: 'pass', message: 'Open Graph tags configured' })
+      if (!page.openGraph.image) {
+        recommendations.push({ category: 'Social', message: 'Add Open Graph image for social sharing preview' })
+      }
+    }
+
+    // 12. Twitter Cards
+    const hasTwitter = page.twitter?.card && page.twitter?.title
+    if (!hasTwitter) {
+      recommendations.push({ category: 'Social', message: 'Add Twitter Card tags for better Twitter sharing' })
+    } else {
+      checks.push({ category: 'Social', status: 'pass', message: 'Twitter Card tags configured' })
+    }
+
+    // Calculate overall SEO score
+    const totalChecks = checks.length
+    const criticalIssues = issues.filter(i => i.severity === 'critical').length
+    const highIssues = issues.filter(i => i.severity === 'high').length
+    const mediumIssues = issues.filter(i => i.severity === 'medium').length
+    const lowIssues = issues.filter(i => i.severity === 'low').length
+
+    // Scoring: start at 100, deduct points for issues
+    let score = 100
+    score -= criticalIssues * 25
+    score -= highIssues * 15
+    score -= mediumIssues * 8
+    score -= lowIssues * 3
+    score = Math.max(0, Math.min(100, score))
+
+    // Update page with new score if it changed
+    if (page.seo?.seoScore !== score) {
+      page.seo = page.seo || {}
+      page.seo.seoScore = score
+      await page.save()
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        page,
+        seoReport: {
+          score,
+          issues,
+          checks,
+          recommendations,
+          summary: {
+            totalIssues: issues.length,
+            criticalIssues,
+            highIssues,
+            mediumIssues,
+            lowIssues,
+            passedChecks: checks.length,
+            recommendations: recommendations.length
+          }
+        }
+      }
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 // POST /api/pages/:id/refresh-content - Fetch page HTML and store content sample/word count
 router.post('/:id/refresh-content', protect, async (req, res, next) => {
   try {
