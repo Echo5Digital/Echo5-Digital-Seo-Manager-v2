@@ -55,7 +55,7 @@ class AuditService {
       
       // Step 2: Analyze each discovered page
       console.log('🔍 Step 2: Starting comprehensive page analysis...');
-      const pageAnalysisPromises = discoveredPages.slice(0, 30).map(page => // Increased from 10 to 30 pages
+      const pageAnalysisPromises = discoveredPages.slice(0, 100).map(page => // Analyze up to 100 pages
         this.analyzePageSEO(page.url, baseUrl)
       );
       
@@ -264,7 +264,7 @@ class AuditService {
       }
       
       // Increased limit for more comprehensive crawling
-      const maxPages = 50; // Increased from 20 to 50
+      const maxPages = 200; // Increased to 200 for thorough analysis
       
       while (toVisit.length > 0 && discoveredPages.length < maxPages) {
         const currentUrl = toVisit.shift();

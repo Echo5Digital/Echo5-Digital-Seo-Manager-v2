@@ -1783,7 +1783,7 @@ export default function AuditDetailed() {
         {selectedPageIndex === null && audit.aiAnalysis && (
           <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl p-8 shadow-lg">
             <h2 className="text-2xl font-bold text-purple-900 mb-4 flex items-center">
-              🤖 AI-Powered Analysis & Recommendations
+              AI-Powered Analysis & Recommendations
             </h2>
             {typeof audit.aiAnalysis === 'string' ? (
               <div className="prose prose-lg max-w-none text-gray-800 whitespace-pre-wrap">
