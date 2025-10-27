@@ -1,14 +1,419 @@
+import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
+import useAuthStore from '../store/auth'
+import useTasksStore from '../store/tasks'
+import useClientsStore from '../store/clients'
 
 export default function Tasks() {
+  const { token, user } = useAuthStore()
+  const { tasks, loading, fetchTasks, updateTask } = useTasksStore()
+  const { clients, fetchClients } = useClientsStore()
+  const [showModal, setShowModal] = useState(false)
+  const [selectedTask, setSelectedTask] = useState(null)
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterPriority, setFilterPriority] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  useEffect(() => {
+    if (token) {
+      fetchTasks(token)
+      fetchClients(token)
+    }
+  }, [token])
+
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'Pending': return 'bg-gray-100 text-gray-700 border-gray-300'
+      case 'In Progress': return 'bg-blue-100 text-blue-700 border-blue-300'
+      case 'Review': return 'bg-yellow-100 text-yellow-700 border-yellow-300'
+      case 'Completed': return 'bg-green-100 text-green-700 border-green-300'
+      case 'Cancelled': return 'bg-red-100 text-red-700 border-red-300'
+      default: return 'bg-gray-100 text-gray-700 border-gray-300'
+    }
+  }
+
+  const getPriorityColor = (priority) => {
+    switch(priority) {
+      case 'Critical': return 'bg-red-100 text-red-700 border-red-300'
+      case 'High': return 'bg-orange-100 text-orange-700 border-orange-300'
+      case 'Medium': return 'bg-yellow-100 text-yellow-700 border-yellow-300'
+      case 'Low': return 'bg-blue-100 text-blue-700 border-blue-300'
+      default: return 'bg-gray-100 text-gray-700 border-gray-300'
+    }
+  }
+
+  const handleStatusChange = async (taskId, newStatus) => {
+    try {
+      await updateTask(token, taskId, { status: newStatus })
+    } catch (error) {
+      alert('Failed to update task status')
+    }
+  }
+
+  const filteredTasks = tasks.filter(task => {
+    const matchesStatus = filterStatus === 'all' || task.status === filterStatus
+    const matchesPriority = filterPriority === 'all' || task.priority === filterPriority
+    const matchesSearch = !searchQuery || 
+      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.clientId?.name.toLowerCase().includes(searchQuery.toLowerCase())
+    
+    return matchesStatus && matchesPriority && matchesSearch
+  })
+
+  const stats = {
+    total: tasks.length,
+    pending: tasks.filter(t => t.status === 'Pending').length,
+    inProgress: tasks.filter(t => t.status === 'In Progress').length,
+    review: tasks.filter(t => t.status === 'Review').length,
+    completed: tasks.filter(t => t.status === 'Completed').length,
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900">Tasks</h1>
-        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-          <p className="text-gray-500">Task management - Coming soon</p>
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-900">Tasks</h1>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Tasks</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="bg-indigo-100 rounded-full p-3">
+                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Pending</p>
+                <p className="text-2xl font-bold text-gray-600">{stats.pending}</p>
+              </div>
+              <div className="bg-gray-100 rounded-full p-3">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">In Progress</p>
+                <p className="text-2xl font-bold text-blue-600">{stats.inProgress}</p>
+              </div>
+              <div className="bg-blue-100 rounded-full p-3">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">In Review</p>
+                <p className="text-2xl font-bold text-yellow-600">{stats.review}</p>
+              </div>
+              <div className="bg-yellow-100 rounded-full p-3">
+                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Completed</p>
+                <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
+              </div>
+              <div className="bg-green-100 rounded-full p-3">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search tasks..."
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                <option value="all">All Statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Review">Review</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+              <select
+                value={filterPriority}
+                onChange={(e) => setFilterPriority(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                <option value="all">All Priorities</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Tasks List */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+          {loading ? (
+            <div className="p-12 text-center">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+              <p className="mt-4 text-gray-600">Loading tasks...</p>
+            </div>
+          ) : filteredTasks.length === 0 ? (
+            <div className="p-12 text-center">
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <p className="mt-4 text-gray-500">No tasks found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredTasks.map((task) => (
+                    <tr key={task._id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-gray-900">{task.title}</span>
+                          <span className="text-xs text-gray-500 line-clamp-1">{task.description}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-gray-900">{task.clientId?.name || 'N/A'}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-gray-600">{task.type}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityColor(task.priority)}`}>
+                          {task.priority}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <select
+                          value={task.status}
+                          onChange={(e) => handleStatusChange(task._id, e.target.value)}
+                          className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(task.status)} cursor-pointer`}
+                        >
+                          <option value="Pending">Pending</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Review">Review</option>
+                          <option value="Completed">Completed</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-gray-900">{task.assignedTo?.name || 'Unassigned'}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {task.dueDate ? (
+                          <span className="text-sm text-gray-600">
+                            {new Date(task.dueDate).toLocaleDateString()}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400">No due date</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={() => {
+                            setSelectedTask(task)
+                            setShowModal(true)
+                          }}
+                          className="text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 px-3 py-1 rounded transition-colors"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Task Details Modal */}
+      {showModal && selectedTask && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" onClick={() => setShowModal(false)}>
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"></div>
+            
+            <div className="relative bg-white rounded-xl shadow-2xl max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 rounded-t-xl flex justify-between items-center">
+                <h3 className="text-xl font-bold text-white">Task Details</h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-white hover:bg-white/20 rounded-lg p-1"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">{selectedTask.title}</h4>
+                  <div className="flex gap-2 mb-4">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityColor(selectedTask.priority)}`}>
+                      {selectedTask.priority}
+                    </span>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(selectedTask.status)}`}>
+                      {selectedTask.status}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h5 className="font-medium text-gray-700 mb-2">Description</h5>
+                  <p className="text-gray-600 whitespace-pre-wrap">{selectedTask.description}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Client</h5>
+                    <p className="text-gray-600">{selectedTask.clientId?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Type</h5>
+                    <p className="text-gray-600">{selectedTask.type}</p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Assigned To</h5>
+                    <p className="text-gray-600">{selectedTask.assignedTo?.name || 'Unassigned'}</p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Created By</h5>
+                    <p className="text-gray-600">{selectedTask.createdBy?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Due Date</h5>
+                    <p className="text-gray-600">
+                      {selectedTask.dueDate 
+                        ? new Date(selectedTask.dueDate).toLocaleDateString()
+                        : 'No due date'}
+                    </p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-1">Created</h5>
+                    <p className="text-gray-600">{new Date(selectedTask.createdAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+
+                {selectedTask.relatedUrl && (
+                  <div className="border-t pt-4">
+                    <h5 className="font-medium text-gray-700 mb-1">Related URL</h5>
+                    <a 
+                      href={selectedTask.relatedUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:underline break-all"
+                    >
+                      {selectedTask.relatedUrl}
+                    </a>
+                  </div>
+                )}
+
+                {selectedTask.aiSuggestion && (
+                  <div className="border-t pt-4">
+                    <h5 className="font-medium text-gray-700 mb-2">AI Suggestion</h5>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-sm text-gray-700 mb-2">{selectedTask.aiSuggestion.recommendation}</p>
+                      {selectedTask.aiSuggestion.reasoning && (
+                        <p className="text-xs text-gray-600 italic">{selectedTask.aiSuggestion.reasoning}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {selectedTask.logs && selectedTask.logs.length > 0 && (
+                  <div className="border-t pt-4">
+                    <h5 className="font-medium text-gray-700 mb-2">Activity Log</h5>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {selectedTask.logs.map((log, idx) => (
+                        <div key={idx} className="text-xs text-gray-600 border-l-2 border-gray-300 pl-3">
+                          <p className="font-medium">{log.action}</p>
+                          <p className="text-gray-500">{new Date(log.timestamp).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-gray-50 px-6 py-4 rounded-b-xl flex justify-end gap-3">
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }
