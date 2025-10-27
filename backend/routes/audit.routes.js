@@ -6,6 +6,7 @@ const Notification = require('../models/Notification.model');
 const { protect } = require('../middleware/auth');
 const auditService = require('../services/audit.service');
 const aiService = require('../services/ai.service');
+const auditQueue = require('../jobs/auditQueue');
 
 // Test endpoint for debugging page discovery
 router.get('/test-discovery/:domain', protect, async (req, res) => {
@@ -34,7 +35,7 @@ router.get('/test-discovery/:domain', protect, async (req, res) => {
   }
 });
 
-// POST /api/audits - Run audit (new API endpoint)
+// POST /api/audits - Run audit (new API endpoint with Bull Queue)
 router.post('/', protect, async (req, res, next) => {
   try {
     const { clientId, url } = req.body;
@@ -59,63 +60,28 @@ router.post('/', protect, async (req, res, next) => {
     const audit = await Audit.create({
       clientId: client._id,
       auditType: 'Full Site',
-      status: 'In Progress',
+      status: 'Queued',
       triggeredBy: req.user._id,
     });
 
-    // Start audit (async)
-    auditService.performFullAudit(url || client.domain)
-      .then(async (results) => {
-  const summary = auditService.calculateAuditScore(results);
-        const aiAnalysis = await aiService.analyzeAuditResults(summary, url || client.domain);
-
-        audit.results = results;
-        audit.summary = summary;
-        audit.aiAnalysis = aiAnalysis;
-        audit.status = 'Completed';
-        audit.completedAt = new Date();
-        await audit.save();
-
-        // Update client SEO health
-        client.seoHealth = {
-          score: summary.overallScore,
-          lastChecked: new Date(),
-          criticalIssues: summary.criticalCount,
-          highIssues: summary.highCount,
-          mediumIssues: summary.mediumCount,
-          lowIssues: summary.lowCount,
-        };
-        await client.save();
-
-        // Persist pages into Pages collection with latest snapshot
-        try {
-          await auditService.persistPages(audit, client._id)
-        } catch (e) {
-          console.warn('Failed to persist pages from audit:', e.message)
-        }
-
-        // Create notification for user who triggered the audit
-        await Notification.create({
-          userId: audit.triggeredBy,
-          type: 'Audit Complete',
-          title: 'Audit Completed',
-          message: `Site audit for ${client.name} has been completed with a score of ${summary.overallScore}/100`,
-          priority: summary.overallScore < 50 ? 'High' : summary.overallScore < 70 ? 'Medium' : 'Low',
-          relatedModel: 'Audit',
-          relatedId: audit._id,
-          actionUrl: '/audits',
-        });
-      })
-      .catch(async (error) => {
-        audit.status = 'Failed';
-        audit.error = error.message;
-        await audit.save();
-      });
+    // Add job to Bull queue instead of running directly
+    const job = await auditQueue.add({
+      auditId: audit._id.toString(),
+      clientId: client._id.toString(),
+      url: url || client.domain,
+      triggeredBy: req.user._id.toString(),
+    }, {
+      priority: 1, // Higher priority for manual audits
+      jobId: audit._id.toString(), // Use audit ID as job ID for easy tracking
+    });
 
     res.json({
       status: 'success',
-      message: 'Audit started',
-      data: audit,
+      message: 'Audit queued for processing',
+      data: {
+        audit,
+        jobId: job.id,
+      },
     });
   } catch (error) {
     next(error);
@@ -158,6 +124,65 @@ router.get('/:id', protect, async (req, res, next) => {
     res.json({
       status: 'success',
       data: { audit },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/audits/:id/progress - Get audit job progress from Bull queue
+router.get('/:id/progress', protect, async (req, res, next) => {
+  try {
+    const auditId = req.params.id;
+    
+    // Get audit from database
+    const audit = await Audit.findById(auditId);
+    
+    if (!audit) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Audit not found',
+      });
+    }
+    
+    // If audit is already completed or failed, return from database
+    if (audit.status === 'Completed' || audit.status === 'Failed') {
+      return res.json({
+        status: 'success',
+        data: {
+          auditStatus: audit.status,
+          progress: audit.status === 'Completed' ? 100 : 0,
+          audit: audit,
+        },
+      });
+    }
+    
+    // Get job from Bull queue
+    const job = await auditQueue.getJob(auditId);
+    
+    if (!job) {
+      return res.json({
+        status: 'success',
+        data: {
+          auditStatus: audit.status,
+          progress: 0,
+          message: 'Job not found in queue',
+        },
+      });
+    }
+    
+    // Get job state and progress
+    const jobState = await job.getState();
+    const progress = job.progress();
+    
+    res.json({
+      status: 'success',
+      data: {
+        auditStatus: audit.status,
+        jobState: jobState,
+        progress: progress,
+        jobId: job.id,
+      },
     });
   } catch (error) {
     next(error);

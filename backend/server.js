@@ -30,6 +30,9 @@ const { logger } = require('./utils/logger');
 // Import jobs
 const { initScheduler } = require('./jobs/scheduler');
 
+// Start Bull worker for audit processing
+require('./jobs/auditWorker');
+
 // Initialize Express app
 const app = express();
 const server = http.createServer(app);
