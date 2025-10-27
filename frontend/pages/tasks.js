@@ -107,24 +107,20 @@ export default function Tasks() {
     return matchesStatus && matchesPriority && matchesSearch
   })
 
-  // Group tasks by staff member
+  // Group tasks by staff member, then by client
   const groupedTasks = {}
   if (groupByStaff) {
     filteredTasks.forEach(task => {
       const staffName = task.assignedTo?.name || 'Unassigned'
       if (!groupedTasks[staffName]) {
-        groupedTasks[staffName] = []
+        groupedTasks[staffName] = {}
       }
-      groupedTasks[staffName].push(task)
-    })
-    
-    // Sort tasks within each staff group by client name
-    Object.keys(groupedTasks).forEach(staffName => {
-      groupedTasks[staffName].sort((a, b) => {
-        const clientA = a.clientId?.name || 'ZZZ' // Put items without client at the end
-        const clientB = b.clientId?.name || 'ZZZ'
-        return clientA.localeCompare(clientB)
-      })
+      
+      const clientName = task.clientId?.name || 'No Client'
+      if (!groupedTasks[staffName][clientName]) {
+        groupedTasks[staffName][clientName] = []
+      }
+      groupedTasks[staffName][clientName].push(task)
     })
   }
 
@@ -296,7 +292,9 @@ export default function Tasks() {
                 </button>
               </div>
 
-              {Object.keys(groupedTasks).sort().map((staffName) => (
+              {Object.keys(groupedTasks).sort().map((staffName) => {
+                const totalTasks = Object.values(groupedTasks[staffName]).reduce((sum, tasks) => sum + tasks.length, 0)
+                return (
                 <div key={staffName} className="border border-gray-200 rounded-lg overflow-hidden">
                   <div 
                     className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-3 border-b border-gray-200 cursor-pointer hover:from-indigo-100 hover:to-purple-100 transition-colors"
@@ -318,7 +316,7 @@ export default function Tasks() {
                         <h3 className="text-lg font-semibold text-gray-900">
                           {staffName} 
                           <span className="ml-2 text-sm font-normal text-gray-600">
-                            ({groupedTasks[staffName].length} task{groupedTasks[staffName].length !== 1 ? 's' : ''})
+                            ({totalTasks} task{totalTasks !== 1 ? 's' : ''})
                           </span>
                         </h3>
                       </div>
@@ -328,7 +326,38 @@ export default function Tasks() {
                     </div>
                   </div>
                   {expandedStaff[staffName] && (
-                    <div className="overflow-x-auto">
+                    <div className="p-4 space-y-3 bg-gray-50">
+                      {Object.keys(groupedTasks[staffName]).sort().map((clientName) => {
+                        const clientKey = `${staffName}-${clientName}`
+                        const clientTasks = groupedTasks[staffName][clientName]
+                        return (
+                          <div key={clientKey} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                            <div 
+                              className="bg-gradient-to-r from-blue-50 to-cyan-50 px-4 py-2 cursor-pointer hover:from-blue-100 hover:to-cyan-100 transition-colors flex items-center justify-between"
+                              onClick={() => toggleClientGroup(staffName, clientName)}
+                            >
+                              <div className="flex items-center gap-2">
+                                <svg 
+                                  className={`w-4 h-4 text-gray-500 transition-transform ${expandedClients[clientKey] ? 'rotate-90' : ''}`}
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                                <h4 className="font-semibold text-gray-800">
+                                  {clientName}
+                                  <span className="ml-2 text-xs font-normal text-gray-600">
+                                    ({clientTasks.length} task{clientTasks.length !== 1 ? 's' : ''})
+                                  </span>
+                                </h4>
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {expandedClients[clientKey] ? 'Click to collapse' : 'Click to expand'}
+                              </span>
+                            </div>
+                            {expandedClients[clientKey] && (
+                              <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                           <tr>
@@ -342,7 +371,7 @@ export default function Tasks() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {groupedTasks[staffName].map((task) => (
+                        {clientTasks.map((task) => (
                           <tr key={task._id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4">
                               <div className="flex flex-col">
@@ -415,10 +444,15 @@ export default function Tasks() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
-              ))}
+              )})}
             </div>
           ) : (
             // Regular table view (for Staff)
