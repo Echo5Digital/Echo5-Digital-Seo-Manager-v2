@@ -24,6 +24,7 @@ const notificationSchema = new mongoose.Schema({
       'Rank Gain',
       'Audit Complete',
       'Task Assigned',
+      'Task Update',
       'Task Overdue',
       'Approval Required',
       'Backlink Live',

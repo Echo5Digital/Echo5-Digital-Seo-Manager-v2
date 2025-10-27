@@ -71,6 +71,8 @@ export default function Navbar() {
     switch(type) {
       case 'Task Assigned':
         return '📋'
+      case 'Task Update':
+        return '🔄'
       case 'Audit Complete':
         return '✅'
       case 'Rank Gain':

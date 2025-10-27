@@ -85,6 +85,10 @@ router.put('/:id', protect, async (req, res, next) => {
       });
     }
 
+    // Track status change for notifications
+    const oldStatus = task.status;
+    const statusChanged = req.body.status && req.body.status !== oldStatus;
+
     Object.assign(task, req.body);
     
     task.logs.push({
@@ -99,6 +103,37 @@ router.put('/:id', protect, async (req, res, next) => {
     await task.populate('clientId', 'name domain');
     await task.populate('assignedTo', 'name email');
     await task.populate('createdBy', 'name');
+
+    // Create notification for status changes
+    if (statusChanged) {
+      // If staff member changes status, notify admin (createdBy)
+      if (req.user.role === 'Staff' && task.createdBy && task.createdBy._id.toString() !== req.user._id.toString()) {
+        await Notification.create({
+          userId: task.createdBy._id,
+          type: 'Task Update',
+          title: 'Task Status Updated',
+          message: `${req.user.name} changed task "${task.title}" status from ${oldStatus} to ${task.status}`,
+          priority: task.status === 'Completed' ? 'Low' : 'Medium',
+          relatedModel: 'Task',
+          relatedId: task._id,
+          actionUrl: '/tasks',
+        });
+      }
+      
+      // If admin changes status, notify assigned staff member
+      if ((req.user.role === 'Boss' || req.user.role === 'Manager') && task.assignedTo && task.assignedTo._id.toString() !== req.user._id.toString()) {
+        await Notification.create({
+          userId: task.assignedTo._id,
+          type: 'Task Update',
+          title: 'Task Status Updated',
+          message: `${req.user.name} changed your task "${task.title}" status to ${task.status}`,
+          priority: task.status === 'Cancelled' ? 'High' : 'Medium',
+          relatedModel: 'Task',
+          relatedId: task._id,
+          actionUrl: '/tasks',
+        });
+      }
+    }
 
     res.json({
       status: 'success',
