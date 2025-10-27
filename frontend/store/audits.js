@@ -78,50 +78,57 @@ const useAuditStore = create((set, get) => ({
       const data = await response.json()
 
       if (data.status === 'success') {
-        const auditId = data.data._id
+        const auditId = data.data.audit._id
         
         // Add audit to list immediately
         set(state => ({
-          audits: [data.data, ...state.audits]
+          audits: [data.data.audit, ...state.audits]
         }))
 
-        // Poll for audit status
+        // Poll for audit progress using new Bull queue endpoint
         let pollCount = 0
         const pollInterval = setInterval(async () => {
           try {
             pollCount++
-            const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/audits/${auditId}`, {
+            const progressResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/audits/${auditId}/progress`, {
               headers: {
                 'Authorization': `Bearer ${token}`
               }
             })
             
-            const statusData = await statusResponse.json()
+            const progressData = await progressResponse.json()
             
-            if (statusData.status === 'success') {
-              const audit = statusData.data.audit
+            if (progressData.status === 'success') {
+              const { auditStatus, progress: jobProgress } = progressData.data
               
               // Update audit in list
-              set(state => ({
-                audits: state.audits.map(a => a._id === auditId ? audit : a)
-              }))
+              const auditResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/audits/${auditId}`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              })
+              const auditData = await auditResponse.json()
+              
+              if (auditData.status === 'success') {
+                set(state => ({
+                  audits: state.audits.map(a => a._id === auditId ? auditData.data.audit : a)
+                }))
+              }
 
-              // Update progress based on status
-              if (audit.status === 'In Progress') {
+              // Update progress UI based on Bull queue progress
+              if (auditStatus === 'Queued' || auditStatus === 'Running') {
                 const steps = get().auditProgress.steps
-                // Progress through steps based on poll count
-                const stepIndex = Math.min(Math.floor(pollCount / 2), steps.length - 2)
-                const baseProgress = (stepIndex / (steps.length - 1)) * 90
-                const randomProgress = Math.random() * 10
+                const currentProgress = jobProgress || 0
+                const stepIndex = Math.floor((currentProgress / 100) * steps.length)
                 
                 set(state => ({
                   auditProgress: {
                     ...state.auditProgress,
-                    step: steps[stepIndex],
-                    progress: Math.min(baseProgress + randomProgress, 95)
+                    step: steps[Math.min(stepIndex, steps.length - 1)],
+                    progress: currentProgress
                   }
                 }))
-              } else if (audit.status === 'Completed') {
+              } else if (auditStatus === 'Completed') {
                 // Audit completed
                 clearInterval(pollInterval)
                 set(state => ({
@@ -144,12 +151,13 @@ const useAuditStore = create((set, get) => ({
                     }
                   }))
                 }, 2000)
-              } else if (audit.status === 'Failed') {
+              } else if (auditStatus === 'Failed') {
                 // Audit failed
                 clearInterval(pollInterval)
+                const auditError = auditData.data.audit.error || 'Audit failed'
                 set(state => ({
                   loading: false,
-                  error: audit.error || 'Audit failed',
+                  error: auditError,
                   auditProgress: {
                     ...state.auditProgress,
                     isRunning: false,
@@ -171,7 +179,7 @@ const useAuditStore = create((set, get) => ({
               }
             }
           } catch (error) {
-            console.error('Error polling audit status:', error)
+            console.error('Error polling audit progress:', error)
           }
         }, 3000) // Poll every 3 seconds
 

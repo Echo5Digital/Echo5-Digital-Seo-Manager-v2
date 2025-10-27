@@ -125,7 +125,11 @@ class AuditService {
 
       const upserts = analyses.map(async (pa) => {
         try {
-          const url = pa.url
+          let url = pa.url
+          // Ensure URL has protocol
+          if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url
+          }
           const u = new URL(url)
           const path = (u.pathname || '/').replace(/\/+$/,'') || '/'
           // Use a special slug for the root path to avoid collisions with "/home" pages
@@ -280,8 +284,8 @@ class AuditService {
         // Ignore sitemap errors
       }
       
-      // Increased limit for more comprehensive crawling
-      const maxPages = 500; // Increased to 200 for thorough analysis
+      // Limit for memory-efficient crawling
+      const maxPages = 20; // Reduced for better memory management
       
       while (toVisit.length > 0 && discoveredPages.length < maxPages) {
         const currentUrl = toVisit.shift();
