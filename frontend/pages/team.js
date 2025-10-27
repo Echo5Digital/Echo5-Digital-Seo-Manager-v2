@@ -3,7 +3,7 @@ import Layout from '../components/Layout'
 import useAuthStore from '../store/auth'
 
 export default function Team() {
-  const { token } = useAuthStore()
+  const { token, user: currentUser } = useAuthStore()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -298,7 +298,7 @@ export default function Team() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                           </button>
-                          {user.role !== 'Boss' && (
+                          {(user.role !== 'Boss' || (currentUser?.role === 'Boss' && user.role === 'Manager')) && (
                             <button
                               onClick={() => handleDelete(user._id, user.name)}
                               className="text-red-600 hover:text-red-900 hover:bg-red-50 px-3 py-1 rounded transition-colors"
@@ -389,6 +389,7 @@ export default function Team() {
                   >
                     <option value="Staff">Staff</option>
                     <option value="Developer">Developer</option>
+                    <option value="Manager">Manager</option>
                     <option value="Boss">Boss (Admin)</option>
                   </select>
                 </div>
