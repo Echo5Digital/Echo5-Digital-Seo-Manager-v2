@@ -9,12 +9,14 @@ const useTasksStore = create((set, get) => ({
   fetchTasks: async (token, filters = {}) => {
     set({ loading: true, error: null })
     try {
-      const queryParams = new URLSearchParams()
-      if (filters.clientId) queryParams.append('clientId', filters.clientId)
-      if (filters.status) queryParams.append('status', filters.status)
+      let queryString = ''
+      const params = []
+      if (filters.clientId) params.push(`clientId=${filters.clientId}`)
+      if (filters.status) params.push(`status=${filters.status}`)
+      if (params.length > 0) queryString = '?' + params.join('&')
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE}/api/tasks?${queryParams}`,
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/tasks${queryString}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

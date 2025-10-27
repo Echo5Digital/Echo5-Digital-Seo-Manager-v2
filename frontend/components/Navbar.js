@@ -2,7 +2,17 @@ import { useRouter } from 'next/router'
 import { useState, useEffect, useRef } from 'react'
 import useAuthStore from '../store/auth'
 import useNotificationsStore from '../store/notifications'
-import { BellIcon, UserCircleIcon } from '@heroicons/react/24/outline'
+import { 
+  BellIcon, 
+  UserCircleIcon, 
+  ClipboardDocumentListIcon,
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
+  ExclamationTriangleIcon,
+  BellAlertIcon
+} from '@heroicons/react/24/outline'
 
 export default function Navbar() {
   const router = useRouter()
@@ -68,21 +78,22 @@ export default function Navbar() {
   }
 
   const getNotificationIcon = (type) => {
+    const iconClass = "h-6 w-6"
     switch(type) {
       case 'Task Assigned':
-        return '📋'
+        return <ClipboardDocumentListIcon className={`${iconClass} text-blue-600`} />
       case 'Task Update':
-        return '🔄'
+        return <ArrowPathIcon className={`${iconClass} text-indigo-600`} />
       case 'Audit Complete':
-        return '✅'
+        return <CheckCircleIcon className={`${iconClass} text-green-600`} />
       case 'Rank Gain':
-        return '📈'
+        return <ArrowTrendingUpIcon className={`${iconClass} text-emerald-600`} />
       case 'Rank Drop':
-        return '📉'
+        return <ArrowTrendingDownIcon className={`${iconClass} text-red-600`} />
       case 'Alert':
-        return '⚠️'
+        return <ExclamationTriangleIcon className={`${iconClass} text-yellow-600`} />
       default:
-        return '🔔'
+        return <BellAlertIcon className={`${iconClass} text-gray-600`} />
     }
   }
 
@@ -157,7 +168,7 @@ export default function Navbar() {
                             onClick={() => handleNotificationClick(notification)}
                           >
                             <div className="flex gap-3">
-                              <div className="text-2xl">{getNotificationIcon(notification.type)}</div>
+                              <div className="flex-shrink-0 mt-0.5">{getNotificationIcon(notification.type)}</div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-semibold text-gray-900">
                                   {notification.title}
