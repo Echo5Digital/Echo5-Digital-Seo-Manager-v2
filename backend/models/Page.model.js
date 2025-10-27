@@ -69,7 +69,6 @@ const pageSchema = new mongoose.Schema({
     canonical: String,
     robots: {
       type: String,
-      enum: ['index,follow', 'noindex,follow', 'index,nofollow', 'noindex,nofollow'],
       default: 'index,follow',
     },
     focusKeyword: String,
@@ -124,7 +123,7 @@ const pageSchema = new mongoose.Schema({
     url: String,
     alt: {
       type: String,
-      required: true,
+      default: '',
     },
     title: String,
     width: Number,

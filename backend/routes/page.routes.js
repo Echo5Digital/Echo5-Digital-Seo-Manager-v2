@@ -6,6 +6,8 @@ const aiService = require('../services/ai.service');
 const { default: mongoose } = require('mongoose');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const Audit = require('../models/Audit.model');
+const auditService = require('../services/audit.service');
 
 // GET /api/pages - Get all pages with filters
 router.get('/', protect, async (req, res, next) => {
@@ -450,14 +452,25 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     const response = await axios.get(url, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEO-Tool/1.0)' } })
     const $ = cheerio.load(response.data)
 
-    // Extract text sample and word count
+    // Remove scripts, styles, and other non-content elements
+    $('script, style, noscript, iframe, svg').remove()
+
+    // Extract text sample and word count from clean content
     const bodyText = $('body').text().replace(/\s+/g, ' ').trim()
     const blocks = []
     $('h1, h2, h3, h4, h5, h6, p, li').each((i, el) => {
       if (blocks.length >= 50) return false
       const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
-      const text = $(el).text().replace(/\s+/g, ' ').trim()
-      if (!text || text.length < 2) return
+      let text = $(el).text().replace(/\s+/g, ' ').trim()
+      // Remove CSS class names, Elementor markup, and WordPress artifacts
+      text = text.replace(/\.elementor-[^\s]+/g, '')
+                 .replace(/\.wpr-[^\s]+/g, '')
+                 .replace(/\{[^}]*\}/g, '')
+                 .replace(/--[a-z-]+:[^;]+;/g, '')
+                 .replace(/@media[^{]+\{[^}]*\}/g, '')
+                 .replace(/\s+/g, ' ')
+                 .trim()
+      if (!text || text.length < 3) return
       blocks.push({ tag, text })
     })
     const sampleText = (blocks.map(b => b.text).join(' ').trim() || bodyText).substring(0, 2000)
@@ -476,6 +489,23 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     await page.save()
 
     res.json({ status: 'success', data: { page } })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// POST /api/pages/sync-from-audits?clientId=... - Repersist pages from the latest completed audit
+router.post('/sync-from-audits', protect, async (req, res, next) => {
+  try {
+    const clientId = req.query.clientId || req.body.clientId
+    if (!clientId) return res.status(400).json({ status: 'error', message: 'clientId is required' })
+    const audit = await Audit.findOne({ clientId }).sort('-completedAt')
+    if (!audit || audit.status !== 'Completed') {
+      return res.status(404).json({ status: 'error', message: 'No completed audit found to sync from' })
+    }
+    await auditService.persistPages(audit, clientId)
+    const count = await Page.countDocuments({ clientId })
+    res.json({ status: 'success', data: { synced: true, pagesCount: count } })
   } catch (error) {
     next(error)
   }

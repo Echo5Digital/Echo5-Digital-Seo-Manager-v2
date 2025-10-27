@@ -3,12 +3,14 @@ import Link from 'next/link'
 import Layout from '../components/Layout'
 import useClientStore from '../store/clients'
 import useAuditStore from '../store/audits'
+import useAuthStore from '../store/auth'
 import usePagesStore from '../store/pages'
 
 export default function Pages() {
   const { clients, fetchClients } = useClientStore()
   const { pages, fetchPages, fetchPage, updateFocusKeyword, refreshContent, error, loading } = usePagesStore()
   const { runAudit, auditProgress } = useAuditStore()
+  const [syncing, setSyncing] = useState(false)
   const [clientId, setClientId] = useState('')
   const [selectedId, setSelectedId] = useState('')
 
@@ -33,6 +35,25 @@ export default function Pages() {
                 <option key={c._id} value={c._id}>{c.name}</option>
               ))}
             </select>
+            {clientId && (
+              <button
+                className="ml-3 px-3 py-2 rounded border text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+                disabled={syncing}
+                onClick={async () => {
+                  try {
+                    setSyncing(true)
+                    const token = useAuthStore.getState().token
+                    await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/sync-from-audits?clientId=${clientId}`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                    await fetchPages(clientId)
+                  } finally {
+                    setSyncing(false)
+                  }
+                }}
+              >{syncing ? 'Syncing…' : 'Sync from last audit'}</button>
+            )}
           </div>
         </div>
 

@@ -233,6 +233,7 @@ class AuditService {
       const toVisit = [baseUrl];
       const normalizeHost = (h) => (h || '').toLowerCase().replace(/^www\./, '');
       const baseHost = (() => { try { return normalizeHost(new URL(baseUrl).hostname) } catch { return '' } })();
+      let sitemapSeeded = false;
       // Protocol fallback (try both https and http to maximize discovery)
       try {
         const u = new URL(baseUrl)
@@ -285,6 +286,9 @@ class AuditService {
           const h1 = $('h1').first().text().trim();
           const robots = $('meta[name="robots"]').attr('content') || '';
           
+          // Remove scripts, styles, and other non-content elements for clean text
+          $('script, style, noscript, iframe, svg').remove();
+          
           // Get content preview
           const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
           const contentPreview = bodyText.substring(0, 500);
@@ -323,6 +327,46 @@ class AuditService {
           console.log(`   Word Count: ${wordCount}`);
           console.log(`   Issues: ${pageData.issues.length > 0 ? pageData.issues.join(', ') : 'None'}`);
           
+          // One-time sitemap seeding to improve discovery coverage
+          if (!sitemapSeeded) {
+            sitemapSeeded = true;
+            try {
+              const smUrl = new URL('/sitemap.xml', baseUrl).href;
+              const smRes = await axios.get(smUrl, { timeout: 7000, validateStatus: () => true });
+              if (smRes.status === 200) {
+                const $$ = cheerio.load(smRes.data, { xmlMode: true });
+                const addToQueue = (locUrl) => {
+                  try {
+                    const u = new URL(locUrl);
+                    if (normalizeHost(u.hostname) !== baseHost) return;
+                    if (!visited.has(locUrl) && !toVisit.includes(locUrl) && toVisit.length < 200) toVisit.push(locUrl);
+                  } catch {}
+                };
+                // If this is a sitemap index
+                const indexLocs = $$('sitemap > loc');
+                if (indexLocs.length > 0) {
+                  // Fetch a few child sitemaps
+                  const childLocs = indexLocs.map((i, el) => $$(el).text().trim()).get().slice(0, 5);
+                  await Promise.allSettled(childLocs.map(async (loc) => {
+                    try {
+                      const csRes = await axios.get(loc, { timeout: 7000, validateStatus: () => true });
+                      if (csRes.status === 200) {
+                        const $$$ = cheerio.load(csRes.data, { xmlMode: true });
+                        $$$('url > loc').each((i, el) => addToQueue($$$(el).text().trim()));
+                      }
+                    } catch {}
+                  }));
+                } else {
+                  // Simple sitemap with URLs
+                  $$('url > loc').each((i, el) => addToQueue($$(el).text().trim()));
+                }
+                console.log(`🗺️  Sitemap seeding done. Queue size: ${toVisit.length}`);
+              }
+            } catch (e) {
+              // ignore sitemap errors
+            }
+          }
+
           // Find internal links to crawl - more aggressive discovery
           $('a[href]').each((i, element) => {
             const href = $(element).attr('href');
@@ -526,6 +570,9 @@ class AuditService {
       $('script[src]').each((i, element) => {
         jsFiles.push($(element).attr('src'));
       });
+      
+      // Remove scripts, styles, and other non-content for clean analysis
+      $('script, style, noscript, iframe, svg').remove();
       
   // Content Analysis with more details
   const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
