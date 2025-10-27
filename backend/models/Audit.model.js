@@ -22,7 +22,7 @@ const auditSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Pending', 'Queued', 'Running', 'In Progress', 'Completed', 'Failed'],
+    enum: ['Pending', 'In Progress', 'Completed', 'Failed'],
     default: 'Pending',
   },
   results: {
