@@ -343,7 +343,7 @@ export default function Team() {
                     value={formData.name}
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="John Doe"
+                    placeholder="Enter full name"
                   />
                 </div>
 
@@ -357,7 +357,8 @@ export default function Team() {
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="john@example.com"
+                    placeholder="user@echo5digital.com"
+                    autoComplete="off"
                   />
                 </div>
 
@@ -373,6 +374,7 @@ export default function Team() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     placeholder="••••••••"
                     minLength="6"
+                    autoComplete="new-password"
                   />
                   {!editingUser && <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>}
                 </div>
