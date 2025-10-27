@@ -19,20 +19,20 @@ export default function Sidebar() {
   const user = useAuthStore(state => state.user)
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-    { name: 'Clients', href: '/clients', icon: UserGroupIcon },
-    { name: 'SEO Audits', href: '/audits', icon: DocumentCheckIcon },
+    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, isNew: true },
+    { name: 'Clients', href: '/clients', icon: UserGroupIcon, isNew: true },
+    { name: 'SEO Audits', href: '/audits', icon: DocumentCheckIcon, isNew: true },
     { name: 'Keywords', href: '/keywords', icon: MagnifyingGlassIcon },
     { name: 'Backlinks', href: '/backlinks', icon: LinkIcon },
-    { name: 'Pages', href: '/pages', icon: DocumentTextIcon },
-    { name: 'Tasks', href: '/tasks', icon: ClipboardDocumentListIcon },
+    { name: 'Pages', href: '/pages', icon: DocumentTextIcon, isNew: true },
+    { name: 'Tasks', href: '/tasks', icon: ClipboardDocumentListIcon, isNew: true },
     { name: 'Reports', href: '/reports', icon: ChartBarIcon },
     { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
   ]
 
   if (user?.role === 'Boss') {
     navigation.push(
-      { name: 'Team', href: '/team', icon: UsersIcon },
+      { name: 'Team', href: '/team', icon: UsersIcon, isNew: true },
       { name: 'Settings', href: '/settings', icon: Cog6ToothIcon }
     )
   }
@@ -55,15 +55,22 @@ export default function Sidebar() {
                   isActive
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                } group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors`}
+                } group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors`}
               >
-                <Icon
-                  className={`${
-                    isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
-                  } mr-3 h-5 w-5 flex-shrink-0`}
-                  aria-hidden="true"
-                />
-                {item.name}
+                <div className="flex items-center">
+                  <Icon
+                    className={`${
+                      isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
+                    } mr-3 h-5 w-5 flex-shrink-0`}
+                    aria-hidden="true"
+                  />
+                  {item.name}
+                </div>
+                {item.isNew && (
+                  <span className="px-2 py-0.5 text-xs font-semibold text-white bg-green-500 rounded-full">
+                    NEW
+                  </span>
+                )}
               </Link>
             )
           })}
