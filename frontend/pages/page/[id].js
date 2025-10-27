@@ -710,6 +710,7 @@ export default function PageDetail() {
         selectedFixes={selectedFixes}
         pageId={page?._id}
         pageTitle={page?.title}
+        clientId={page?.clientId}
         onClose={() => setShowAssignModal(false)}
         onCreated={(result) => {
           alert(`Successfully created ${result.count} task(s) and assigned to ${result.assignee}!`)

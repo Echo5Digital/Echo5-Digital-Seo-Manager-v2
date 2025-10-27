@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import useAuthStore from '../store/auth'
 
-export default function AssignTasksModal({ isOpen, selectedFixes = [], pageId, pageTitle, onClose, onCreated }) {
+export default function AssignTasksModal({ isOpen, selectedFixes = [], pageId, pageTitle, clientId, onClose, onCreated }) {
   const [teamMembers, setTeamMembers] = useState([])
   const [selectedUserId, setSelectedUserId] = useState('')
   const [taskPriority, setTaskPriority] = useState('Medium')
@@ -47,14 +47,20 @@ export default function AssignTasksModal({ isOpen, selectedFixes = [], pageId, p
         // Create individual tasks for each fix
         const taskPromises = selectedFixes.map(fix => {
           const taskData = {
+            clientId: clientId,
             title: `SEO Fix: ${fix.issue}`,
             description: `**Category:** ${fix.category}\n**Issue:** ${fix.issue}\n\n**Current Value:**\n${fix.currentValue || 'N/A'}\n\n**Suggested Fix:**\n${fix.suggestedValue}\n\n**Reasoning:**\n${fix.reasoning}\n\n**Additional Notes:**\n${fix.notes || 'None'}\n\n${additionalNotes ? `**General Instructions:**\n${additionalNotes}` : ''}`,
+            type: fix.category === 'Title' || fix.category === 'Meta' ? 'Meta Update' :
+                  fix.category === 'Content' ? 'Content Optimization' :
+                  fix.category === 'Images' ? 'Alt Text' :
+                  fix.category === 'Links' ? 'Internal Linking' :
+                  fix.category === 'Technical' ? 'Technical SEO' :
+                  fix.category === 'Keywords' ? 'Keyword Research' : 'Other',
             assignedTo: selectedUserId,
             priority: taskPriority,
-            status: 'To Do',
-            relatedPage: pageId,
-            dueDate: dueDate || undefined,
-            tags: [fix.category, 'SEO', 'AI-Generated']
+            status: 'Pending',
+            relatedUrl: pageId,
+            dueDate: dueDate || undefined
           }
           
           return fetch(`${baseUrl}/api/tasks`, {
@@ -75,14 +81,15 @@ export default function AssignTasksModal({ isOpen, selectedFixes = [], pageId, p
         ).join('\n')
         
         const taskData = {
+          clientId: clientId,
           title: `SEO Improvements for: ${pageTitle}`,
           description: `Complete the following ${selectedFixes.length} SEO fixes:\n\n${fixesList}\n${additionalNotes ? `\n**General Instructions:**\n${additionalNotes}` : ''}`,
+          type: 'Content Optimization',
           assignedTo: selectedUserId,
           priority: taskPriority,
-          status: 'To Do',
-          relatedPage: pageId,
-          dueDate: dueDate || undefined,
-          tags: ['SEO', 'AI-Generated', 'Multi-Fix']
+          status: 'Pending',
+          relatedUrl: pageId,
+          dueDate: dueDate || undefined
         }
         
         await fetch(`${baseUrl}/api/tasks`, {

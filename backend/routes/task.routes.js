@@ -76,6 +76,11 @@ router.put('/:id', protect, async (req, res, next) => {
 
     await task.save();
 
+    // Populate the task with related data before returning
+    await task.populate('clientId', 'name domain');
+    await task.populate('assignedTo', 'name email');
+    await task.populate('createdBy', 'name');
+
     res.json({
       status: 'success',
       data: { task },
