@@ -252,7 +252,9 @@ class AuditService {
             try {
               const abs = this.resolveUrl(baseUrl, href)
               const host = normalizeHost(new URL(abs).hostname)
-              if ((host === baseHost) && !toVisit.includes(abs)) toVisit.push(abs)
+              // Filter out editor URLs from sitemap
+              const isEditorUrl = abs.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i)
+              if ((host === baseHost) && !isEditorUrl && !toVisit.includes(abs)) toVisit.push(abs)
             } catch {}
           })
           console.log(`🗺️ Seeded ${Math.min(150, locs.length)} URLs from sitemap.xml`)
@@ -338,6 +340,9 @@ class AuditService {
                   try {
                     const u = new URL(locUrl);
                     if (normalizeHost(u.hostname) !== baseHost) return;
+                    // Filter out editor URLs
+                    const isEditorUrl = locUrl.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i);
+                    if (isEditorUrl) return;
                     if (!visited.has(locUrl) && !toVisit.includes(locUrl) && toVisit.length < 200) toVisit.push(locUrl);
                   } catch {}
                 };
@@ -378,10 +383,19 @@ class AuditService {
                 const linkHost = normalizeHost(urlObj.hostname);
                 const baseHostN = normalizeHost(baseUrlObj.hostname);
                 
+                // Filter out editor/preview URLs and non-page URLs
+                const isEditorUrl = absoluteUrl.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i);
+                const isAdminUrl = absoluteUrl.match(/\/wp-admin\/|\/wp-login\.php|\/wp-content\//i);
+                const isFeedUrl = absoluteUrl.match(/\/feed\/?$|\/rss\/?$/i);
+                const isFileUrl = absoluteUrl.match(/\.(pdf|jpg|jpeg|png|gif|css|js|zip|xml|txt|ico|svg|woff|woff2|ttf|eot)$/i);
+                
                 // Only crawl same domain, avoid fragments and common files
                 if ((linkHost === baseHostN || linkHost === currentHost) && 
                     !absoluteUrl.includes('#') &&
-                    !absoluteUrl.match(/\.(pdf|jpg|jpeg|png|gif|css|js|zip|xml|txt)$/i) &&
+                    !isEditorUrl &&
+                    !isAdminUrl &&
+                    !isFeedUrl &&
+                    !isFileUrl &&
                     !visited.has(absoluteUrl) &&
                     !toVisit.includes(absoluteUrl) &&
                     toVisit.length < 200) { // Allow larger queue
@@ -1113,7 +1127,19 @@ class AuditService {
    */
   async checkMetaTags(url) {
     try {
-      const response = await axios.get(url, { timeout: 10000 });
+      const response = await axios.get(url, { 
+        timeout: 30000,
+        validateStatus: () => true,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0)'
+        }
+      });
+      
+      if (response.status >= 400) {
+        logger.warn(`Meta tags check skipped for ${url} - Status: ${response.status}`);
+        return [];
+      }
+      
       const $ = cheerio.load(response.data);
       const issues = [];
 
@@ -1171,7 +1197,19 @@ class AuditService {
    */
   async checkAltTags(url) {
     try {
-      const response = await axios.get(url, { timeout: 10000 });
+      const response = await axios.get(url, { 
+        timeout: 30000,
+        validateStatus: () => true,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0)'
+        }
+      });
+      
+      if (response.status >= 400) {
+        logger.warn(`Alt tags check skipped for ${url} - Status: ${response.status}`);
+        return [];
+      }
+      
       const $ = cheerio.load(response.data);
       const missing = [];
 
@@ -1278,7 +1316,20 @@ class AuditService {
    */
   async checkSchema(url) {
     try {
-      const response = await axios.get(url, { timeout: 10000 });
+      const response = await axios.get(url, { 
+        timeout: 30000, // Increased to 30 seconds
+        validateStatus: () => true,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0)'
+        }
+      });
+      
+      // If request failed, return empty issues
+      if (response.status >= 400) {
+        logger.warn(`Schema check skipped for ${url} - Status: ${response.status}`);
+        return [];
+      }
+      
       const $ = cheerio.load(response.data);
       const issues = [];
 
@@ -1295,7 +1346,11 @@ class AuditService {
 
       return issues;
     } catch (error) {
-      logger.error('Schema Check Error:', error);
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        logger.warn(`Schema check timeout for ${url} - skipping`);
+      } else {
+        logger.error('Schema Check Error:', error.message);
+      }
       return [];
     }
   }
