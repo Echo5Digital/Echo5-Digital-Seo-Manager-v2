@@ -293,7 +293,15 @@ export default function Tasks() {
               </div>
 
               {Object.keys(groupedTasks).sort().map((staffName) => {
-                const totalTasks = Object.values(groupedTasks[staffName]).reduce((sum, tasks) => sum + tasks.length, 0)
+                const allStaffTasks = Object.values(groupedTasks[staffName]).flat()
+                const totalTasks = allStaffTasks.length
+                const statusCounts = {
+                  pending: allStaffTasks.filter(t => t.status === 'Pending').length,
+                  inProgress: allStaffTasks.filter(t => t.status === 'In Progress').length,
+                  review: allStaffTasks.filter(t => t.status === 'Review').length,
+                  completed: allStaffTasks.filter(t => t.status === 'Completed').length,
+                  cancelled: allStaffTasks.filter(t => t.status === 'Cancelled').length,
+                }
                 return (
                 <div key={staffName} className="border border-gray-200 rounded-lg overflow-hidden">
                   <div 
@@ -313,12 +321,41 @@ export default function Tasks() {
                         <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white font-semibold text-sm shadow-md">
                           {staffName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                         </div>
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {staffName} 
-                          <span className="ml-2 text-sm font-normal text-gray-600">
-                            ({totalTasks} task{totalTasks !== 1 ? 's' : ''})
-                          </span>
-                        </h3>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {staffName} 
+                            <span className="ml-2 text-sm font-normal text-gray-600">
+                              ({totalTasks} task{totalTasks !== 1 ? 's' : ''})
+                            </span>
+                          </h3>
+                          <div className="flex gap-2 mt-1">
+                            {statusCounts.pending > 0 && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-300">
+                                {statusCounts.pending} Pending
+                              </span>
+                            )}
+                            {statusCounts.inProgress > 0 && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 border border-blue-300">
+                                {statusCounts.inProgress} In Progress
+                              </span>
+                            )}
+                            {statusCounts.review > 0 && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-700 border border-yellow-300">
+                                {statusCounts.review} Review
+                              </span>
+                            )}
+                            {statusCounts.completed > 0 && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700 border border-green-300">
+                                {statusCounts.completed} Completed
+                              </span>
+                            )}
+                            {statusCounts.cancelled > 0 && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700 border border-red-300">
+                                {statusCounts.cancelled} Cancelled
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                       <span className="text-xs text-gray-500">
                         {expandedStaff[staffName] ? 'Click to collapse' : 'Click to expand'}
