@@ -612,36 +612,50 @@ The alt text should:
    */
   async generateSEOFixSuggestions(pageData, seoReport) {
     try {
-      const prompt = `You are a world-class SEO specialist and technical SEO expert. Analyze this page and provide specific, actionable fix suggestions.
+      const prompt = `You are a world-class SEO specialist and technical SEO expert. Analyze this page and provide ACTUAL, READY-TO-USE content fixes - NOT instructions.
 
 Page Information:
 - Title: ${pageData.title || 'Not set'}
 - URL: ${pageData.url || 'Not set'}
 - Meta Description: ${pageData.metaDescription || 'Not set'}
+- H1: ${pageData.content?.headings?.h1 || 'Not set'}
 - Focus Keyword: ${pageData.seo?.focusKeyword || 'Not set'}
 - Secondary Keywords: ${pageData.seo?.secondaryKeywords?.join(', ') || 'None'}
+- Content Sample: ${pageData.content?.sample || 'Not available'}
 - Content Length: ${pageData.content?.wordCount || 0} words
 - Current SEO Score: ${seoReport.score}/100
 
 SEO Analysis Issues:
 ${JSON.stringify(seoReport.issues, null, 2)}
 
-Passed Checks:
-${seoReport.checks.map(c => c.title).join(', ')}
+CRITICAL INSTRUCTIONS:
+- DO NOT give instructions like "Include keyword in content" or "Add alt text to images"
+- INSTEAD provide the ACTUAL rewritten content, the EXACT new title, the SPECIFIC alt text, etc.
+- For titles: Write the complete optimized title ready to copy-paste
+- For meta descriptions: Write the complete optimized meta description ready to use
+- For H1s: Write the complete optimized H1 heading
+- For content: Write the actual rewritten paragraph or section with keywords included
+- For images: Write the exact alt text for each image
+- For links: Provide the exact anchor text to use
 
-For EACH issue found, provide a fix suggestion in this exact JSON format:
+Example of GOOD suggestions:
+- Title: "currentValue": "Insurance", "suggestedValue": "Comprehensive Insurance Coverage Plans | Get Quotes Online 2024"
+- Meta: "currentValue": "Learn about insurance", "suggestedValue": "Compare insurance plans and get instant quotes. Expert guidance on health, auto, and life insurance coverage. Save up to 40% on premiums."
+- Content: "currentValue": "We offer various plans", "suggestedValue": "We offer comprehensive insurance plans tailored to your needs, including health insurance, auto insurance, and life insurance coverage with competitive rates."
+
+For EACH issue found, provide a fix in this exact JSON format:
 {
-  "category": "Title|Meta|Content|Images|Links|Technical|Keywords",
+  "category": "Title|Meta|Content|H1|Images|Links|Technical|Keywords",
   "issue": "Brief description of the issue",
-  "currentValue": "What currently exists (if applicable)",
-  "suggestedValue": "Your specific suggestion for the fix",
-  "reasoning": "Why this fix matters for SEO (1-2 sentences)",
+  "currentValue": "The exact current text/content",
+  "suggestedValue": "The COMPLETE ready-to-use replacement text (not instructions)",
+  "reasoning": "Why this fix improves SEO (1-2 sentences)",
   "impact": "High|Medium|Low",
   "estimatedTime": "5min|15min|30min|1hr|2hr",
   "priority": 1-10 (10 being highest)
 }
 
-Provide 5-15 specific, actionable fixes. Be concrete - give exact text suggestions for titles, meta descriptions, headings. For images, suggest specific alt text. For keywords, suggest exact placement locations.
+Provide 5-15 specific fixes with ACTUAL content, not instructions. Focus on the focus keyword "${pageData.seo?.focusKeyword || ''}" throughout.
 
 Return ONLY a valid JSON array of fix objects, no additional text.`;
 
@@ -650,15 +664,15 @@ Return ONLY a valid JSON array of fix objects, no additional text.`;
         messages: [
           {
             role: 'system',
-            content: 'You are an elite SEO consultant with 15+ years of experience. You specialize in on-page optimization, technical SEO, content strategy, and achieving #1 Google rankings. You provide specific, actionable recommendations with exact text suggestions. Always respond with valid JSON only.',
+            content: 'You are an elite SEO copywriter and technical SEO expert with 15+ years of experience. You write actual optimized content, not instructions. When asked to fix a title, you write the complete optimized title. When asked to fix meta descriptions, you write the complete meta description. When asked to optimize content, you rewrite the actual content with keywords naturally included. You provide ready-to-use content that can be immediately copy-pasted. Always respond with valid JSON only.',
           },
           {
             role: 'user',
             content: prompt,
           },
         ],
-        temperature: 0.7,
-        max_tokens: 2500,
+        temperature: 0.8,
+        max_tokens: 3000,
       });
 
       const responseText = completion.choices[0].message.content.trim();
