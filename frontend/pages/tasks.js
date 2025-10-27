@@ -13,6 +13,8 @@ export default function Tasks() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterPriority, setFilterPriority] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [groupByStaff, setGroupByStaff] = useState(user?.role === 'Boss' || user?.role === 'Manager')
+  const [expandedStaff, setExpandedStaff] = useState({})
 
   useEffect(() => {
     if (token) {
@@ -20,6 +22,29 @@ export default function Tasks() {
       fetchClients(token)
     }
   }, [token])
+
+  useEffect(() => {
+    setGroupByStaff(user?.role === 'Boss' || user?.role === 'Manager')
+  }, [user])
+
+  const toggleStaffGroup = (staffName) => {
+    setExpandedStaff(prev => ({
+      ...prev,
+      [staffName]: !prev[staffName]
+    }))
+  }
+
+  const expandAll = () => {
+    const allExpanded = {}
+    Object.keys(groupedTasks).forEach(staffName => {
+      allExpanded[staffName] = true
+    })
+    setExpandedStaff(allExpanded)
+  }
+
+  const collapseAll = () => {
+    setExpandedStaff({})
+  }
 
   const getStatusColor = (status) => {
     switch(status) {
@@ -50,16 +75,39 @@ export default function Tasks() {
     }
   }
 
+  const handleSendReminder = async (task) => {
+    if (!task.assignedTo?.email) {
+      alert('Cannot send reminder: No assignee email found')
+      return
+    }
+    
+    // TODO: Implement reminder email functionality
+    alert(`Reminder would be sent to ${task.assignedTo.name} (${task.assignedTo.email}) for task: "${task.title}"`)
+  }
+
   const filteredTasks = tasks.filter(task => {
     const matchesStatus = filterStatus === 'all' || task.status === filterStatus
     const matchesPriority = filterPriority === 'all' || task.priority === filterPriority
     const matchesSearch = !searchQuery || 
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.clientId?.name.toLowerCase().includes(searchQuery.toLowerCase())
+      task.clientId?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.assignedTo?.name.toLowerCase().includes(searchQuery.toLowerCase())
     
     return matchesStatus && matchesPriority && matchesSearch
   })
+
+  // Group tasks by staff member
+  const groupedTasks = {}
+  if (groupByStaff) {
+    filteredTasks.forEach(task => {
+      const staffName = task.assignedTo?.name || 'Unassigned'
+      if (!groupedTasks[staffName]) {
+        groupedTasks[staffName] = []
+      }
+      groupedTasks[staffName].push(task)
+    })
+  }
 
   const stats = {
     total: tasks.length,
@@ -210,7 +258,151 @@ export default function Tasks() {
               </svg>
               <p className="mt-4 text-gray-500">No tasks found</p>
             </div>
+          ) : groupByStaff ? (
+            // Grouped by staff view (for Boss and Manager)
+            <div className="p-4 space-y-4">
+              {/* Expand/Collapse All Buttons */}
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={expandAll}
+                  className="px-3 py-1 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors"
+                >
+                  Expand All
+                </button>
+                <button
+                  onClick={collapseAll}
+                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Collapse All
+                </button>
+              </div>
+
+              {Object.keys(groupedTasks).sort().map((staffName) => (
+                <div key={staffName} className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-3 border-b border-gray-200 cursor-pointer hover:from-indigo-100 hover:to-purple-100 transition-colors"
+                    onClick={() => toggleStaffGroup(staffName)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <svg 
+                          className={`w-5 h-5 text-gray-600 transition-transform ${expandedStaff[staffName] ? 'rotate-90' : ''}`}
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white font-semibold text-sm shadow-md">
+                          {staffName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {staffName} 
+                          <span className="ml-2 text-sm font-normal text-gray-600">
+                            ({groupedTasks[staffName].length} task{groupedTasks[staffName].length !== 1 ? 's' : ''})
+                          </span>
+                        </h3>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {expandedStaff[staffName] ? 'Click to collapse' : 'Click to expand'}
+                      </span>
+                    </div>
+                  </div>
+                  {expandedStaff[staffName] && (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {groupedTasks[staffName].map((task) => (
+                          <tr key={task._id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium text-gray-900">{task.title}</span>
+                                <span className="text-xs text-gray-500 line-clamp-1">{task.description}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="text-sm text-gray-900">{task.clientId?.name || 'N/A'}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="text-sm text-gray-600">{task.type}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityColor(task.priority)}`}>
+                                {task.priority}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <select
+                                value={task.status}
+                                onChange={(e) => handleStatusChange(task._id, e.target.value)}
+                                className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(task.status)} cursor-pointer`}
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Review">Review</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Cancelled">Cancelled</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {task.dueDate ? (
+                                <span className="text-sm text-gray-600">
+                                  {new Date(task.dueDate).toLocaleDateString()}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-gray-400">No due date</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedTask(task)
+                                    setShowModal(true)
+                                  }}
+                                  className="text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
+                                  title="View Details"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  </svg>
+                                </button>
+                                {task.assignedTo && task.status !== 'Completed' && task.status !== 'Cancelled' && (
+                                  <button
+                                    onClick={() => handleSendReminder(task)}
+                                    className="text-orange-600 hover:text-orange-900 hover:bg-orange-50 px-2 py-1 rounded transition-colors"
+                                    title="Send Reminder"
+                                  >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  )}
+                </div>
+              ))}
+            </div>
           ) : (
+            // Regular table view (for Staff)
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -253,9 +445,7 @@ export default function Tasks() {
                         >
                           <option value="Pending">Pending</option>
                           <option value="In Progress">In Progress</option>
-                          <option value="Review">Review</option>
                           <option value="Completed">Completed</option>
-                          <option value="Cancelled">Cancelled</option>
                         </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
