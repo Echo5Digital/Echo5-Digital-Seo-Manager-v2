@@ -11,19 +11,36 @@ export default function Navbar() {
   const logout = useAuthStore(state => state.logout)
   const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotificationsStore()
   const [showNotifications, setShowNotifications] = useState(false)
+  const [hasNewNotification, setHasNewNotification] = useState(false)
   const notificationRef = useRef(null)
+  const previousUnreadCountRef = useRef(0)
 
   useEffect(() => {
     if (token) {
       fetchNotifications(token)
-      // Poll for new notifications every 30 seconds
+      // Poll for new notifications every 5 seconds for real-time updates
       const interval = setInterval(() => {
         fetchNotifications(token)
-      }, 30000)
+      }, 5000)
       
       return () => clearInterval(interval)
     }
   }, [token])
+
+  // Detect new notifications and trigger animation
+  useEffect(() => {
+    if (unreadCount > previousUnreadCountRef.current) {
+      setHasNewNotification(true)
+      // Play notification sound (optional)
+      // new Audio('/notification.mp3').play().catch(() => {})
+      
+      // Remove animation after 2 seconds
+      setTimeout(() => {
+        setHasNewNotification(false)
+      }, 2000)
+    }
+    previousUnreadCountRef.current = unreadCount
+  }, [unreadCount])
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -91,12 +108,16 @@ export default function Navbar() {
           <div className="flex items-center space-x-4">
             <div className="relative" ref={notificationRef}>
               <button 
-                className="p-2 text-gray-400 hover:text-gray-500 relative"
+                className={`p-2 text-gray-400 hover:text-gray-500 relative transition-all ${
+                  hasNewNotification ? 'animate-bounce' : ''
+                }`}
                 onClick={() => setShowNotifications(!showNotifications)}
               >
                 <BellIcon className="h-6 w-6" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full min-w-[18px]">
+                  <span className={`absolute top-1 right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full min-w-[18px] ${
+                    hasNewNotification ? 'animate-pulse' : ''
+                  }`}>
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
