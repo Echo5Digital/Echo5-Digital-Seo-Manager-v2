@@ -34,10 +34,23 @@ const { initScheduler } = require('./jobs/scheduler');
 const app = express();
 const server = http.createServer(app);
 
-// Initialize Socket.IO
+// Initialize Socket.IO with dynamic CORS
 const io = socketIO(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        'http://localhost:3000',
+        process.env.FRONTEND_URL,
+        'https://echo5-digital-seo-ops-v2-1pany1sa7-manu-amarnaths-projects.vercel.app',
+        'https://echo5-digital-seo-ops-v2.vercel.app',
+      ].filter(Boolean);
+      
+      if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.includes('.vercel.app')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   },
 });
@@ -72,9 +85,26 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// CORS
+// CORS - Allow multiple origins
+const allowedOrigins = [
+  'http://localhost:3000',
+  process.env.FRONTEND_URL,
+  'https://echo5-digital-seo-ops-v2-1pany1sa7-manu-amarnaths-projects.vercel.app',
+  'https://echo5-digital-seo-ops-v2.vercel.app',
+].filter(Boolean); // Remove undefined values
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list or is a Vercel preview URL
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
