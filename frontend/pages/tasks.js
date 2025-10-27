@@ -15,6 +15,7 @@ export default function Tasks() {
   const [searchQuery, setSearchQuery] = useState('')
   const [groupByStaff, setGroupByStaff] = useState(user?.role === 'Boss' || user?.role === 'Manager')
   const [expandedStaff, setExpandedStaff] = useState({})
+  const [expandedClients, setExpandedClients] = useState({})
 
   useEffect(() => {
     if (token) {
@@ -34,6 +35,14 @@ export default function Tasks() {
     }))
   }
 
+  const toggleClientGroup = (staffName, clientName) => {
+    const key = `${staffName}-${clientName}`
+    setExpandedClients(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+
   const expandAll = () => {
     const allExpanded = {}
     Object.keys(groupedTasks).forEach(staffName => {
@@ -44,6 +53,7 @@ export default function Tasks() {
 
   const collapseAll = () => {
     setExpandedStaff({})
+    setExpandedClients({})
   }
 
   const getStatusColor = (status) => {
@@ -106,6 +116,15 @@ export default function Tasks() {
         groupedTasks[staffName] = []
       }
       groupedTasks[staffName].push(task)
+    })
+    
+    // Sort tasks within each staff group by client name
+    Object.keys(groupedTasks).forEach(staffName => {
+      groupedTasks[staffName].sort((a, b) => {
+        const clientA = a.clientId?.name || 'ZZZ' // Put items without client at the end
+        const clientB = b.clientId?.name || 'ZZZ'
+        return clientA.localeCompare(clientB)
+      })
     })
   }
 
