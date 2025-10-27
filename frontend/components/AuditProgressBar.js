@@ -41,7 +41,7 @@ export default function AuditProgressBar() {
             <img 
               src="/echo5-loading.gif" 
               alt="Running SEO Audit" 
-              className="w-[200px] max-w-sm h-auto object-contain"
+              className="w-full max-w-sm h-auto object-contain"
               style={{ aspectRatio: '16/9' }}
             />
           </div>
