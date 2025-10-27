@@ -141,6 +141,29 @@ const usePagesStore = create((set, get) => ({
       set({ error: e.message || 'Failed to check SEO' })
       throw e
     }
+  },
+
+  suggestSEOFixes: async (pageId, seoReport) => {
+    try {
+      const token = useAuthStore.getState().token
+      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/${pageId}/suggest-fixes`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ seoReport })
+      })
+      const data = await resp.json()
+      if (data.status === 'success') {
+        return data.data
+      } else {
+        throw new Error(data.message || 'Failed to generate fix suggestions')
+      }
+    } catch (e) {
+      set({ error: e.message || 'Failed to generate fix suggestions' })
+      throw e
+    }
   }
 }))
 

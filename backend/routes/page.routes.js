@@ -375,6 +375,49 @@ function checkSEOIssues(page) {
   return issues;
 }
 
+// POST /api/pages/:id/suggest-fixes - Generate AI-powered SEO fix suggestions
+router.post('/:id/suggest-fixes', protect, async (req, res, next) => {
+  try {
+    const page = await Page.findById(req.params.id).populate('clientId', 'name domain');
+    if (!page) {
+      return res.status(404).json({ status: 'error', message: 'Page not found' });
+    }
+
+    // Get the SEO report from request body (should be passed from frontend)
+    const { seoReport } = req.body;
+    
+    if (!seoReport) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'SEO report required. Please run SEO check first.' 
+      });
+    }
+
+    // Generate AI-powered fix suggestions
+    const suggestions = await aiService.generateSEOFixSuggestions(
+      {
+        title: page.title,
+        url: page.url,
+        metaDescription: page.metaDescription,
+        seo: page.seo,
+        content: page.content,
+      },
+      seoReport
+    );
+
+    res.json({
+      status: 'success',
+      data: { 
+        suggestions,
+        pageId: page._id,
+        pageTitle: page.title,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
  
 // PATCH /api/pages/:id/focus-keyword - Set focus keyword and recompute keyword-based score

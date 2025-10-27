@@ -603,6 +603,83 @@ The alt text should:
     if (text.toLowerCase().includes('low impact')) return 'Low';
     return 'Medium';
   }
+
+  /**
+   * Generate comprehensive SEO fix suggestions for a page
+   * @param {Object} pageData - Current page data
+   * @param {Object} seoReport - SEO analysis report
+   * @returns {Promise<Array>} Array of fix suggestions
+   */
+  async generateSEOFixSuggestions(pageData, seoReport) {
+    try {
+      const prompt = `You are a world-class SEO specialist and technical SEO expert. Analyze this page and provide specific, actionable fix suggestions.
+
+Page Information:
+- Title: ${pageData.title || 'Not set'}
+- URL: ${pageData.url || 'Not set'}
+- Meta Description: ${pageData.metaDescription || 'Not set'}
+- Focus Keyword: ${pageData.seo?.focusKeyword || 'Not set'}
+- Secondary Keywords: ${pageData.seo?.secondaryKeywords?.join(', ') || 'None'}
+- Content Length: ${pageData.content?.wordCount || 0} words
+- Current SEO Score: ${seoReport.score}/100
+
+SEO Analysis Issues:
+${JSON.stringify(seoReport.issues, null, 2)}
+
+Passed Checks:
+${seoReport.checks.map(c => c.title).join(', ')}
+
+For EACH issue found, provide a fix suggestion in this exact JSON format:
+{
+  "category": "Title|Meta|Content|Images|Links|Technical|Keywords",
+  "issue": "Brief description of the issue",
+  "currentValue": "What currently exists (if applicable)",
+  "suggestedValue": "Your specific suggestion for the fix",
+  "reasoning": "Why this fix matters for SEO (1-2 sentences)",
+  "impact": "High|Medium|Low",
+  "estimatedTime": "5min|15min|30min|1hr|2hr",
+  "priority": 1-10 (10 being highest)
+}
+
+Provide 5-15 specific, actionable fixes. Be concrete - give exact text suggestions for titles, meta descriptions, headings. For images, suggest specific alt text. For keywords, suggest exact placement locations.
+
+Return ONLY a valid JSON array of fix objects, no additional text.`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an elite SEO consultant with 15+ years of experience. You specialize in on-page optimization, technical SEO, content strategy, and achieving #1 Google rankings. You provide specific, actionable recommendations with exact text suggestions. Always respond with valid JSON only.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 2500,
+      });
+
+      const responseText = completion.choices[0].message.content.trim();
+      
+      // Extract JSON from response (in case it's wrapped in markdown code blocks)
+      let jsonText = responseText;
+      if (responseText.includes('```json')) {
+        jsonText = responseText.match(/```json\s*([\s\S]*?)\s*```/)?.[1] || responseText;
+      } else if (responseText.includes('```')) {
+        jsonText = responseText.match(/```\s*([\s\S]*?)\s*```/)?.[1] || responseText;
+      }
+
+      const suggestions = JSON.parse(jsonText);
+      
+      // Sort by priority
+      return suggestions.sort((a, b) => (b.priority || 5) - (a.priority || 5));
+    } catch (error) {
+      logger.error('AI SEO Fix Suggestions Error:', error);
+      throw new Error('Failed to generate SEO fix suggestions: ' + error.message);
+    }
+  }
 }
 
 module.exports = new AIService();
