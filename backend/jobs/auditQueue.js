@@ -10,7 +10,7 @@ const redisConfig = {
   enableReadyCheck: false,
 };
 
-// Create audit queue with extended timeout for long-running jobs
+// Create audit queue
 const auditQueue = new Queue('audit-processing', {
   redis: redisConfig,
   defaultJobOptions: {
@@ -21,13 +21,6 @@ const auditQueue = new Queue('audit-processing', {
     },
     removeOnComplete: 100, // Keep last 100 completed jobs
     removeOnFail: 200, // Keep last 200 failed jobs
-    timeout: 600000, // 10 minutes timeout for long audits
-  },
-  settings: {
-    lockDuration: 600000, // Lock for 10 minutes (longer than job timeout)
-    lockRenewTime: 30000, // Renew lock every 30 seconds
-    stalledInterval: 60000, // Check for stalled jobs every minute
-    maxStalledCount: 2, // Max number of times a job can be recovered from stalled state
   },
 });
 
