@@ -12,12 +12,19 @@ export default function Login() {
     email: '',
     password: ''
   })
+  const [showGif, setShowGif] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
       await login(formData.email, formData.password)
-      router.push('/dashboard')
+      
+      // Show GIF popup for 5 seconds
+      setShowGif(true)
+      setTimeout(() => {
+        setShowGif(false)
+        router.push('/dashboard')
+      }, 5000)
     } catch (err) {
       console.error('Login error:', err)
     }
@@ -93,6 +100,21 @@ export default function Login() {
           </div>
         </form>
       </div>
+
+      {/* Echo5 GIF Popup */}
+      {showGif && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4">
+            <div className="text-center">
+              <img src="/echo5-loading.gif" alt="Echo5 Loading" className="w-full h-auto rounded-lg" />
+              <p className="mt-4 text-lg font-semibold text-gray-800">Welcome to Echo5 SEO Platform</p>
+              <div className="mt-4 flex justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
