@@ -29,8 +29,8 @@ auditQueue.process(async (job) => {
     await job.progress(20);
     
     // Step 2: Analyze pages in batches (20% - 80%)
-    const pagesToAnalyze = discoveredPages.slice(0, 100); // Reduced to 100 pages max
-    const batchSize = 10; // Smaller batches - 10 pages at a time
+    const pagesToAnalyze = discoveredPages.slice(0, 500);
+    const batchSize = 25; // Smaller batches for better memory management
     const allPageAnalyses = [];
     const totalBatches = Math.ceil(pagesToAnalyze.length / batchSize);
     
@@ -57,16 +57,6 @@ auditQueue.process(async (job) => {
       await job.progress(progress);
       
       logger.info(`Batch ${currentBatch}/${totalBatches} completed. Total analyzed: ${allPageAnalyses.length}`);
-      
-      // Add delay between batches to prevent memory buildup
-      if (currentBatch < totalBatches) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
-      }
-      
-      // Force garbage collection if available
-      if (global.gc) {
-        global.gc();
-      }
     }
     
     // Step 3: Additional checks (80% - 90%)
@@ -100,6 +90,8 @@ auditQueue.process(async (job) => {
       auditService.checkSSL(formattedUrl).then(data => results.sslIssues = data),
       auditService.checkSchema(formattedUrl).then(data => results.schemaIssues = data),
       auditService.analyzeCoreWebVitals(formattedUrl).then(data => results.coreWebVitals = data),
+      auditService.checkSchema(url).then(data => results.schemaIssues = data),
+      auditService.analyzeCoreWebVitals(url).then(data => results.coreWebVitals = data),
     ]);
     
     await job.progress(90);

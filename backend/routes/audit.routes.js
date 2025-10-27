@@ -94,13 +94,9 @@ router.get('/', protect, async (req, res, next) => {
     const { clientId } = req.query;
     const filter = clientId ? { clientId } : {};
     
-    // Only select fields needed for list view (exclude entire results field for performance)
     const audits = await Audit.find(filter)
-      .select('clientId auditType status overallScore createdAt updatedAt triggeredBy') // Only essential fields
       .populate('clientId', 'name domain')
-      .sort('-createdAt')
-      .limit(100) // Limit to recent 100 audits for performance
-      .lean(); // Convert to plain JS objects for faster serialization
+      .sort('-createdAt');
 
     res.json({
       status: 'success',
@@ -139,10 +135,8 @@ router.get('/:id/progress', protect, async (req, res, next) => {
   try {
     const auditId = req.params.id;
     
-    // Get audit from database (only status field needed)
-    const audit = await Audit.findById(auditId)
-      .select('status')
-      .lean();
+    // Get audit from database
+    const audit = await Audit.findById(auditId);
     
     if (!audit) {
       return res.status(404).json({
@@ -158,6 +152,7 @@ router.get('/:id/progress', protect, async (req, res, next) => {
         data: {
           auditStatus: audit.status,
           progress: audit.status === 'Completed' ? 100 : 0,
+          audit: audit,
         },
       });
     }

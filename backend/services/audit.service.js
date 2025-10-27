@@ -284,8 +284,8 @@ class AuditService {
         // Ignore sitemap errors
       }
       
-      // Limit for memory-efficient crawling
-      const maxPages = 20; // Reduced for better memory management
+      // Increased limit for more comprehensive crawling
+      const maxPages = 500; // Increased to 200 for thorough analysis
       
       while (toVisit.length > 0 && discoveredPages.length < maxPages) {
         const currentUrl = toVisit.shift();
