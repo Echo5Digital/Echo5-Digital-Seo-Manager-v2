@@ -1606,13 +1606,15 @@ class AuditService {
     const mediumCount = this.countBySeverity(results, 'Medium');
     const lowCount = this.countBySeverity(results, 'Low');
 
-    score -= criticalCount * 10;
-    score -= highCount * 5;
-    score -= mediumCount * 2;
-    score -= lowCount * 0.5;
+    // Use a more balanced scoring system
+    // Don't let broken links (500 errors) tank the entire score
+    score -= Math.min(criticalCount * 2, 20);  // Max 20 points for critical issues
+    score -= Math.min(highCount * 0.5, 15);    // Max 15 points for high issues
+    score -= Math.min(mediumCount * 0.2, 10);  // Max 10 points for medium issues
+    score -= Math.min(lowCount * 0.1, 5);      // Max 5 points for low issues
 
     return {
-      overallScore: Math.max(0, Math.min(100, score)),
+      overallScore: Math.max(0, Math.min(100, Math.round(score))),
       totalIssues: criticalCount + highCount + mediumCount + lowCount,
       criticalCount,
       highCount,
@@ -1626,11 +1628,39 @@ class AuditService {
    */
   countBySeverity(results, severity) {
     let count = 0;
-    Object.values(results).forEach(issueArray => {
-      if (Array.isArray(issueArray)) {
-        count += issueArray.filter(issue => issue.severity === severity).length;
+    
+    // Count issues from top-level arrays (robotsIssues, sslIssues, sitemapIssues, etc.)
+    Object.values(results).forEach(value => {
+      if (Array.isArray(value)) {
+        count += value.filter(issue => issue.severity === severity).length;
       }
     });
+    
+    // Count issues from aggregated data (metaAnalysis, headingStructure, imageAnalysis)
+    if (results.metaAnalysis && Array.isArray(results.metaAnalysis)) {
+      results.metaAnalysis.forEach(page => {
+        if (page.issues && Array.isArray(page.issues)) {
+          count += page.issues.filter(issue => issue.severity === severity).length;
+        }
+      });
+    }
+    
+    if (results.headingStructure && Array.isArray(results.headingStructure)) {
+      results.headingStructure.forEach(page => {
+        if (page.issues && Array.isArray(page.issues)) {
+          count += page.issues.filter(issue => issue.severity === severity).length;
+        }
+      });
+    }
+    
+    if (results.imageAnalysis && Array.isArray(results.imageAnalysis)) {
+      results.imageAnalysis.forEach(page => {
+        if (page.issues && Array.isArray(page.issues)) {
+          count += page.issues.filter(issue => issue.severity === severity).length;
+        }
+      });
+    }
+    
     return count;
   }
 

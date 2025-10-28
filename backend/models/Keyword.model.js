@@ -26,6 +26,12 @@ const keywordSchema = new mongoose.Schema({
     required: [true, 'Keyword is required'],
     trim: true,
   },
+  keywordType: {
+    type: String,
+    enum: ['Primary', 'Secondary'],
+    default: 'Primary',
+    required: true,
+  },
   volume: {
     type: Number,
     default: 0,
