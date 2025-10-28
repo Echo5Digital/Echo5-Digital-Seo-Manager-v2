@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
+import useKeywordStore from '../store/keywords'
+import useClientStore from '../store/clients'
 import { PlusIcon, MagnifyingGlassIcon, TrashIcon, PencilIcon } from '@heroicons/react/24/outline'
 
 export default function Keywords() {
-  const [keywords, setKeywords] = useState([])
-  const [clients, setClients] = useState([])
-  const [loading, setLoading] = useState(true)
+  const keywords = useKeywordStore(state => state.keywords)
+  const keywordsLoading = useKeywordStore(state => state.loading)
+  const fetchKeywords = useKeywordStore(state => state.fetchKeywords)
+  const addKeyword = useKeywordStore(state => state.addKeyword)
+  const updateKeyword = useKeywordStore(state => state.updateKeyword)
+  const deleteKeyword = useKeywordStore(state => state.deleteKeyword)
+
+  const clients = useClientStore(state => state.clients)
+  const fetchClients = useClientStore(state => state.fetchClients)
+
   const [showModal, setShowModal] = useState(false)
   const [editingKeyword, setEditingKeyword] = useState(null)
   const [selectedClient, setSelectedClient] = useState('')
@@ -26,69 +35,25 @@ export default function Keywords() {
   })
 
   useEffect(() => {
-    fetchClients()
-    fetchKeywords()
-  }, [])
-
-  const fetchClients = async () => {
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/clients`, {
-        credentials: 'include'
-      })
-      const data = await res.json()
-      if (data.status === 'success') {
-        setClients(data.data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch clients:', error)
+    const loadData = async () => {
+      await Promise.all([fetchClients(), fetchKeywords()])
     }
-  }
-
-  const fetchKeywords = async () => {
-    try {
-      setLoading(true)
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/keywords`, {
-        credentials: 'include'
-      })
-      const data = await res.json()
-      if (data.status === 'success') {
-        setKeywords(data.data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch keywords:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+    loadData()
+  }, [fetchClients, fetchKeywords])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     
     try {
-      const url = editingKeyword
-        ? `${process.env.NEXT_PUBLIC_API_BASE}/api/keywords/${editingKeyword._id}`
-        : `${process.env.NEXT_PUBLIC_API_BASE}/api/keywords`
-      
-      const method = editingKeyword ? 'PUT' : 'POST'
-      
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(formData)
-      })
-      
-      const data = await res.json()
-      
-      if (data.status === 'success') {
-        fetchKeywords()
-        handleCloseModal()
+      if (editingKeyword) {
+        await updateKeyword(editingKeyword._id, formData)
       } else {
-        alert(data.message || 'Failed to save keyword')
+        await addKeyword(formData)
       }
+      handleCloseModal()
     } catch (error) {
       console.error('Failed to save keyword:', error)
-      alert('Failed to save keyword')
+      alert(error.message || 'Failed to save keyword')
     }
   }
 
@@ -96,21 +61,10 @@ export default function Keywords() {
     if (!confirm('Are you sure you want to delete this keyword?')) return
     
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/keywords/${id}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      })
-      
-      const data = await res.json()
-      
-      if (data.status === 'success') {
-        fetchKeywords()
-      } else {
-        alert(data.message || 'Failed to delete keyword')
-      }
+      await deleteKeyword(id)
     } catch (error) {
       console.error('Failed to delete keyword:', error)
-      alert('Failed to delete keyword')
+      alert(error.message || 'Failed to delete keyword')
     }
   }
 
@@ -146,7 +100,7 @@ export default function Keywords() {
     })
   }
 
-  const filteredKeywords = keywords.filter(kw => {
+  const filteredKeywords = (keywords || []).filter(kw => {
     const matchesClient = !selectedClient || kw.clientId?._id === selectedClient
     const matchesType = filterType === 'All' || kw.keywordType === filterType
     const matchesSearch = !searchTerm || kw.keyword.toLowerCase().includes(searchTerm.toLowerCase())
@@ -238,7 +192,7 @@ export default function Keywords() {
 
         {/* Keywords List */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          {loading ? (
+          {keywordsLoading ? (
             <div className="p-12 text-center text-gray-500">Loading keywords...</div>
           ) : filteredKeywords.length === 0 ? (
             <div className="p-12 text-center text-gray-500">
@@ -329,7 +283,7 @@ export default function Keywords() {
 
       {/* Add/Edit Modal */}
       <Modal
-        isOpen={showModal}
+        show={showModal}
         onClose={handleCloseModal}
         title={editingKeyword ? 'Edit Keyword' : 'Add New Keyword'}
       >
