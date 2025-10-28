@@ -21,6 +21,19 @@ export default function Pages() {
   useEffect(() => { fetchKeywords() }, [fetchKeywords])
   useEffect(() => { if (clientId) fetchPages(clientId) }, [clientId, fetchPages])
 
+  // Filter to show only main pages (no query params, no hash fragments)
+  const mainPages = useMemo(() => {
+    return (pages || []).filter(p => {
+      try {
+        const url = new URL(p.url);
+        // Exclude pages with query parameters or hash fragments
+        return !url.search && !url.hash;
+      } catch {
+        return true; // Keep pages with invalid URLs
+      }
+    });
+  }, [pages]);
+
   const selectedPage = useMemo(() => pages.find(p => p._id === selectedId), [pages, selectedId])
   
   // Get primary keywords for the selected client
@@ -79,7 +92,7 @@ export default function Pages() {
             <div className="p-12 text-center text-gray-500">Loading pages…</div>
           ) : error ? (
             <div className="p-4 bg-red-50 text-red-700 rounded">{error}</div>
-          ) : pages.length === 0 ? (
+          ) : mainPages.length === 0 ? (
             <div className="p-12 text-center">
               <div className="text-gray-700 mb-3">No pages found for this client.</div>
               <div className="flex items-center justify-center gap-3">
@@ -105,7 +118,7 @@ export default function Pages() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">URL</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Page</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Title</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">SEO Score</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Focus Keyword</th>
@@ -113,7 +126,15 @@ export default function Pages() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {pages.map(p => (
+                  {mainPages.map(p => {
+                    // Extract path from URL for cleaner display
+                    let displayPath = p.url;
+                    try {
+                      const urlObj = new URL(p.url);
+                      displayPath = urlObj.pathname === '/' ? '/' : urlObj.pathname.replace(/\/+$/, '');
+                    } catch {}
+                    
+                    return (
                     <tr key={p._id}
                         onClick={async () => { 
                           setSelectedId(p._id); 
@@ -126,7 +147,11 @@ export default function Pages() {
                         }}
                         className={`${selectedId === p._id ? 'bg-blue-50' : ''} cursor-pointer hover:bg-gray-50`}
                     >
-                      <td className="px-4 py-3 text-sm text-blue-600 underline" onClick={e => e.stopPropagation()}><a href={p.url} target="_blank" rel="noreferrer">{p.url}</a></td>
+                      <td className="px-4 py-3 text-sm" onClick={e => e.stopPropagation()}>
+                        <a href={p.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline font-mono text-xs">
+                          {displayPath}
+                        </a>
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         <div className="flex items-center gap-2">
                           <span>{p.title}</span>
@@ -178,7 +203,8 @@ export default function Pages() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -286,30 +312,34 @@ function FocusEditor({ page, onSave, keywords = [] }) {
   const [value, setValue] = useState(page?.seo?.focusKeyword || '')
   const [saving, setSaving] = useState(false)
   
+  const handleChange = async (newValue) => {
+    setValue(newValue)
+    if (newValue.trim()) {
+      try {
+        setSaving(true)
+        await onSave(page._id, newValue.trim())
+      } catch (error) {
+        console.error('Failed to save focus keyword:', error)
+      } finally {
+        setSaving(false)
+      }
+    }
+  }
+  
   return (
     <div className="flex items-center gap-2">
       <select
-        className="px-3 py-1.5 border rounded w-56"
+        className="px-3 py-1.5 border rounded w-56 disabled:opacity-50"
         value={value}
-        onChange={e => setValue(e.target.value)}
+        onChange={e => handleChange(e.target.value)}
+        disabled={saving}
       >
         <option value="">Select focus keyword</option>
         {keywords.map(kw => (
           <option key={kw._id} value={kw.keyword}>{kw.keyword}</option>
         ))}
       </select>
-      <button
-        className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-semibold disabled:opacity-50"
-        disabled={saving || !value.trim()}
-        onClick={async () => {
-          try {
-            setSaving(true)
-            await onSave(page._id, value.trim())
-          } finally {
-            setSaving(false)
-          }
-        }}
-      >{saving ? 'Saving…' : 'Save'}</button>
+      {saving && <span className="text-xs text-gray-500">Saving...</span>}
     </div>
   )
 }

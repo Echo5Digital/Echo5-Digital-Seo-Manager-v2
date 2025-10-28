@@ -263,6 +263,10 @@ class AuditService {
           const h1 = Array.isArray(headings.h1Text) ? (headings.h1Text[0] || '') : ''
           const metaDescription = meta.description?.text || ''
 
+          // Check if page already exists to preserve focus keyword
+          const existingPage = await Page.findOne({ clientId, slug })
+          const existingFocusKeyword = existingPage?.seo?.focusKeyword
+
           const update = {
             clientId,
             url,
@@ -273,7 +277,7 @@ class AuditService {
             seo: {
               canonical: meta.canonical || undefined,
               robots: meta.robots || 'index,follow',
-              focusKeyword: undefined,
+              focusKeyword: existingFocusKeyword || undefined, // Preserve existing focus keyword
               readabilityScore: undefined,
               seoScore: pa.seoAnalysis?.seoScore ?? undefined,
             },
