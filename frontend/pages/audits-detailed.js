@@ -3,6 +3,8 @@ import { useRouter } from 'next/router'
 import Layout from '../components/Layout'
 import useAuditStore from '../store/audits'
 import useClientStore from '../store/clients'
+import usePagesStore from '../store/pages'
+import useAuthStore from '../store/auth'
 import { format } from 'date-fns'
 import {
   ArrowLeftIcon,
@@ -10,7 +12,8 @@ import {
   InformationCircleIcon,
   ExclamationTriangleIcon,
   ChevronDownIcon,
-  ChevronUpIcon
+  ChevronUpIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 
 /**
@@ -24,6 +27,7 @@ export default function AuditDetailed() {
   const getAuditDetails = useAuditStore(state => state.getAuditDetails)
   const clients = useClientStore(state => state.clients)
   const fetchClients = useClientStore(state => state.fetchClients)
+  const { pages, fetchPages } = usePagesStore()
   
   const [audit, setAudit] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -35,6 +39,7 @@ export default function AuditDetailed() {
   const [groupBy, setGroupBy] = useState('page') // 'page' | 'category'
   const [expandedIssues, setExpandedIssues] = useState({})
   const [openIssuesDropdown, setOpenIssuesDropdown] = useState(null)
+  const [excludedPages, setExcludedPages] = useState(new Set())
 
   // Focus keyword per URL (persisted in localStorage per audit id)
   const [focusKeywords, setFocusKeywords] = useState({})
@@ -98,6 +103,25 @@ export default function AuditDetailed() {
     loadData()
   }, [id, getAuditDetails, fetchClients])
 
+  // Fetch pages when audit is loaded to check exclusion status
+  useEffect(() => {
+    if (audit?.clientId) {
+      const clientId = typeof audit.clientId === 'string' ? audit.clientId : audit.clientId._id;
+      fetchPages(clientId);
+    }
+  }, [audit, fetchPages])
+
+  // Build excluded pages set from pages store
+  useEffect(() => {
+    const excluded = new Set();
+    pages.forEach(page => {
+      if (page.excluded) {
+        excluded.add(page.url);
+      }
+    });
+    setExcludedPages(excluded);
+  }, [pages])
+
   const getClientName = (clientData) => {
     if (!clientData) return 'Unknown'
     if (typeof clientData === 'object' && clientData.name) {
@@ -127,6 +151,37 @@ export default function AuditDetailed() {
     const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+  
+  const handleExcludePage = async (pageUrl) => {
+    try {
+      const token = useAuthStore.getState().token;
+      // Find the page by URL in the pages collection
+      const page = pages.find(p => p.url === pageUrl);
+      if (!page) {
+        console.log('Page not found in database, cannot exclude');
+        return;
+      }
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/${page._id}/exclude`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ excluded: true })
+      });
+      
+      if (response.ok) {
+        setExcludedPages(prev => new Set([...prev, pageUrl]));
+        // Refresh pages list if client is available
+        if (audit?.clientId) {
+          await fetchPages(typeof audit.clientId === 'string' ? audit.clientId : audit.clientId._id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to exclude page:', error);
+    }
   }
 
   // URL matching helpers to robustly associate analysis/meta/etc with discovered pages
@@ -1065,7 +1120,7 @@ export default function AuditDetailed() {
                     <th className="px-4 py-3 text-center font-semibold">Score</th>
                     <th className="px-4 py-3 text-center font-semibold">Status</th>
                     <th className="px-4 py-3 text-center font-semibold">Issues</th>
-                    <th className="px-4 py-3 text-center font-semibold"></th>
+                    <th className="px-4 py-3 text-center font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1266,12 +1321,27 @@ export default function AuditDetailed() {
                             })()}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); selectPage(page.originalIndex); }}
-                              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded transition-colors"
-                            >
-                              View
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); selectPage(page.originalIndex); }}
+                                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded transition-colors"
+                              >
+                                View
+                              </button>
+                              {!excludedPages.has(page.url) ? (
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleExcludePage(page.url); }}
+                                  className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold rounded transition-colors flex items-center gap-1"
+                                >
+                                  <XMarkIcon className="w-3 h-3" />
+                                  Exclude
+                                </button>
+                              ) : (
+                                <span className="px-3 py-1.5 bg-gray-200 text-gray-600 text-xs font-semibold rounded">
+                                  Excluded
+                                </span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

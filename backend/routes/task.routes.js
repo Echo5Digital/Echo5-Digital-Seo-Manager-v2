@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Task = require('../models/Task.model');
+const User = require('../models/User.model');
 const Notification = require('../models/Notification.model');
+const emailService = require('../services/email.service');
 const { protect, authorize } = require('../middleware/auth');
 
 // GET /api/tasks - Get tasks (filtered by user role)
@@ -48,7 +50,7 @@ router.post('/', protect, async (req, res, next) => {
 
     await task.populate('clientId', 'name domain');
     await task.populate('assignedTo', 'name email');
-    await task.populate('createdBy', 'name');
+    await task.populate('createdBy', 'name email');
 
     // Create notification for assigned user
     if (task.assignedTo && task.assignedTo._id.toString() !== req.user._id.toString()) {
@@ -62,6 +64,18 @@ router.post('/', protect, async (req, res, next) => {
         relatedId: task._id,
         actionUrl: '/tasks',
       });
+
+      // Send email notification to assigned staff
+      try {
+        await emailService.sendTaskAssignedEmail(
+          task.assignedTo,
+          task,
+          req.user
+        );
+      } catch (error) {
+        console.error('Failed to send task assignment email:', error);
+        // Don't fail the request if email fails
+      }
     }
 
     res.status(201).json({
@@ -102,7 +116,13 @@ router.put('/:id', protect, async (req, res, next) => {
     // Populate the task with related data before returning
     await task.populate('clientId', 'name domain');
     await task.populate('assignedTo', 'name email');
-    await task.populate('createdBy', 'name');
+    await task.populate('createdBy', 'name email');
+
+    // Track changes for email notification
+    const changes = [];
+    if (statusChanged) {
+      changes.push({ field: 'Status', from: oldStatus, to: task.status });
+    }
 
     // Create notification for status changes
     if (statusChanged) {
@@ -118,6 +138,18 @@ router.put('/:id', protect, async (req, res, next) => {
           relatedId: task._id,
           actionUrl: '/tasks',
         });
+
+        // Send email to admin about task update
+        try {
+          await emailService.sendTaskUpdateEmail(
+            task.createdBy,
+            task,
+            req.user,
+            changes
+          );
+        } catch (error) {
+          console.error('Failed to send task update email to admin:', error);
+        }
       }
       
       // If admin changes status, notify assigned staff member
@@ -132,6 +164,19 @@ router.put('/:id', protect, async (req, res, next) => {
           relatedId: task._id,
           actionUrl: '/tasks',
         });
+
+        // Send email to staff about status change
+        try {
+          await emailService.sendTaskStatusChangeEmail(
+            task.assignedTo,
+            task,
+            oldStatus,
+            task.status,
+            req.user
+          );
+        } catch (error) {
+          console.error('Failed to send status change email to staff:', error);
+        }
       }
     }
 

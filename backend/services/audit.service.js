@@ -243,14 +243,141 @@ class AuditService {
       const results = auditOrResults?.results || auditOrResults
       if (!results) return
       const analyses = Array.isArray(results.pageAnalysis) ? results.pageAnalysis : []
+      
+      console.log(`📄 Persisting ${analyses.length} pages for client ${clientId}`);
+      
+      // Check if homepage is in the analyses
+      const hasHomepage = analyses.some(pa => {
+        try {
+          const u = new URL(pa.url);
+          return u.pathname === '/' || u.pathname === '';
+        } catch {
+          return false;
+        }
+      });
+      console.log(`🏠 Homepage found in analyses: ${hasHomepage}`);
 
       const upserts = analyses.map(async (pa) => {
         try {
-          const url = pa.url
-          const u = new URL(url)
+          const originalUrl = pa.url
+          const u = new URL(originalUrl)
+          
+          // Skip non-HTTPS pages
+          if (u.protocol !== 'https:') {
+            console.log(`⏭️  Skipping non-HTTPS page: ${originalUrl}`);
+            return null;
+          }
+          
           const path = (u.pathname || '/').replace(/\/+$/,'') || '/'
           // Use a special slug for the root path to avoid collisions with "/home" pages
           const slug = path === '/' ? '__root__' : path.replace(/^\//,'')
+          
+          // ============ WORDPRESS & NON-PAGE FILTERING ============
+          // Skip if this is not a real content page
+          const isHomepage = slug === '__root__';
+          
+          if (!isHomepage) {
+            // 1. Skip WordPress system pages
+            if (path.includes('/wp-admin') || 
+                path.includes('/wp-login') || 
+                path.includes('/wp-json') ||
+                path.includes('/wp-content') ||
+                path.includes('/wp-includes')) {
+              console.log(`⏭️  Skipping WordPress system page: ${path}`);
+              return null;
+            }
+            
+            // 2. Skip all sitemaps (XML)
+            if (path.includes('sitemap') && (path.endsWith('.xml') || path.includes('sitemap.xml'))) {
+              console.log(`⏭️  Skipping sitemap: ${path}`);
+              return null;
+            }
+            
+            // 3. Skip WordPress templates
+            if (path.includes('wpr_templates') || path.includes('/elementor/') || path.includes('/templates/')) {
+              console.log(`⏭️  Skipping template: ${path}`);
+              return null;
+            }
+            
+            // 4. Skip date-based archives (e.g., /2025/10/06/, /2024/12/)
+            if (/\/\d{4}\/\d{1,2}(\/\d{1,2})?\/?$/.test(path)) {
+              console.log(`⏭️  Skipping date archive: ${path}`);
+              return null;
+            }
+            
+            // 5. Skip author, category, tag archives
+            if (path.startsWith('/author/') || 
+                path.startsWith('/tag/') || 
+                path.startsWith('/category/') ||
+                path.startsWith('/categories/') ||
+                path.startsWith('/tags/')) {
+              console.log(`⏭️  Skipping taxonomy archive: ${path}`);
+              return null;
+            }
+            
+            // 6. Skip pagination pages
+            if (path.includes('/page/') && /\/page\/\d+\/?$/.test(path)) {
+              console.log(`⏭️  Skipping pagination page: ${path}`);
+              return null;
+            }
+            
+            // 7. Skip feeds
+            if (path.includes('/feed') || path.endsWith('/feed/') || path.endsWith('.rss') || path.endsWith('.atom')) {
+              console.log(`⏭️  Skipping feed: ${path}`);
+              return null;
+            }
+            
+            // 8. Skip form pages (MetForm, Contact Form 7, WPForms, Gravity Forms)
+            if (path.includes('/metform') || 
+                path.includes('/cf7-') || 
+                path.includes('/wpforms') ||
+                path.includes('/gf-') ||
+                path.includes('/gravityforms')) {
+              console.log(`⏭️  Skipping form page: ${path}`);
+              return null;
+            }
+            
+            // 9. Skip search results
+            if (path.includes('/search/') || u.search.includes('?s=')) {
+              console.log(`⏭️  Skipping search results: ${path}`);
+              return null;
+            }
+            
+            // 10. Skip attachment/media pages
+            if (path.includes('/attachment/') || path.match(/\.(jpg|jpeg|png|gif|pdf|zip|svg)$/i)) {
+              console.log(`⏭️  Skipping attachment/media: ${path}`);
+              return null;
+            }
+            
+            // 11. Skip trackback/pingback/embed
+            if (path.includes('/trackback') || 
+                path.includes('/pingback') || 
+                path.includes('/embed')) {
+              console.log(`⏭️  Skipping trackback/pingback/embed: ${path}`);
+              return null;
+            }
+            
+            // 12. Skip cart, checkout, account pages (WooCommerce, EDD)
+            if (path.includes('/cart') || 
+                path.includes('/checkout') || 
+                path.includes('/my-account') ||
+                path.includes('/shop/') ||
+                path.match(/\/(cart|checkout|account|login|register|orders)\/?$/)) {
+              console.log(`⏭️  Skipping e-commerce utility page: ${path}`);
+              return null;
+            }
+          }
+          
+          // Clean URL - remove query params and hash for homepage, keep them for other pages
+          // For homepage, store clean URL without query params
+          const url = slug === '__root__' 
+            ? `${u.protocol}//${u.hostname}${u.port ? ':' + u.port : ''}/`
+            : originalUrl;
+          
+          // Log homepage persistence
+          if (slug === '__root__') {
+            console.log(`🏠 Persisting homepage: ${url} (cleaned from ${originalUrl}) with slug: ${slug}`);
+          }
 
           // Extract fields
           const meta = pa.metaData || {}
@@ -259,21 +386,36 @@ class AuditService {
           const images = pa.images || {}
           const content = pa.content || {}
           const perf = pa.performance || {}
-          const title = meta.title?.text || pa.title || u.pathname || 'Untitled'
+          
+          // Extract title from multiple sources, prefer actual page title over path
+          let title = 'Untitled';
+          if (meta.title?.text && meta.title.text.trim()) {
+            title = meta.title.text.trim();
+          } else if (pa.title && pa.title.trim()) {
+            title = pa.title.trim();
+          } else if (Array.isArray(headings.h1Text) && headings.h1Text[0]) {
+            title = headings.h1Text[0].trim();
+          } else {
+            // Only fall back to pathname if nothing else is available
+            title = u.pathname === '/' ? 'Homepage' : u.pathname.replace(/^\//, '').replace(/\//g, ' / ');
+          }
+          
           const h1 = Array.isArray(headings.h1Text) ? (headings.h1Text[0] || '') : ''
           const metaDescription = meta.description?.text || ''
 
-          // Check if page already exists to preserve focus keyword
+          // Check if page already exists to preserve focus keyword and exclusion status
           const existingPage = await Page.findOne({ clientId, slug })
           const existingFocusKeyword = existingPage?.seo?.focusKeyword
+          const existingExcluded = existingPage?.excluded
 
           const update = {
             clientId,
             url,
             slug,
-            title: title?.substring(0, 60) || 'Untitled',
+            title: title?.substring(0, 200) || 'Untitled', // Allow longer titles
             metaDescription: metaDescription?.substring(0, 160) || '',
             h1,
+            excluded: existingExcluded !== undefined ? existingExcluded : false, // Preserve existing exclusion status
             seo: {
               canonical: meta.canonical || undefined,
               robots: meta.robots || 'index,follow',

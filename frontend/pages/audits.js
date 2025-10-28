@@ -5,6 +5,8 @@ import Modal from '../components/Modal'
 import AuditProgressBar from '../components/AuditProgressBar'
 import useAuditStore from '../store/audits'
 import useClientStore from '../store/clients'
+import usePagesStore from '../store/pages'
+import useAuthStore from '../store/auth'
 import { format } from 'date-fns'
 import {
   PlusIcon,
@@ -12,7 +14,8 @@ import {
   EyeIcon,
   DocumentMagnifyingGlassIcon,
   InformationCircleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 
 export default function Audits() {
@@ -26,6 +29,8 @@ export default function Audits() {
   
   const clients = useClientStore(state => state.clients)
   const fetchClients = useClientStore(state => state.fetchClients)
+  
+  const { pages, fetchPages } = usePagesStore()
 
   const [loading, setLoading] = useState(true)
   const [showRunModal, setShowRunModal] = useState(false)
@@ -35,6 +40,7 @@ export default function Audits() {
   const [selectedClient, setSelectedClient] = useState('')
   const [selectedAudit, setSelectedAudit] = useState(null)
   const [showAllPages, setShowAllPages] = useState(false)
+  const [excludedPages, setExcludedPages] = useState(new Set())
 
   const [newAudit, setNewAudit] = useState({
     clientId: '',
@@ -53,6 +59,16 @@ export default function Audits() {
     }
     loadData()
   }, [fetchClients, fetchAudits])
+  
+  // Fetch pages when audit details are viewed
+  useEffect(() => {
+    if (selectedAudit?.clientId) {
+      const clientId = typeof selectedAudit.clientId === 'string' 
+        ? selectedAudit.clientId 
+        : selectedAudit.clientId._id;
+      fetchPages(clientId);
+    }
+  }, [selectedAudit, fetchPages])
 
   // Auto-populate URL when client is selected
   useEffect(() => {
@@ -105,6 +121,37 @@ export default function Audits() {
     const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+  
+  const handleExcludePage = async (pageUrl) => {
+    try {
+      const token = useAuthStore.getState().token;
+      // Find the page by URL in the pages collection
+      const page = pages.find(p => p.url === pageUrl);
+      if (!page) {
+        console.log('Page not found in database, cannot exclude');
+        return;
+      }
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/${page._id}/exclude`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ excluded: true })
+      });
+      
+      if (response.ok) {
+        setExcludedPages(prev => new Set([...prev, pageUrl]));
+        // Refresh pages list if client is selected
+        if (selectedAudit?.clientId) {
+          await fetchPages(typeof selectedAudit.clientId === 'string' ? selectedAudit.clientId : selectedAudit.clientId._id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to exclude page:', error);
+    }
   }
 
   const getScoreColorClass = (score) => {
@@ -435,18 +482,37 @@ export default function Audits() {
                     {(showAllPages
                       ? selectedAudit.results.discoveredPages
                       : selectedAudit.results.discoveredPages.slice(0, 10)
-                    ).map((page, index) => (
-                      <div key={index} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                    ).map((page, index) => {
+                      const isExcluded = excludedPages.has(page.url);
+                      return (
+                      <div key={index} className={`p-4 border border-gray-200 rounded-lg ${isExcluded ? 'bg-gray-100 opacity-50' : 'bg-gray-50'}`}>
                         <div className="flex justify-between items-start mb-2">
                           <a
                             href={page.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline font-medium text-sm"
+                            className="text-blue-600 hover:underline font-medium text-sm flex-1"
                           >
                             {truncateUrl(page.url)}
                           </a>
-                          <span className="text-xs text-gray-500">{formatDate(page.discoveredAt)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">{formatDate(page.discoveredAt)}</span>
+                            {!isExcluded && (
+                              <button
+                                onClick={() => handleExcludePage(page.url)}
+                                className="px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 flex items-center gap-1"
+                                title="Exclude from pages list"
+                              >
+                                <XMarkIcon className="w-3 h-3" />
+                                Exclude
+                              </button>
+                            )}
+                            {isExcluded && (
+                              <span className="px-2 py-1 text-xs rounded bg-gray-200 text-gray-600">
+                                Excluded
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="text-sm text-gray-900 font-medium mb-1">
                           {page.title || 'No Title'}
@@ -459,7 +525,8 @@ export default function Audits() {
                           <span>Size: {formatBytes(page.contentLength)}</span>
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                     {selectedAudit.results.discoveredPages.length > 10 && (
                       <div className="text-center">
                         <button

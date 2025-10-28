@@ -23,6 +23,9 @@ const userRoutes = require('./routes/user.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const pageRoutes = require('./routes/page.routes');
 
+// Import services
+const emailService = require('./services/email.service');
+
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
 const { logger } = require('./utils/logger');
@@ -176,9 +179,21 @@ app.use(errorHandler);
 // Start server
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0'; // Bind to all network interfaces
-server.listen(PORT, HOST, () => {
+server.listen(PORT, HOST, async () => {
   logger.info(`🚀 Server running on ${HOST}:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
   logger.info(`📱 Network access: http://<your-local-ip>:${PORT}`);
+  
+  // Verify SMTP connection
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    const smtpConnected = await emailService.verifyConnection();
+    if (smtpConnected) {
+      logger.info('✅ SMTP connection verified - Email notifications enabled');
+    } else {
+      logger.warn('⚠️  SMTP connection failed - Email notifications disabled');
+    }
+  } else {
+    logger.warn('⚠️  SMTP credentials not configured - Email notifications disabled');
+  }
 });
 
 // Handle unhandled promise rejections

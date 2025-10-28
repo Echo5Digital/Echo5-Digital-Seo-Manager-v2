@@ -55,11 +55,11 @@ router.post('/', protect, async (req, res, next) => {
       });
     }
 
-    // Delete old audits for this client (keep only the 5 most recent)
+    // Delete old audits for this client (keep only the latest)
     try {
       const oldAudits = await Audit.find({ clientId: client._id })
         .sort('-createdAt')
-        .skip(5); // Keep 5 most recent
+        .skip(1); // Keep only 1 most recent
       
       if (oldAudits.length > 0) {
         const oldAuditIds = oldAudits.map(a => a._id);
@@ -145,9 +145,12 @@ router.get('/', protect, async (req, res, next) => {
     const { clientId } = req.query;
     const filter = clientId ? { clientId } : {};
     
+    // Exclude heavy fields: results and logs to improve performance
     const audits = await Audit.find(filter)
+      .select('-results -logs')
       .populate('clientId', 'name domain')
-      .sort('-createdAt');
+      .sort('-createdAt')
+      .lean();
 
     res.json({
       status: 'success',
@@ -198,6 +201,21 @@ router.post('/run/:clientId', protect, async (req, res, next) => {
         status: 'error',
         message: 'Client not found',
       });
+    }
+
+    // Delete old audits for this client (keep only the latest)
+    try {
+      const oldAudits = await Audit.find({ clientId: client._id })
+        .sort('-createdAt')
+        .skip(1); // Keep only 1 most recent
+      
+      if (oldAudits.length > 0) {
+        const oldAuditIds = oldAudits.map(a => a._id);
+        await Audit.deleteMany({ _id: { $in: oldAuditIds } });
+        console.log(`🗑️ Cleaned up ${oldAudits.length} old audits for client: ${client.name}`);
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup old audits:', cleanupError.message);
     }
 
     // Create audit record

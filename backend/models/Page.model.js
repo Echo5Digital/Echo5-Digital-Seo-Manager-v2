@@ -41,7 +41,7 @@ const pageSchema = new mongoose.Schema({
   title: {
     type: String,
     required: [true, 'Page title is required'],
-    maxlength: [60, 'Title should not exceed 60 characters'],
+    maxlength: [200, 'Title should not exceed 200 characters'],
     trim: true,
   },
   metaDescription: {
@@ -62,6 +62,10 @@ const pageSchema = new mongoose.Schema({
     type: String,
     enum: ['Published', 'Draft', 'Archived', 'Scheduled'],
     default: 'Draft',
+  },
+  excluded: {
+    type: Boolean,
+    default: false,
   },
   
   // SEO Metadata

@@ -14,7 +14,7 @@ router.get('/', protect, async (req, res, next) => {
   try {
     const { clientId, type, status } = req.query;
     
-    const filter = {};
+    const filter = { excluded: { $ne: true } }; // Exclude pages marked as excluded
     if (clientId) filter.clientId = clientId;
     if (type) filter.type = type;
     if (status) filter.status = status;
@@ -418,6 +418,29 @@ router.post('/:id/suggest-fixes', protect, async (req, res, next) => {
   }
 });
 
+// PATCH /api/pages/:id/exclude - Toggle page exclusion status
+router.patch('/:id/exclude', protect, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { excluded } = req.body;
+    
+    const page = await Page.findById(id);
+    if (!page) {
+      return res.status(404).json({ status: 'error', message: 'Page not found' });
+    }
+    
+    page.excluded = excluded !== undefined ? excluded : !page.excluded;
+    await page.save();
+    
+    res.json({
+      status: 'success',
+      data: { page },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
  
 // PATCH /api/pages/:id/focus-keyword - Set focus keyword and recompute keyword-based score
@@ -800,17 +823,20 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     const sampleText = (blocks.map(b => b.text).join(' ').trim() || bodyText).substring(0, 2000)
     const wordCount = (sampleText ? sampleText.split(/\s+/).filter(Boolean).length : 0)
 
-    // Try to infer some basics if missing
-    const h1 = page.h1 || $('h1').first().text().trim()
-    const metaDescription = page.metaDescription || $('meta[name="description"]').attr('content') || ''
+    // Extract H1 and meta description
+    const h1 = $('h1').first().text().trim()
+    const metaDescription = $('meta[name="description"]').attr('content') || ''
 
     page.content = page.content || {}
     page.content.sample = sampleText
     page.content.wordCount = wordCount
     page.content.blocks = blocks
     page.content.internalLinks = internalLinks
-    if (!page.h1 && h1) page.h1 = h1
-    if (!page.metaDescription && metaDescription) page.metaDescription = metaDescription
+    
+    // Always update H1 and meta description if found
+    if (h1) page.h1 = h1
+    if (metaDescription && !page.metaDescription) page.metaDescription = metaDescription
+    
     await page.save()
 
     res.json({ status: 'success', data: { page } })

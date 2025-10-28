@@ -21,17 +21,15 @@ export default function Pages() {
   useEffect(() => { fetchKeywords() }, [fetchKeywords])
   useEffect(() => { if (clientId) fetchPages(clientId) }, [clientId, fetchPages])
 
-  // Filter to show only main pages (no query params, no hash fragments)
+  // Show all pages from database (backend already filters excluded pages)
   const mainPages = useMemo(() => {
-    return (pages || []).filter(p => {
-      try {
-        const url = new URL(p.url);
-        // Exclude pages with query parameters or hash fragments
-        return !url.search && !url.hash;
-      } catch {
-        return true; // Keep pages with invalid URLs
-      }
-    });
+    // Backend already filters out excluded pages via { excluded: { $ne: true } }
+    // So we just return all pages we received
+    const filtered = pages || [];
+    
+    console.log(`Pages: ${pages?.length || 0} total, ${filtered.length} displayed`);
+    
+    return filtered;
   }, [pages]);
 
   const selectedPage = useMemo(() => pages.find(p => p._id === selectedId), [pages, selectedId])
@@ -115,24 +113,20 @@ export default function Pages() {
           ) : (
             <>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-gray-700 to-gray-800 text-white text-sm">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Page</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Title</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">SEO Score</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Focus Keyword</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Actions</th>
+                    <th className="px-4 py-3 text-left font-semibold">#</th>
+                    <th className="px-4 py-3 text-left font-semibold">URL</th>
+                    <th className="px-4 py-3 text-left font-semibold">Title</th>
+                    <th className="px-4 py-3 text-center font-semibold">Score</th>
+                    <th className="px-4 py-3 text-center font-semibold">Focus Keyword</th>
+                    <th className="px-4 py-3 text-center font-semibold">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {mainPages.map(p => {
-                    // Extract path from URL for cleaner display
-                    let displayPath = p.url;
-                    try {
-                      const urlObj = new URL(p.url);
-                      displayPath = urlObj.pathname === '/' ? '/' : urlObj.pathname.replace(/\/+$/, '');
-                    } catch {}
+                <tbody>
+                  {mainPages.map((p, idx) => {
+                    const score = p.seo?.seoScore;
                     
                     return (
                     <tr key={p._id}
@@ -145,49 +139,40 @@ export default function Pages() {
                             } catch {} 
                           } 
                         }}
-                        className={`${selectedId === p._id ? 'bg-blue-50' : ''} cursor-pointer hover:bg-gray-50`}
+                        className={`border-b hover:bg-blue-50 cursor-pointer transition-colors ${selectedId === p._id ? 'bg-blue-100' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
                     >
-                      <td className="px-4 py-3 text-sm" onClick={e => e.stopPropagation()}>
-                        <a href={p.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline font-mono text-xs">
-                          {displayPath}
+                      <td className="px-4 py-3 text-gray-700 font-semibold">{idx + 1}</td>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <a href={p.url} target="_blank" rel="noreferrer" className="text-blue-600 text-sm font-medium max-w-md truncate block hover:underline" title={p.url}>
+                          {p.url}
                         </a>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        <div className="flex items-center gap-2">
-                          <span>{p.title}</span>
-                          {(() => {
-                            let isHome = p.slug === '__root__';
-                            if (!isHome && p.slug === 'home') {
-                              try { isHome = new URL(p.url).pathname.replace(/\/+$/,'') === '' || new URL(p.url).pathname.replace(/\/+$/,'') === '/'; } catch {}
-                            }
-                            return isHome ? (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border">Homepage</span>
-                            ) : null;
-                          })()}
+                      <td className="px-4 py-3">
+                        <div className="text-gray-900 text-sm font-medium max-w-xs truncate" title={p.title}>
+                          {p.title || <span className="text-gray-400 italic">No title</span>}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm font-bold">
-                        <span className={`px-2 py-1 rounded ${
-                          (p.seo?.seoScore || 0) >= 80 ? 'bg-green-100 text-green-800' :
-                          (p.seo?.seoScore || 0) >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                          (p.seo?.seoScore || 0) >= 40 ? 'bg-orange-100 text-orange-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>{p.seo?.seoScore ?? 'N/A'}</span>
+                      <td className="px-4 py-3 text-center">
+                        {score ? (
+                          <div className="flex flex-col items-center">
+                            <span className={`text-2xl font-bold ${
+                              score >= 80 ? 'text-green-600' : score >= 60 ? 'text-yellow-600' : score >= 40 ? 'text-orange-600' : 'text-red-600'
+                            }`}>{score}</span>
+                            <span className="text-xs text-gray-500">/100</span>
+                          </div>
+                        ) : <span className="text-gray-400">N/A</span>}
                       </td>
-                      <td className="px-4 py-3 text-sm">
+                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                         <FocusEditor 
                           page={p} 
                           onSave={updateFocusKeyword} 
                           keywords={getPrimaryKeywordsForClient(p.clientId)}
                         />
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        <div className="flex items-center gap-3">
-                          <Link href={`/page/${p._id}`} legacyBehavior>
-                            <a className="text-blue-600 underline" onClick={e => e.stopPropagation()}>View</a>
-                          </Link>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
                           <button
-                            className="text-green-600 underline disabled:opacity-50"
+                            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded transition-colors"
                             disabled={recrawling[p._id]}
                             onClick={async (e) => {
                               e.stopPropagation()
@@ -199,7 +184,9 @@ export default function Pages() {
                               }
                             }}
                           >{recrawling[p._id] ? 'Recrawling…' : 'Recrawl'}</button>
-                          <span className="text-xs text-gray-500">Updated {new Date(p.updatedAt).toLocaleString()}</span>
+                          <Link href={`/page/${p._id}`} legacyBehavior>
+                            <a className="px-4 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-bold rounded transition-colors" onClick={e => e.stopPropagation()}>Details</a>
+                          </Link>
                         </div>
                       </td>
                     </tr>
