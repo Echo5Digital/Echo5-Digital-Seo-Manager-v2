@@ -175,14 +175,20 @@ server.listen(PORT, () => {
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
-  logger.error('❌ Unhandled Rejection:', err);
-  server.close(() => process.exit(1));
+  logger.error('❌ Unhandled Rejection (non-fatal):', err.message || err);
+  // Don't exit - just log the error and continue
+  // This allows audits to complete even if some promises fail
 });
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   logger.error('❌ Uncaught Exception:', err);
-  process.exit(1);
+  // Only exit on truly critical errors, not audit-related timeouts
+  if (err.message && err.message.includes('ECONNREFUSED')) {
+    // Database connection issues - should exit
+    process.exit(1);
+  }
+  // Otherwise, log and continue
 });
 
 module.exports = { app, server, io };

@@ -101,35 +101,84 @@ class AuditService {
       results.discoveredPages = discoveredPages;
       console.log('📋 Step 1 completed. Pages discovered:', discoveredPages.length);
       
-      // Step 2: Analyze discovered pages in batches
+      // Step 2: Analyze discovered pages in batches (parallel batch processing)
       console.log('🔍 Step 2: Starting comprehensive page analysis...');
       const pagesToAnalyze = discoveredPages.slice(0, memoryConfig.maxAnalysis);
-      const batchSize = memoryConfig.batchSize;
+      const batchSize = 10; // 10 pages per batch
+      const parallelBatches = 3; // Process 3 batches in parallel
       const pageAnalysisResults = [];
       
+      // Create all batches upfront
+      const allBatches = [];
       for (let i = 0; i < pagesToAnalyze.length; i += batchSize) {
-        const batch = pagesToAnalyze.slice(i, i + batchSize);
-        console.log(`📊 Analyzing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(pagesToAnalyze.length/batchSize)} (${batch.length} pages)...`);
+        allBatches.push(pagesToAnalyze.slice(i, i + batchSize));
+      }
+      
+      console.log(`📊 Total batches: ${allBatches.length} (${batchSize} pages per batch, ${parallelBatches} batches in parallel)`);
+      
+      // Process batches in groups of parallelBatches
+      for (let groupIndex = 0; groupIndex < allBatches.length; groupIndex += parallelBatches) {
+        const batchGroup = allBatches.slice(groupIndex, groupIndex + parallelBatches);
+        const groupNumber = Math.floor(groupIndex / parallelBatches) + 1;
+        const totalGroups = Math.ceil(allBatches.length / parallelBatches);
         
-        const batchResults = await Promise.allSettled(
-          batch.map(page => this.analyzePageSEO(page.url, baseUrl, memoryConfig.enableDeepAnalysis))
+        console.log(`\n🚀 Processing batch group ${groupNumber}/${totalGroups} (${batchGroup.length} batches in parallel)...`);
+        
+        // Process all batches in this group in parallel
+        const groupResults = await Promise.allSettled(
+          batchGroup.map(async (batch, batchIndexInGroup) => {
+            const absoluteBatchIndex = groupIndex + batchIndexInGroup;
+            console.log(`   📦 Batch ${absoluteBatchIndex + 1}/${allBatches.length}: Analyzing ${batch.length} pages...`);
+            
+            const batchResults = await Promise.allSettled(
+              batch.map(page => this.analyzePageSEO(page.url, baseUrl, memoryConfig.enableDeepAnalysis))
+            );
+            
+            // Process batch results
+            const processedResults = [];
+            batchResults.forEach((result, index) => {
+              if (result.status === 'fulfilled') {
+                processedResults.push(result.value);
+              } else {
+                const pageUrl = batch[index]?.url || 'unknown';
+                console.warn(`   ⚠️ Failed to analyze: ${pageUrl} - ${result.reason?.message || 'Unknown error'}`);
+                
+                processedResults.push({
+                  url: pageUrl,
+                  error: result.reason?.message || 'Analysis failed',
+                  seoAnalysis: {
+                    criticalIssues: ['Failed to analyze page: ' + (result.reason?.message || 'Unknown error')],
+                    opportunities: [],
+                    recommendations: [],
+                    seoScore: 0
+                  },
+                  analyzedAt: new Date()
+                });
+              }
+            });
+            
+            console.log(`   ✅ Batch ${absoluteBatchIndex + 1} completed: ${processedResults.length} pages`);
+            return processedResults;
+          })
         );
         
-        // Only keep fulfilled results
-        const fulfilledResults = batchResults
-          .filter(result => result.status === 'fulfilled')
-          .map(result => result.value);
+        // Collect all results from this group
+        groupResults.forEach(result => {
+          if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+            pageAnalysisResults.push(...result.value);
+          }
+        });
         
-        pageAnalysisResults.push(...fulfilledResults);
+        console.log(`✅ Group ${groupNumber}/${totalGroups} completed. Total analyzed: ${pageAnalysisResults.length}/${pagesToAnalyze.length}`);
         
-        // Force garbage collection if available (requires --expose-gc flag)
-        if (global.gc && i % 10 === 0) {
+        // Force garbage collection between groups
+        if (global.gc) {
           global.gc();
         }
         
-        // Delay between batches to allow GC
-        if (i + batchSize < pagesToAnalyze.length) {
-          await new Promise(resolve => setTimeout(resolve, memoryConfig.batchDelay));
+        // Small delay between groups to prevent overwhelming the target server
+        if (groupIndex + parallelBatches < allBatches.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
       
@@ -352,158 +401,190 @@ class AuditService {
         // Ignore sitemap errors
       }
       
+      // Process pages in parallel batches for faster discovery
+      const batchSize = 15; // Process 5 pages at once
+      
       while (toVisit.length > 0 && discoveredPages.length < maxPages) {
-        const currentUrl = toVisit.shift();
+        // Get batch of URLs to process
+        const batchUrls = [];
+        while (batchUrls.length < batchSize && toVisit.length > 0 && discoveredPages.length + batchUrls.length < maxPages) {
+          const url = toVisit.shift();
+          if (!visited.has(url)) {
+            visited.add(url);
+            batchUrls.push(url);
+          }
+        }
         
-        if (visited.has(currentUrl)) continue;
-        visited.add(currentUrl);
+        if (batchUrls.length === 0) break;
         
-        try {
-          console.log(`📄 Analyzing page ${discoveredPages.length + 1}/${maxPages}:`, currentUrl);
-          const response = await axios.get(currentUrl, { 
-            timeout: 15000, // Increased timeout
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0; +https://seo-audit.example.com)'
-            }
-          });
-          
-          const $ = cheerio.load(response.data);
-          const title = $('title').text().trim();
-          const metaDescription = $('meta[name="description"]').attr('content') || '';
-          const h1 = $('h1').first().text().trim();
-          const robots = $('meta[name="robots"]').attr('content') || '';
-          
-          // Remove scripts, styles, and other non-content elements for clean text
-          $('script, style, noscript, iframe, svg').remove();
-          
-          // Get content preview
-          const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
-          const contentPreview = bodyText.substring(0, 500);
-          const wordCount = bodyText.split(' ').filter(w => w.length > 0).length;
-          
-          const pageData = {
-            url: currentUrl,
-            title: title,
-            h1: h1,
-            metaDescription: metaDescription,
-            statusCode: response.status,
-            contentLength: response.data.length,
-            contentType: response.headers['content-type'] || '',
-            wordCount: wordCount,
-            contentPreview: contentPreview,
-            robots: robots,
-            isIndexable: !robots.toLowerCase().includes('noindex'),
-            discoveredAt: new Date(),
-            // SEO Quick Checks
-            issues: []
-          };
-          
-          // Detect immediate SEO issues
-          if (!title) pageData.issues.push('Missing Title');
-          if (title && title.length < 30) pageData.issues.push('Title Too Short');
-          if (title && title.length > 60) pageData.issues.push('Title Too Long');
-          if (!metaDescription) pageData.issues.push('Missing Meta Description');
-          if (metaDescription && metaDescription.length < 120) pageData.issues.push('Meta Description Too Short');
-          if (!h1) pageData.issues.push('Missing H1');
-          if (wordCount < 300) pageData.issues.push('Thin Content');
-          
-          discoveredPages.push(pageData);
-          console.log(`✅ Page ${discoveredPages.length} discovered:`, pageData.url);
-          console.log(`   Title: ${pageData.title || '(missing)'}`);
-          console.log(`   H1: ${pageData.h1 || '(missing)'}`);
-          console.log(`   Word Count: ${wordCount}`);
-          console.log(`   Issues: ${pageData.issues.length > 0 ? pageData.issues.join(', ') : 'None'}`);
-          
-          // One-time sitemap seeding to improve discovery coverage
-          if (!sitemapSeeded) {
-            sitemapSeeded = true;
+        console.log(`� Processing batch of ${batchUrls.length} pages (${discoveredPages.length + 1}-${discoveredPages.length + batchUrls.length}/${maxPages})`);
+        
+        // Process batch in parallel
+        const batchResults = await Promise.allSettled(
+          batchUrls.map(async (currentUrl) => {
             try {
-              const smUrl = new URL('/sitemap.xml', baseUrl).href;
-              const smRes = await axios.get(smUrl, { timeout: 7000, validateStatus: () => true });
-              if (smRes.status === 200) {
-                const $$ = cheerio.load(smRes.data, { xmlMode: true });
-                const addToQueue = (locUrl) => {
-                  try {
-                    const u = new URL(locUrl);
-                    if (normalizeHost(u.hostname) !== baseHost) return;
-                    // Filter out editor URLs
-                    const isEditorUrl = locUrl.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i);
-                    if (isEditorUrl) return;
-                    if (!visited.has(locUrl) && !toVisit.includes(locUrl) && toVisit.length < 200) toVisit.push(locUrl);
-                  } catch {}
-                };
-                // If this is a sitemap index
-                const indexLocs = $$('sitemap > loc');
-                if (indexLocs.length > 0) {
-                  // Fetch a few child sitemaps
-                  const childLocs = indexLocs.map((i, el) => $$(el).text().trim()).get().slice(0, 5);
-                  await Promise.allSettled(childLocs.map(async (loc) => {
-                    try {
-                      const csRes = await axios.get(loc, { timeout: 7000, validateStatus: () => true });
-                      if (csRes.status === 200) {
-                        const $$$ = cheerio.load(csRes.data, { xmlMode: true });
-                        $$$('url > loc').each((i, el) => addToQueue($$$(el).text().trim()));
-                      }
-                    } catch {}
-                  }));
-                } else {
-                  // Simple sitemap with URLs
-                  $$('url > loc').each((i, el) => addToQueue($$(el).text().trim()));
+              const response = await axios.get(currentUrl, { 
+                timeout: 15000,
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0; +https://seo-audit.example.com)'
                 }
-                console.log(`🗺️  Sitemap seeding done. Queue size: ${toVisit.length}`);
-              }
-            } catch (e) {
-              // ignore sitemap errors
+              });
+              
+              const $ = cheerio.load(response.data);
+              const title = $('title').text().trim();
+              const metaDescription = $('meta[name="description"]').attr('content') || '';
+              const h1 = $('h1').first().text().trim();
+              const robots = $('meta[name="robots"]').attr('content') || '';
+              
+              // Remove scripts, styles, and other non-content elements for clean text
+              $('script, style, noscript, iframe, svg').remove();
+              
+              // Get content preview
+              const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+              const contentPreview = bodyText.substring(0, 500);
+              const wordCount = bodyText.split(' ').filter(w => w.length > 0).length;
+              
+              const pageData = {
+                url: currentUrl,
+                title: title,
+                h1: h1,
+                metaDescription: metaDescription,
+                statusCode: response.status,
+                contentLength: response.data.length,
+                contentType: response.headers['content-type'] || '',
+                wordCount: wordCount,
+                contentPreview: contentPreview,
+                robots: robots,
+                isIndexable: !robots.toLowerCase().includes('noindex'),
+                discoveredAt: new Date(),
+                issues: []
+              };
+              
+              // Detect immediate SEO issues
+              if (!title) pageData.issues.push('Missing Title');
+              if (title && title.length < 30) pageData.issues.push('Title Too Short');
+              if (title && title.length > 60) pageData.issues.push('Title Too Long');
+              if (!metaDescription) pageData.issues.push('Missing Meta Description');
+              if (metaDescription && metaDescription.length < 120) pageData.issues.push('Meta Description Too Short');
+              if (!h1) pageData.issues.push('Missing H1');
+              if (wordCount < 300) pageData.issues.push('Thin Content');
+              
+              // Find internal links
+              const newLinks = [];
+              $('a[href]').each((i, element) => {
+                const href = $(element).attr('href');
+                if (href) {
+                  const absoluteUrl = this.resolveUrl(baseUrl, href);
+                  try {
+                    const urlObj = new URL(absoluteUrl);
+                    const baseUrlObj = new URL(baseUrl);
+                    const currentHost = normalizeHost(new URL(currentUrl).hostname);
+                    const linkHost = normalizeHost(urlObj.hostname);
+                    const baseHostN = normalizeHost(baseUrlObj.hostname);
+                    
+                    // Filter out editor/preview URLs and non-page URLs
+                    const isEditorUrl = absoluteUrl.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i);
+                    const isAdminUrl = absoluteUrl.match(/\/wp-admin\/|\/wp-login\.php|\/wp-content\//i);
+                    const isFeedUrl = absoluteUrl.match(/\/feed\/?$|\/rss\/?$/i);
+                    const isFileUrl = absoluteUrl.match(/\.(pdf|jpg|jpeg|png|gif|css|js|zip|xml|txt|ico|svg|woff|woff2|ttf|eot)$/i);
+                    
+                    if ((linkHost === baseHostN || linkHost === currentHost) && 
+                        !absoluteUrl.includes('#') &&
+                        !isEditorUrl &&
+                        !isAdminUrl &&
+                        !isFeedUrl &&
+                        !isFileUrl &&
+                        !visited.has(absoluteUrl) &&
+                        !toVisit.includes(absoluteUrl)) {
+                      newLinks.push(absoluteUrl);
+                    }
+                  } catch (urlError) {
+                    // Invalid URL, skip
+                  }
+                }
+              });
+              
+              return { success: true, pageData, newLinks };
+              
+            } catch (error) {
+              console.warn(`⚠️ Could not access page: ${currentUrl}`, error.message);
+              return {
+                success: false,
+                pageData: {
+                  url: currentUrl,
+                  title: 'Error Loading Page',
+                  statusCode: error.response?.status || 0,
+                  error: error.message,
+                  issues: ['Page Load Error'],
+                  discoveredAt: new Date()
+                },
+                newLinks: []
+              };
+            }
+          })
+        );
+        
+        // Process results
+        batchResults.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value) {
+            const { pageData, newLinks } = result.value;
+            discoveredPages.push(pageData);
+            
+            console.log(`✅ Page ${discoveredPages.length}: ${pageData.url}`);
+            console.log(`   Title: ${pageData.title || '(missing)'} | H1: ${pageData.h1 || '(missing)'} | Words: ${pageData.wordCount || 0}`);
+            if (pageData.issues.length > 0) {
+              console.log(`   Issues: ${pageData.issues.join(', ')}`);
+            }
+            
+            // Add new links to queue (limit to prevent memory issues)
+            if (toVisit.length < 200) {
+              newLinks.slice(0, 50).forEach(link => {
+                if (!toVisit.includes(link)) {
+                  toVisit.push(link);
+                }
+              });
             }
           }
-
-          // Find internal links to crawl - more aggressive discovery
-          $('a[href]').each((i, element) => {
-            const href = $(element).attr('href');
-            if (href) {
-              const absoluteUrl = this.resolveUrl(baseUrl, href);
-              try {
-                const urlObj = new URL(absoluteUrl);
-                const baseUrlObj = new URL(baseUrl);
-                const currentHost = normalizeHost(new URL(currentUrl).hostname);
-                const linkHost = normalizeHost(urlObj.hostname);
-                const baseHostN = normalizeHost(baseUrlObj.hostname);
-                
-                // Filter out editor/preview URLs and non-page URLs
-                const isEditorUrl = absoluteUrl.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i);
-                const isAdminUrl = absoluteUrl.match(/\/wp-admin\/|\/wp-login\.php|\/wp-content\//i);
-                const isFeedUrl = absoluteUrl.match(/\/feed\/?$|\/rss\/?$/i);
-                const isFileUrl = absoluteUrl.match(/\.(pdf|jpg|jpeg|png|gif|css|js|zip|xml|txt|ico|svg|woff|woff2|ttf|eot)$/i);
-                
-                // Only crawl same domain, avoid fragments and common files
-                if ((linkHost === baseHostN || linkHost === currentHost) && 
-                    !absoluteUrl.includes('#') &&
-                    !isEditorUrl &&
-                    !isAdminUrl &&
-                    !isFeedUrl &&
-                    !isFileUrl &&
-                    !visited.has(absoluteUrl) &&
-                    !toVisit.includes(absoluteUrl) &&
-                    toVisit.length < 200) { // Allow larger queue
-                  toVisit.push(absoluteUrl);
-                }
-              } catch (urlError) {
-                // Invalid URL, skip
+        });
+        
+        // One-time sitemap seeding (only on first batch)
+        if (!sitemapSeeded) {
+          sitemapSeeded = true;
+          try {
+            const smUrl = new URL('/sitemap.xml', baseUrl).href;
+            const smRes = await axios.get(smUrl, { timeout: 7000, validateStatus: () => true });
+            if (smRes.status === 200) {
+              const $$ = cheerio.load(smRes.data, { xmlMode: true });
+              const addToQueue = (locUrl) => {
+                try {
+                  const u = new URL(locUrl);
+                  if (normalizeHost(u.hostname) !== baseHost) return;
+                  const isEditorUrl = locUrl.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i);
+                  if (isEditorUrl) return;
+                  if (!visited.has(locUrl) && !toVisit.includes(locUrl) && toVisit.length < 200) toVisit.push(locUrl);
+                } catch {}
+              };
+              
+              const indexLocs = $$('sitemap > loc');
+              if (indexLocs.length > 0) {
+                const childLocs = indexLocs.map((i, el) => $$(el).text().trim()).get().slice(0, 5);
+                await Promise.allSettled(childLocs.map(async (loc) => {
+                  try {
+                    const csRes = await axios.get(loc, { timeout: 7000, validateStatus: () => true });
+                    if (csRes.status === 200) {
+                      const $$$ = cheerio.load(csRes.data, { xmlMode: true });
+                      $$$('url > loc').each((i, el) => addToQueue($$$(el).text().trim()));
+                    }
+                  } catch {}
+                }));
+              } else {
+                $$('url > loc').each((i, el) => addToQueue($$(el).text().trim()));
               }
+              console.log(`🗺️  Sitemap seeding done. Queue size: ${toVisit.length}`);
             }
-          });
-          
-        } catch (error) {
-          // Skip pages that can't be accessed but log them
-          console.warn(`⚠️ Could not access page: ${currentUrl}`, error.message);
-          discoveredPages.push({
-            url: currentUrl,
-            title: 'Error Loading Page',
-            statusCode: error.response?.status || 0,
-            error: error.message,
-            issues: ['Page Load Error'],
-            discoveredAt: new Date()
-          });
+          } catch (e) {
+            // ignore sitemap errors
+          }
         }
       }
       
@@ -522,11 +603,30 @@ class AuditService {
   async analyzePageSEO(url, baseUrl, enableDeepAnalysis = true) {
     try {
       const response = await axios.get(url, { 
-        timeout: 15000,
+        timeout: 20000, // Increased to 20 seconds
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0; +https://seo-audit.example.com)'
-        }
+        },
+        validateStatus: () => true, // Accept all status codes
+        maxRedirects: 5
       });
+      
+      // Handle non-200 responses
+      if (response.status >= 400) {
+        console.warn(`⚠️ Page returned ${response.status}: ${url}`);
+        return {
+          url: url,
+          statusCode: response.status,
+          error: `HTTP ${response.status}`,
+          seoAnalysis: {
+            criticalIssues: [`Page returned HTTP ${response.status} status`],
+            opportunities: [],
+            recommendations: [],
+            seoScore: 0
+          },
+          analyzedAt: new Date()
+        };
+      }
       
       const $ = cheerio.load(response.data);
       
@@ -985,14 +1085,24 @@ class AuditService {
       };
       
     } catch (error) {
-      logger.error(`Error analyzing page ${url}:`, error);
+      // More detailed error logging
+      const errorType = error.code || error.message;
+      const errorMsg = error.code === 'ECONNABORTED' ? 'Request timeout' :
+                       error.code === 'ENOTFOUND' ? 'Domain not found' :
+                       error.code === 'ECONNREFUSED' ? 'Connection refused' :
+                       error.message || 'Unknown error';
+      
+      console.warn(`❌ Error analyzing ${url}: ${errorMsg}`);
+      
       return {
         url: url,
-        error: error.message,
+        error: errorMsg,
+        errorCode: error.code,
         seoAnalysis: {
-          criticalIssues: ['Failed to analyze page: ' + error.message],
+          criticalIssues: [`Failed to analyze page: ${errorMsg}`],
           opportunities: [],
-          recommendations: []
+          recommendations: [],
+          seoScore: 0
         },
         analyzedAt: new Date()
       };
