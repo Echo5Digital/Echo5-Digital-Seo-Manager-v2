@@ -143,7 +143,27 @@ router.post('/', protect, async (req, res, next) => {
 router.get('/', protect, async (req, res, next) => {
   try {
     const { clientId } = req.query;
-    const filter = clientId ? { clientId } : {};
+    let filter = clientId ? { clientId } : {};
+    
+    // If user is Staff, only show audits for assigned clients
+    if (req.user.role === 'Staff') {
+      const Client = require('../models/Client.model');
+      const assignedClients = await Client.find({ assignedStaff: req.user._id, isActive: true }).select('_id');
+      const clientIds = assignedClients.map(c => c._id);
+      
+      if (clientId) {
+        // Check if the requested client is assigned to this staff
+        if (!clientIds.some(id => id.toString() === clientId)) {
+          return res.status(403).json({
+            status: 'error',
+            message: 'Not authorized to access this client\'s audits'
+          });
+        }
+      } else {
+        // Only show audits for assigned clients
+        filter.clientId = { $in: clientIds };
+      }
+    }
     
     // Exclude heavy fields: results and logs to improve performance
     const audits = await Audit.find(filter)
@@ -173,6 +193,18 @@ router.get('/:id', protect, async (req, res, next) => {
         status: 'error',
         message: 'Audit not found',
       });
+    }
+
+    // If user is Staff, check if they have access to this client
+    if (req.user.role === 'Staff') {
+      const Client = require('../models/Client.model');
+      const client = await Client.findById(audit.clientId._id);
+      if (!client || !client.assignedStaff.some(staffId => staffId.toString() === req.user._id.toString())) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Not authorized to access this audit'
+        });
+      }
     }
 
     console.log('📤 Returning audit:', {
@@ -300,6 +332,18 @@ router.get('/details/:auditId', protect, async (req, res, next) => {
         status: 'error',
         message: 'Audit not found',
       });
+    }
+
+    // If user is Staff, check if they have access to this client
+    if (req.user.role === 'Staff') {
+      const Client = require('../models/Client.model');
+      const client = await Client.findById(audit.clientId._id);
+      if (!client || !client.assignedStaff.some(staffId => staffId.toString() === req.user._id.toString())) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Not authorized to access this audit'
+        });
+      }
     }
 
     res.json({
