@@ -8,6 +8,45 @@ const Page = require('../models/Page.model');
  */
 class AuditService {
   /**
+   * Get memory tier based on available system memory
+   */
+  getMemoryTier() {
+    const totalMemoryMB = (require('os').totalmem() / 1024 / 1024);
+    
+    if (totalMemoryMB >= 3000) {
+      // High memory (4GB+): Local development, large servers
+      return {
+        tier: 'high',
+        maxDiscovery: 200,
+        maxAnalysis: 100,
+        batchSize: 5,
+        batchDelay: 1000,
+        enableDeepAnalysis: true
+      };
+    } else if (totalMemoryMB >= 1500) {
+      // Medium memory (2GB): Small VPS
+      return {
+        tier: 'medium',
+        maxDiscovery: 100,
+        maxAnalysis: 50,
+        batchSize: 3,
+        batchDelay: 1500,
+        enableDeepAnalysis: true
+      };
+    } else {
+      // Low memory (512MB-1GB): Render free tier, Heroku free
+      return {
+        tier: 'low',
+        maxDiscovery: 50,
+        maxAnalysis: 25,
+        batchSize: 2,
+        batchDelay: 2000,
+        enableDeepAnalysis: false // Skip some heavy operations
+      };
+    }
+  }
+
+  /**
    * Perform full site audit
    * @param {string} domain - Domain to audit
    * @returns {Promise<Object>} Audit results
@@ -15,6 +54,11 @@ class AuditService {
   async performFullAudit(domain) {
     try {
       const baseUrl = this.formatUrl(domain);
+      const memoryConfig = this.getMemoryTier();
+      
+      console.log(`🧠 Memory tier: ${memoryConfig.tier.toUpperCase()} (${Math.round(require('os').totalmem() / 1024 / 1024)}MB available)`);
+      console.log(`📊 Config: Discovery=${memoryConfig.maxDiscovery}, Analysis=${memoryConfig.maxAnalysis}, Batch=${memoryConfig.batchSize}`);
+      
       const results = {
         // Page Discovery & Analysis
         discoveredPages: [],
@@ -45,38 +89,83 @@ class AuditService {
         
         // Performance
         coreWebVitals: [],
+        
+        // Metadata
+        memoryTier: memoryConfig.tier,
+        auditConfig: memoryConfig
       };
 
-      // Step 1: Discover all pages from the website
+      // Step 1: Discover pages from the website
       console.log('🚀 Step 1: Starting page discovery...');
-      const discoveredPages = await this.discoverPages(baseUrl);
+      const discoveredPages = await this.discoverPages(baseUrl, memoryConfig.maxDiscovery);
       results.discoveredPages = discoveredPages;
       console.log('📋 Step 1 completed. Pages discovered:', discoveredPages.length);
       
-      // Step 2: Analyze each discovered page
+      // Step 2: Analyze discovered pages in batches
       console.log('🔍 Step 2: Starting comprehensive page analysis...');
-      const pageAnalysisPromises = discoveredPages.slice(0, 100).map(page => // Analyze up to 100 pages
-        this.analyzePageSEO(page.url, baseUrl)
-      );
+      const pagesToAnalyze = discoveredPages.slice(0, memoryConfig.maxAnalysis);
+      const batchSize = memoryConfig.batchSize;
+      const pageAnalysisResults = [];
       
-      const pageAnalyses = await Promise.allSettled(pageAnalysisPromises);
-      results.pageAnalysis = pageAnalyses
-        .filter(result => result.status === 'fulfilled')
-        .map(result => result.value);
+      for (let i = 0; i < pagesToAnalyze.length; i += batchSize) {
+        const batch = pagesToAnalyze.slice(i, i + batchSize);
+        console.log(`📊 Analyzing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(pagesToAnalyze.length/batchSize)} (${batch.length} pages)...`);
+        
+        const batchResults = await Promise.allSettled(
+          batch.map(page => this.analyzePageSEO(page.url, baseUrl, memoryConfig.enableDeepAnalysis))
+        );
+        
+        // Only keep fulfilled results
+        const fulfilledResults = batchResults
+          .filter(result => result.status === 'fulfilled')
+          .map(result => result.value);
+        
+        pageAnalysisResults.push(...fulfilledResults);
+        
+        // Force garbage collection if available (requires --expose-gc flag)
+        if (global.gc && i % 10 === 0) {
+          global.gc();
+        }
+        
+        // Delay between batches to allow GC
+        if (i + batchSize < pagesToAnalyze.length) {
+          await new Promise(resolve => setTimeout(resolve, memoryConfig.batchDelay));
+        }
+      }
+      
+      results.pageAnalysis = pageAnalysisResults;
       console.log('📊 Step 2 completed. Page analyses:', results.pageAnalysis.length);
 
-      // Step 3: Run all other audit checks in parallel
+      // Step 3: Run additional audit checks (skip heavy ones on low memory)
       console.log('⚙️ Step 3: Running additional audit checks...');
-      await Promise.allSettled([
-        this.checkBrokenLinks(baseUrl).then(data => results.brokenLinks = data),
-        this.checkMetaTags(baseUrl).then(data => results.metaIssues = data),
-        this.checkAltTags(baseUrl).then(data => results.missingAltTags = data),
-        this.checkRobotsTxt(baseUrl).then(data => results.robotsTxtIssues = data),
-        this.checkSitemap(baseUrl).then(data => results.sitemapIssues = data),
-        this.checkSSL(baseUrl).then(data => results.sslIssues = data),
-        this.checkSchema(baseUrl).then(data => results.schemaIssues = data),
-        this.analyzeCoreWebVitals(baseUrl).then(data => results.coreWebVitals = data),
-      ]);
+      if (memoryConfig.enableDeepAnalysis) {
+        // Full analysis for medium/high memory
+        await Promise.allSettled([
+          this.checkBrokenLinks(baseUrl).then(data => results.brokenLinks = data).catch(() => []),
+          this.checkMetaTags(baseUrl).then(data => results.metaIssues = data).catch(() => []),
+          this.checkAltTags(baseUrl).then(data => results.missingAltTags = data).catch(() => []),
+          this.checkRobotsTxt(baseUrl).then(data => results.robotsTxtIssues = data).catch(() => []),
+          this.checkSitemap(baseUrl).then(data => results.sitemapIssues = data).catch(() => []),
+          this.checkSSL(baseUrl).then(data => results.sslIssues = data).catch(() => []),
+          this.checkSchema(baseUrl).then(data => results.schemaIssues = data).catch(() => []),
+        ]);
+      } else {
+        // Lightweight checks only for low memory
+        await Promise.allSettled([
+          this.checkRobotsTxt(baseUrl).then(data => results.robotsTxtIssues = data).catch(() => []),
+          this.checkSitemap(baseUrl).then(data => results.sitemapIssues = data).catch(() => []),
+          this.checkSSL(baseUrl).then(data => results.sslIssues = data).catch(() => []),
+        ]);
+        console.log('⚠️ Skipped heavy analysis (broken links, meta tags, alt tags, schema) due to low memory');
+      }
+      
+      // Always add Core Web Vitals placeholder
+      results.coreWebVitals = [{
+        type: 'Core Web Vitals',
+        message: 'PageSpeed analysis requires Google PageSpeed Insights API integration',
+        severity: 'Info',
+        recommendation: 'Integrate with Google PageSpeed Insights API for detailed performance metrics'
+      }];
 
       // Step 4: Aggregate data from page analyses
       console.log('📈 Step 4: Aggregating page data...');
@@ -173,11 +262,11 @@ class AuditService {
                 external: pa.links?.external?.count || 0,
                 broken: pa.links?.potentiallyBroken || 0,
               },
-              sample: content.sampleText || undefined,
+              sample: content.sampleText?.substring(0, 500) || undefined, // Limit to 500 chars
             },
-            images: (images.details || []).map(img => ({
-              url: img.src,
-              alt: img.alt || '',
+            images: (images.details || []).slice(0, 20).map(img => ({ // Limit to 20 images per page
+              url: img.src?.substring(0, 500) || '', // Limit URL length
+              alt: img.alt?.substring(0, 200) || '', // Limit alt text
               width: (img.width && Number(img.width)) || undefined,
               height: (img.height && Number(img.height)) || undefined,
               optimized: !!img.hasLazyLoading,
@@ -224,9 +313,9 @@ class AuditService {
   /**
    * Discover pages from website
    */
-  async discoverPages(baseUrl) {
+  async discoverPages(baseUrl, maxPages = 200) {
     try {
-      console.log('🔍 Starting comprehensive page discovery for:', baseUrl);
+      console.log(`🔍 Starting page discovery for: ${baseUrl} (max: ${maxPages} pages)`);
       const discoveredPages = [];
       const visited = new Set();
       const toVisit = [baseUrl];
@@ -262,9 +351,6 @@ class AuditService {
       } catch (e) {
         // Ignore sitemap errors
       }
-      
-      // Increased limit for more comprehensive crawling
-      const maxPages = 500; // Increased to 200 for thorough analysis
       
       while (toVisit.length > 0 && discoveredPages.length < maxPages) {
         const currentUrl = toVisit.shift();
@@ -433,7 +519,7 @@ class AuditService {
   /**
    * Analyze individual page for SEO with comprehensive opportunity detection
    */
-  async analyzePageSEO(url, baseUrl) {
+  async analyzePageSEO(url, baseUrl, enableDeepAnalysis = true) {
     try {
       const response = await axios.get(url, { 
         timeout: 15000,
@@ -715,26 +801,30 @@ class AuditService {
       const httpImgs = images.map(img => img.src || '').filter(u => /^http:/.test(u));
       const mixedContentCount = isHttps ? (httpJs.length + httpCss.length + httpImgs.length) : 0;
 
-      // Page responds with redirect?
+      // Page responds with redirect? (skip on low memory)
       let pageRedirects = null;
-      try {
-        const noRedirect = await axios.get(url, { timeout: 5000, maxRedirects: 0, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0; +https://seo-audit.example.com)'} });
-        pageRedirects = (noRedirect.status >= 300 && noRedirect.status < 400) ? true : false;
-      } catch (e) {
-        pageRedirects = null;
+      if (enableDeepAnalysis) {
+        try {
+          const noRedirect = await axios.get(url, { timeout: 5000, maxRedirects: 0, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0; +https://seo-audit.example.com)'} });
+          pageRedirects = (noRedirect.status >= 300 && noRedirect.status < 400) ? true : false;
+        } catch (e) {
+          pageRedirects = null;
+        }
       }
 
-      // Sample a few links for broken status
+      // Sample a few links for broken status (skip on low memory)
       const sampleLinks = [...internalLinks.slice(0, 5), ...externalLinks.slice(0, 5)];
       let brokenSampleCount = 0;
-      await Promise.allSettled(sampleLinks.map(async (l) => {
-        try {
-          const head = await axios.head(l.href, { timeout: 5000, validateStatus: () => true });
-          if (head.status >= 400) brokenSampleCount += 1;
-        } catch (e) {
-          brokenSampleCount += 1;
-        }
-      }));
+      if (enableDeepAnalysis) {
+        await Promise.allSettled(sampleLinks.map(async (l) => {
+          try {
+            const head = await axios.head(l.href, { timeout: 5000, validateStatus: () => true });
+            if (head.status >= 400) brokenSampleCount += 1;
+          } catch (e) {
+            brokenSampleCount += 1;
+          }
+        }));
+      }
 
       // Mobile-friendly (viewport)
       const hasViewport = !!$('meta[name="viewport"]').attr('content');
