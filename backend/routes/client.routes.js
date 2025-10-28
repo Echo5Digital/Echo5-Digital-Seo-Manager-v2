@@ -19,12 +19,21 @@ router.get('/', protect, async (req, res, next) => {
     // If user is Staff, only show assigned clients
     if (req.user.role === 'Staff') {
       query.assignedStaff = req.user._id;
+      console.log('🔍 Staff user querying clients:', {
+        userId: req.user._id,
+        userEmail: req.user.email,
+        query
+      });
     }
 
     const clients = await Client.find(query)
       .populate('assignedStaff', 'name email')
       .populate('createdBy', 'name')
       .sort('-createdAt');
+
+    if (req.user.role === 'Staff') {
+      console.log('📊 Staff clients found:', clients.length);
+    }
 
     res.json({
       status: 'success',

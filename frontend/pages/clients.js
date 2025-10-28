@@ -135,7 +135,10 @@ export default function Clients() {
             googleSearchConsole: false,
             googleAnalytics: false,
             googleBusinessProfile: false,
-          }
+          },
+          assignedStaff: editingClient.assignedStaff 
+            ? editingClient.assignedStaff.map(staff => typeof staff === 'string' ? staff : staff._id)
+            : []
         } : null}
         onComplete={handleClientComplete}
         onCancel={() => {
@@ -259,6 +262,25 @@ export default function Clients() {
                         {client.services.length > 3 && (
                           <span className="inline-block px-2 py-1 text-xs text-gray-500">
                             +{client.services.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Assigned Staff */}
+                  {client.assignedStaff && client.assignedStaff.length > 0 && (
+                    <div>
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Assigned Staff</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {client.assignedStaff.slice(0, 3).map((staff, index) => (
+                          <span key={index} className="inline-block px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded">
+                            {staff.name}
+                          </span>
+                        ))}
+                        {client.assignedStaff.length > 3 && (
+                          <span className="inline-block px-2 py-1 text-xs text-gray-500">
+                            +{client.assignedStaff.length - 3} more
                           </span>
                         )}
                       </div>
