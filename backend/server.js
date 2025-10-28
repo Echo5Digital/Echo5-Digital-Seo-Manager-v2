@@ -34,7 +34,7 @@ const { initScheduler } = require('./jobs/scheduler');
 const app = express();
 const server = http.createServer(app);
 
-// Initialize Socket.IO with dynamic CORS
+// Initialize Socket.IO with dynamic CORS including local network
 const io = socketIO(server, {
   cors: {
     origin: function (origin, callback) {
@@ -45,7 +45,10 @@ const io = socketIO(server, {
         process.env.FRONTEND_URL,
       ].filter(Boolean);
       
-      if (!origin || allowedOrigins.indexOf(origin) !== -1 || (origin && origin.includes('.vercel.app'))) {
+      if (!origin || 
+          allowedOrigins.indexOf(origin) !== -1 || 
+          (origin && origin.includes('.vercel.app')) ||
+          (origin && /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+):\d+$/.test(origin))) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -80,15 +83,16 @@ app.use(helmet());
 app.use(mongoSanitize());
 app.use(xss());
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW || 15) * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || 100),
-  message: 'Too many requests from this IP, please try again later.',
-});
-app.use('/api/', limiter);
+// Rate limiting - DISABLED FOR DEVELOPMENT
+// ⚠️ WARNING: Enable this in production to prevent abuse!
+// const limiter = rateLimit({
+//   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW || 15) * 60 * 1000,
+//   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || 100),
+//   message: 'Too many requests from this IP, please try again later.',
+// });
+// app.use('/api/', limiter);
 
-// CORS - Allow multiple origins
+// CORS - Allow multiple origins including local network
 const allowedOrigins = [
   'http://localhost:3000',
   'https://echo5-digital-seo-ops-v2.vercel.app',
@@ -101,8 +105,10 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Check if origin is in allowed list or is a Vercel preview URL
-    if (allowedOrigins.indexOf(origin) !== -1 || (origin && origin.includes('.vercel.app'))) {
+    // Check if origin is in allowed list or is a Vercel preview URL or local network
+    if (allowedOrigins.indexOf(origin) !== -1 || 
+        (origin && origin.includes('.vercel.app')) ||
+        (origin && /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+):\d+$/.test(origin))) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -169,8 +175,10 @@ app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  logger.info(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+const HOST = process.env.HOST || '0.0.0.0'; // Bind to all network interfaces
+server.listen(PORT, HOST, () => {
+  logger.info(`🚀 Server running on ${HOST}:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+  logger.info(`📱 Network access: http://<your-local-ip>:${PORT}`);
 });
 
 // Handle unhandled promise rejections

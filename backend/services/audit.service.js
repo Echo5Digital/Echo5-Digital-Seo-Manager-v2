@@ -380,25 +380,29 @@ class AuditService {
         if (!toVisit.includes(altUrl)) toVisit.push(altUrl)
       } catch {}
 
-      // Seed from sitemap.xml if present
-      try {
-        const sitemapUrl = new URL('/sitemap.xml', baseUrl).href
-        const sm = await axios.get(sitemapUrl, { timeout: 8000, validateStatus: () => true })
-        if (sm.status === 200 && typeof sm.data === 'string') {
-          const locs = Array.from(sm.data.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)).map(m => m[1])
-          locs.slice(0, 150).forEach(href => {
-            try {
-              const abs = this.resolveUrl(baseUrl, href)
-              const host = normalizeHost(new URL(abs).hostname)
-              // Filter out editor URLs from sitemap
-              const isEditorUrl = abs.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i)
-              if ((host === baseHost) && !isEditorUrl && !toVisit.includes(abs)) toVisit.push(abs)
-            } catch {}
-          })
-          console.log(`🗺️ Seeded ${Math.min(150, locs.length)} URLs from sitemap.xml`)
+      // Seed from sitemap.xml or sitemap_index.xml if present
+      const sitemapPaths = ['/sitemap.xml', '/sitemap_index.xml', '/sitemap-index.xml'];
+      for (const path of sitemapPaths) {
+        try {
+          const sitemapUrl = new URL(path, baseUrl).href;
+          const sm = await axios.get(sitemapUrl, { timeout: 8000, validateStatus: () => true });
+          if (sm.status === 200 && typeof sm.data === 'string') {
+            const locs = Array.from(sm.data.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)).map(m => m[1]);
+            locs.slice(0, 150).forEach(href => {
+              try {
+                const abs = this.resolveUrl(baseUrl, href);
+                const host = normalizeHost(new URL(abs).hostname);
+                // Filter out editor URLs from sitemap
+                const isEditorUrl = abs.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i);
+                if ((host === baseHost) && !isEditorUrl && !toVisit.includes(abs)) toVisit.push(abs);
+              } catch {}
+            });
+            console.log(`🗺️ Seeded ${Math.min(150, locs.length)} URLs from ${path}`);
+            break; // Found a sitemap, stop checking
+          }
+        } catch (e) {
+          // Continue to next sitemap path
         }
-      } catch (e) {
-        // Ignore sitemap errors
       }
       
       // Process pages in parallel batches for faster discovery
@@ -550,40 +554,45 @@ class AuditService {
         // One-time sitemap seeding (only on first batch)
         if (!sitemapSeeded) {
           sitemapSeeded = true;
-          try {
-            const smUrl = new URL('/sitemap.xml', baseUrl).href;
-            const smRes = await axios.get(smUrl, { timeout: 7000, validateStatus: () => true });
-            if (smRes.status === 200) {
-              const $$ = cheerio.load(smRes.data, { xmlMode: true });
-              const addToQueue = (locUrl) => {
-                try {
-                  const u = new URL(locUrl);
-                  if (normalizeHost(u.hostname) !== baseHost) return;
-                  const isEditorUrl = locUrl.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i);
-                  if (isEditorUrl) return;
-                  if (!visited.has(locUrl) && !toVisit.includes(locUrl) && toVisit.length < 200) toVisit.push(locUrl);
-                } catch {}
-              };
-              
-              const indexLocs = $$('sitemap > loc');
-              if (indexLocs.length > 0) {
-                const childLocs = indexLocs.map((i, el) => $$(el).text().trim()).get().slice(0, 5);
-                await Promise.allSettled(childLocs.map(async (loc) => {
+          const sitemapPaths = ['/sitemap.xml', '/sitemap_index.xml', '/sitemap-index.xml'];
+          
+          for (const path of sitemapPaths) {
+            try {
+              const smUrl = new URL(path, baseUrl).href;
+              const smRes = await axios.get(smUrl, { timeout: 7000, validateStatus: () => true });
+              if (smRes.status === 200) {
+                const $$ = cheerio.load(smRes.data, { xmlMode: true });
+                const addToQueue = (locUrl) => {
                   try {
-                    const csRes = await axios.get(loc, { timeout: 7000, validateStatus: () => true });
-                    if (csRes.status === 200) {
-                      const $$$ = cheerio.load(csRes.data, { xmlMode: true });
-                      $$$('url > loc').each((i, el) => addToQueue($$$(el).text().trim()));
-                    }
+                    const u = new URL(locUrl);
+                    if (normalizeHost(u.hostname) !== baseHost) return;
+                    const isEditorUrl = locUrl.match(/[\?&](elementor-preview|wpr_templates|et_fb|fl_builder|vc_editable|tve|ct_builder|brizy-edit|beaver-builder)=/i);
+                    if (isEditorUrl) return;
+                    if (!visited.has(locUrl) && !toVisit.includes(locUrl) && toVisit.length < 200) toVisit.push(locUrl);
                   } catch {}
-                }));
-              } else {
-                $$('url > loc').each((i, el) => addToQueue($$(el).text().trim()));
+                };
+                
+                const indexLocs = $$('sitemap > loc');
+                if (indexLocs.length > 0) {
+                  const childLocs = indexLocs.map((i, el) => $$(el).text().trim()).get().slice(0, 5);
+                  await Promise.allSettled(childLocs.map(async (loc) => {
+                    try {
+                      const csRes = await axios.get(loc, { timeout: 7000, validateStatus: () => true });
+                      if (csRes.status === 200) {
+                        const $$$ = cheerio.load(csRes.data, { xmlMode: true });
+                        $$$('url > loc').each((i, el) => addToQueue($$$(el).text().trim()));
+                      }
+                    } catch {}
+                  }));
+                } else {
+                  $$('url > loc').each((i, el) => addToQueue($$(el).text().trim()));
+                }
+                console.log(`🗺️  Sitemap seeding done from ${path}. Queue size: ${toVisit.length}`);
+                break; // Found a sitemap, stop checking
               }
-              console.log(`🗺️  Sitemap seeding done. Queue size: ${toVisit.length}`);
+            } catch (e) {
+              // Continue to next sitemap path
             }
-          } catch (e) {
-            // ignore sitemap errors
           }
         }
       }
@@ -1449,9 +1458,19 @@ class AuditService {
         });
       } else if (response.status === 200) {
         const content = response.data;
-        if (content.toLowerCase().includes('disallow: /')) {
+        
+        // Check if entire site is blocked (only "Disallow: /" with nothing after the slash)
+        // This should NOT match "Disallow: /wp-admin/" or "Disallow: /private/"
+        const lines = content.split('\n');
+        const hasBlockAll = lines.some(line => {
+          const trimmed = line.trim().toLowerCase();
+          // Match "disallow: /" but NOT "disallow: /something"
+          return trimmed === 'disallow: /' || trimmed === 'disallow:/';
+        });
+        
+        if (hasBlockAll) {
           issues.push({
-            issue: 'robots.txt blocking entire site',
+            issue: 'robots.txt blocking entire site with "Disallow: /"',
             severity: 'Critical',
           });
         }
@@ -1469,14 +1488,35 @@ class AuditService {
    */
   async checkSitemap(url) {
     try {
-      const sitemapUrl = new URL('/sitemap.xml', url).href;
-      const response = await axios.get(sitemapUrl, { timeout: 5000, validateStatus: () => true });
       const issues = [];
+      const sitemapPaths = [
+        '/sitemap.xml',
+        '/sitemap_index.xml',
+        '/sitemap-index.xml',
+        '/sitemap.php',
+      ];
 
-      if (response.status === 404) {
+      let sitemapFound = false;
+
+      // Check each common sitemap location
+      for (const path of sitemapPaths) {
+        try {
+          const sitemapUrl = new URL(path, url).href;
+          const response = await axios.get(sitemapUrl, { timeout: 5000, validateStatus: () => true });
+          
+          if (response.status === 200 && response.data) {
+            sitemapFound = true;
+            break; // Found a sitemap, no need to check others
+          }
+        } catch (err) {
+          // Continue to next sitemap path
+        }
+      }
+
+      if (!sitemapFound) {
         issues.push({
-          issue: 'sitemap.xml not found',
-          details: 'No XML sitemap detected',
+          issue: 'XML sitemap not found',
+          details: 'No XML sitemap detected at common locations (/sitemap.xml, /sitemap_index.xml)',
           severity: 'High',
         });
       }

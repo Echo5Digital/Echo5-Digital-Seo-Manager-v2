@@ -685,8 +685,8 @@ export default function AuditDetailed() {
       const cats = sectionMap[sec]
       let pass=0, fail=0, unknown=0
       cats.forEach(c => { const t = totals[c]; if (t){ pass+=t.pass||0; fail+=t.fail||0; unknown+=t.unknown||0 }})
-      const total = pass+fail+unknown
-      const score = total>0 ? Math.max(0, Math.round(100 - (fail/(pass+fail+unknown))*100)) : null
+      const total = pass+fail // Don't count unknown in total
+      const score = total>0 ? Math.round((pass/total)*100) : null // Score = (pass / (pass+fail)) * 100
       sectionScores[sec] = { score, pass, fail, unknown }
     })
     const overall = (()=>{

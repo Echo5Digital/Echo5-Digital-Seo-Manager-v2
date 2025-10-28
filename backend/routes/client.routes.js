@@ -123,6 +123,23 @@ router.post(
           .split('/')[0];              // Take only the domain part
       }
 
+      // Check if client with this domain already exists
+      if (domain) {
+        const existingClient = await Client.findOne({ domain });
+        if (existingClient) {
+          // Return the existing client instead of error (idempotent behavior)
+          const populatedClient = await Client.findById(existingClient._id)
+            .populate('assignedStaff', 'name email')
+            .populate('createdBy', 'name');
+          
+          return res.status(200).json({
+            status: 'success',
+            message: 'Client already exists',
+            data: { client: populatedClient },
+          });
+        }
+      }
+
       const client = await Client.create({
         name,
         domain,

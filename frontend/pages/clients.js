@@ -296,7 +296,7 @@ export default function Clients() {
                 </div>
 
                 <button
-                  onClick={() => router.push(`/clients/${client._id}`)}
+                  onClick={() => handleView(client)}
                   className="mt-4 w-full btn btn-secondary text-sm"
                 >
                   View Details
