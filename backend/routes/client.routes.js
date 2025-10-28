@@ -185,6 +185,12 @@ router.post(
         createdBy: req.user._id,
       });
 
+      console.log('✅ Client created with assignedStaff:', {
+        clientId: client._id,
+        clientName: client.name,
+        assignedStaff: client.assignedStaff
+      });
+
       // Generate initial site structure with AI
       if (industry) {
         try {
@@ -257,6 +263,13 @@ router.put(
       
       // Handle staff assignment changes
       if (assignedStaff) {
+        console.log('🔄 Updating assignedStaff:', {
+          clientId: client._id,
+          clientName: client.name,
+          oldStaff: client.assignedStaff,
+          newStaff: assignedStaff
+        });
+        
         const oldStaff = client.assignedStaff;
         client.assignedStaff = assignedStaff;
         
