@@ -9,7 +9,7 @@ import useKeywordStore from '../store/keywords'
 
 export default function Pages() {
   const { clients, fetchClients } = useClientStore()
-  const { pages, fetchPages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage, error, loading } = usePagesStore()
+  const { pages, fetchPages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage, checkSEO, error, loading } = usePagesStore()
   const { runAudit, auditProgress } = useAuditStore()
   const { keywords, fetchKeywords } = useKeywordStore()
   const [syncing, setSyncing] = useState(false)
@@ -115,7 +115,15 @@ export default function Pages() {
                 <tbody className="divide-y divide-gray-100">
                   {pages.map(p => (
                     <tr key={p._id}
-                        onClick={async () => { setSelectedId(p._id); if (!p?.content?.sample) { try { await fetchPage(p._id) } catch {} } }}
+                        onClick={async () => { 
+                          setSelectedId(p._id); 
+                          if (!p?.content?.sample) { 
+                            try { 
+                              await refreshContent(p._id);
+                              await checkSEO(p._id);
+                            } catch {} 
+                          } 
+                        }}
                         className={`${selectedId === p._id ? 'bg-blue-50' : ''} cursor-pointer hover:bg-gray-50`}
                     >
                       <td className="px-4 py-3 text-sm text-blue-600 underline" onClick={e => e.stopPropagation()}><a href={p.url} target="_blank" rel="noreferrer">{p.url}</a></td>
