@@ -24,6 +24,14 @@ router.get('/', protect, async (req, res, next) => {
         userEmail: req.user.email,
         query
       });
+      
+      // Debug: Check all clients and their assignedStaff
+      const allClients = await Client.find({ isActive: true }).select('name assignedStaff');
+      console.log('📋 All active clients:', allClients.map(c => ({
+        name: c.name,
+        id: c._id,
+        assignedStaff: c.assignedStaff
+      })));
     }
 
     const clients = await Client.find(query)
@@ -33,6 +41,12 @@ router.get('/', protect, async (req, res, next) => {
 
     if (req.user.role === 'Staff') {
       console.log('📊 Staff clients found:', clients.length);
+      if (clients.length > 0) {
+        console.log('👥 Client details:', clients.map(c => ({
+          name: c.name,
+          assignedStaff: c.assignedStaff.map(s => s.email)
+        })));
+      }
     }
 
     res.json({

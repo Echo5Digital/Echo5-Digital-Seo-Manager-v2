@@ -32,6 +32,11 @@ const ClientOnboardingForm = ({
   // Total steps: 8 for Boss/Manager (includes staff assignment + review), 7 for Staff
   const totalSteps = (user?.role === 'Boss' || user?.role === 'Manager') ? 8 : 7;
 
+  // Debug logging
+  useEffect(() => {
+    console.log('ClientOnboardingForm - User role:', user?.role, 'Total steps:', totalSteps);
+  }, [user, totalSteps]);
+
   // Fetch staff users
   useEffect(() => {
     const fetchStaffUsers = async () => {
@@ -98,6 +103,8 @@ const ClientOnboardingForm = ({
   const handleSubmit = (e) => {
     e.preventDefault();
     
+    console.log('Form submitted. Current step:', currentStep, 'Total steps:', totalSteps);
+    
     // Clean up data before submitting
     const cleanedData = {
       ...formData,
@@ -113,6 +120,7 @@ const ClientOnboardingForm = ({
   };
 
   const nextStep = () => {
+    console.log('Next step clicked. Current:', currentStep, 'Total:', totalSteps);
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
