@@ -72,6 +72,9 @@ io.on('connection', (socket) => {
   });
 });
 
+// Trust proxy - Required for deployment on Render, Heroku, etc.
+app.set('trust proxy', 1);
+
 // Security Middleware
 app.use(helmet());
 app.use(mongoSanitize());
