@@ -5,20 +5,30 @@ import useClientStore from '../store/clients'
 import useAuditStore from '../store/audits'
 import useAuthStore from '../store/auth'
 import usePagesStore from '../store/pages'
+import useKeywordStore from '../store/keywords'
 
 export default function Pages() {
   const { clients, fetchClients } = useClientStore()
   const { pages, fetchPages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage, error, loading } = usePagesStore()
   const { runAudit, auditProgress } = useAuditStore()
+  const { keywords, fetchKeywords } = useKeywordStore()
   const [syncing, setSyncing] = useState(false)
   const [recrawling, setRecrawling] = useState({})
   const [clientId, setClientId] = useState('')
   const [selectedId, setSelectedId] = useState('')
 
   useEffect(() => { fetchClients() }, [fetchClients])
+  useEffect(() => { fetchKeywords() }, [fetchKeywords])
   useEffect(() => { if (clientId) fetchPages(clientId) }, [clientId, fetchPages])
 
   const selectedPage = useMemo(() => pages.find(p => p._id === selectedId), [pages, selectedId])
+  
+  // Get primary keywords for the selected client
+  const getPrimaryKeywordsForClient = (pageClientId) => {
+    return (keywords || []).filter(kw => 
+      kw.clientId?._id === pageClientId && kw.keywordType === 'Primary'
+    )
+  }
 
   return (
     <Layout>
@@ -128,7 +138,11 @@ export default function Pages() {
                         }`}>{p.seo?.seoScore ?? 'N/A'}</span>
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <FocusEditor page={p} onSave={updateFocusKeyword} />
+                        <FocusEditor 
+                          page={p} 
+                          onSave={updateFocusKeyword} 
+                          keywords={getPrimaryKeywordsForClient(p.clientId)}
+                        />
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="flex items-center gap-3">
@@ -226,7 +240,11 @@ export default function Pages() {
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 mb-1">Focus keyword</div>
-                    <FocusEditor page={selectedPage} onSave={updateFocusKeyword} />
+                    <FocusEditor 
+                      page={selectedPage} 
+                      onSave={updateFocusKeyword} 
+                      keywords={getPrimaryKeywordsForClient(selectedPage.clientId)}
+                    />
                   </div>
                   <div className="text-sm"><span className="text-gray-500">H1:</span> <span className="text-gray-800">{selectedPage.h1 || '—'}</span></div>
                   <div className="text-sm"><span className="text-gray-500">Meta description:</span>
@@ -252,17 +270,22 @@ export default function Pages() {
   )
 }
 
-function FocusEditor({ page, onSave }) {
+function FocusEditor({ page, onSave, keywords = [] }) {
   const [value, setValue] = useState(page?.seo?.focusKeyword || '')
   const [saving, setSaving] = useState(false)
+  
   return (
     <div className="flex items-center gap-2">
-      <input
+      <select
         className="px-3 py-1.5 border rounded w-56"
         value={value}
         onChange={e => setValue(e.target.value)}
-        placeholder="Focus keyword"
-      />
+      >
+        <option value="">Select focus keyword</option>
+        {keywords.map(kw => (
+          <option key={kw._id} value={kw.keyword}>{kw.keyword}</option>
+        ))}
+      </select>
       <button
         className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-semibold disabled:opacity-50"
         disabled={saving || !value.trim()}

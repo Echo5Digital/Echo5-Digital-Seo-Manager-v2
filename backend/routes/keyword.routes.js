@@ -8,7 +8,14 @@ const aiService = require('../services/ai.service');
 router.get('/', protect, async (req, res, next) => {
   try {
     const { clientId } = req.query;
-    const keywords = await Keyword.find({ clientId, status: 'Active' })
+    const filter = { status: 'Active' };
+    
+    // Only filter by clientId if provided
+    if (clientId) {
+      filter.clientId = clientId;
+    }
+    
+    const keywords = await Keyword.find(filter)
       .populate('clientId', 'name domain')
       .sort('-createdAt');
 
