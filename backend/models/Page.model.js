@@ -104,6 +104,11 @@ const pageSchema = new mongoose.Schema({
         'Recipe',
         'Event',
         'LocalBusiness',
+        'BreadcrumbList',
+        'Service',
+        'Person',
+        'VideoObject',
+        'ImageObject',
       ],
     },
     schema: {

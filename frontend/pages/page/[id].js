@@ -56,6 +56,10 @@ export default function PageDetail() {
                   try {
                     setRecrawling(true)
                     await recrawlPage(page._id)
+                    alert('Page recrawled successfully!')
+                  } catch (err) {
+                    console.error('Recrawl error:', err)
+                    alert(`Failed to recrawl page: ${err.message}`)
                   } finally {
                     setRecrawling(false)
                   }

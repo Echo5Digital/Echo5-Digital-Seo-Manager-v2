@@ -136,7 +136,10 @@ export default function Pages() {
                             try { 
                               await refreshContent(p._id);
                               await checkSEO(p._id);
-                            } catch {} 
+                            } catch (err) {
+                              console.error('Auto-capture error:', err)
+                              alert(`Failed to auto-capture content: ${err.message}`)
+                            } 
                           } 
                         }}
                         className={`border-b hover:bg-blue-50 cursor-pointer transition-colors ${selectedId === p._id ? 'bg-blue-100' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
@@ -179,6 +182,10 @@ export default function Pages() {
                               try {
                                 setRecrawling(prev => ({ ...prev, [p._id]: true }))
                                 await recrawlPage(p._id)
+                                alert('Page recrawled successfully!')
+                              } catch (err) {
+                                console.error('Recrawl error:', err)
+                                alert(`Failed to recrawl page: ${err.message}`)
                               } finally {
                                 setRecrawling(prev => ({ ...prev, [p._id]: false }))
                               }
@@ -207,12 +214,18 @@ export default function Pages() {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="text-sm font-semibold text-gray-700">Content preview</h3>
-                      {!selectedPage?.content?.sample && (
-                        <button
-                          className="px-2 py-1 text-xs rounded bg-blue-600 text-white disabled:opacity-50"
-                          onClick={async () => { try { await refreshContent(selectedPage._id) } catch {} }}
-                        >Capture content</button>
-                      )}
+                      <button
+                        className="px-2 py-1 text-xs rounded bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-700"
+                        onClick={async () => { 
+                          try { 
+                            await refreshContent(selectedPage._id)
+                            alert('Content captured successfully!')
+                          } catch (err) {
+                            console.error('Capture content error:', err)
+                            alert(`Failed to capture content: ${err.message}`)
+                          }
+                        }}
+                      >{selectedPage?.content?.sample ? 'Re-capture content' : 'Capture content'}</button>
                     </div>
                     {Array.isArray(selectedPage?.content?.blocks) && selectedPage.content.blocks.length > 0 ? (
                       <div className="bg-gray-50 border rounded p-3 max-h-80 overflow-auto divide-y">

@@ -780,6 +780,21 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
 
     // Remove scripts, styles, and other non-content elements
     $('script, style, noscript, iframe, svg').remove()
+    // Remove navigation menus, headers, footers, sidebars
+    $('nav, header, footer, aside, [role="navigation"], [class*="menu"], [class*="nav"], [id*="menu"], [id*="nav"]').remove()
+
+    // Extract text sample and word count from clean content
+    const bodyText = $('body').text().replace(/\s+/g, ' ').trim()
+    const blocks = []
+    $('h1, h2, h3, h4, h5, h6, p').each((i, el) => {
+      if (blocks.length >= 50) return false
+      const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
+      const text = $(el).text().replace(/\s+/g, ' ').trim()
+      if (!text || text.length < 10) return // Skip very short text
+      blocks.push({ tag, text })
+    })
+    const sampleText = (blocks.map(b => b.text).join(' ').trim() || bodyText).substring(0, 2000)
+    const wordCount = (sampleText ? sampleText.split(/\s+/).filter(Boolean).length : 0)
 
     // Extract internal links with anchor text
     const internalLinks = []
@@ -802,30 +817,9 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
       } catch {}
     })
 
-    // Extract text sample and word count from clean content
-    const bodyText = $('body').text().replace(/\s+/g, ' ').trim()
-    const blocks = []
-    $('h1, h2, h3, h4, h5, h6, p, li').each((i, el) => {
-      if (blocks.length >= 50) return false
-      const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
-      let text = $(el).text().replace(/\s+/g, ' ').trim()
-      // Remove CSS class names, Elementor markup, and WordPress artifacts
-      text = text.replace(/\.elementor-[^\s]+/g, '')
-                 .replace(/\.wpr-[^\s]+/g, '')
-                 .replace(/\{[^}]*\}/g, '')
-                 .replace(/--[a-z-]+:[^;]+;/g, '')
-                 .replace(/@media[^{]+\{[^}]*\}/g, '')
-                 .replace(/\s+/g, ' ')
-                 .trim()
-      if (!text || text.length < 3) return
-      blocks.push({ tag, text })
-    })
-    const sampleText = (blocks.map(b => b.text).join(' ').trim() || bodyText).substring(0, 2000)
-    const wordCount = (sampleText ? sampleText.split(/\s+/).filter(Boolean).length : 0)
-
     // Extract H1 and meta description
     const h1 = $('h1').first().text().trim()
-    const metaDescription = $('meta[name="description"]').attr('content') || ''
+    const metaDescription = ($('meta[name="description"]').attr('content') || '').substring(0, 160)
 
     page.content = page.content || {}
     page.content.sample = sampleText
@@ -883,7 +877,7 @@ router.post('/:id/recrawl', protect, async (req, res, next) => {
     const images = analysis.images || {}
     const content = analysis.content || {}
 
-    page.title = (meta.title?.text || page.title || 'Untitled').substring(0, 60)
+    page.title = (meta.title?.text || page.title || 'Untitled').substring(0, 200)
     page.metaDescription = (meta.description?.text || '').substring(0, 160)
     page.h1 = Array.isArray(headings.h1Text) ? (headings.h1Text[0] || '') : ''
     
@@ -893,7 +887,13 @@ router.post('/:id/recrawl', protect, async (req, res, next) => {
     page.seo.seoScore = analysis.seoAnalysis?.seoScore ?? undefined
 
     page.structuredData = page.structuredData || {}
-    page.structuredData.type = (analysis.structuredData?.types && analysis.structuredData.types[0]) || 'WebPage'
+    const allowedStructuredDataTypes = [
+      'Article', 'BlogPosting', 'Product', 'Organization', 'WebPage', 
+      'FAQPage', 'HowTo', 'Recipe', 'Event', 'LocalBusiness', 
+      'BreadcrumbList', 'Service', 'Person', 'VideoObject', 'ImageObject'
+    ]
+    const detectedType = (analysis.structuredData?.types && analysis.structuredData.types[0]) || 'WebPage'
+    page.structuredData.type = allowedStructuredDataTypes.includes(detectedType) ? detectedType : 'WebPage'
     page.structuredData.schema = (analysis.structuredData?.data && analysis.structuredData.data[0]) || {}
 
     page.openGraph = {

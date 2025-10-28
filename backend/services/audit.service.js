@@ -424,7 +424,15 @@ class AuditService {
               seoScore: pa.seoAnalysis?.seoScore ?? undefined,
             },
             structuredData: {
-              type: (pa.structuredData?.types && pa.structuredData.types[0]) || 'WebPage',
+              type: (() => {
+                const allowedTypes = [
+                  'Article', 'BlogPosting', 'Product', 'Organization', 'WebPage', 
+                  'FAQPage', 'HowTo', 'Recipe', 'Event', 'LocalBusiness', 
+                  'BreadcrumbList', 'Service', 'Person', 'VideoObject', 'ImageObject'
+                ];
+                const detectedType = (pa.structuredData?.types && pa.structuredData.types[0]) || 'WebPage';
+                return allowedTypes.includes(detectedType) ? detectedType : 'WebPage';
+              })(),
               schema: (pa.structuredData?.data && pa.structuredData.data[0]) || {},
             },
             openGraph: {

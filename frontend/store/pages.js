@@ -83,15 +83,25 @@ const usePagesStore = create((set, get) => ({
           'Authorization': `Bearer ${token}`
         }
       })
+      
+      if (!resp.ok) {
+        const errorText = await resp.text()
+        console.error('Refresh content HTTP error:', resp.status, errorText)
+        throw new Error(`Server error: ${resp.status}`)
+      }
+      
       const data = await resp.json()
+      console.log('Refresh content response:', data)
+      
       if (data.status === 'success') {
         const page = data.data.page
         set(state => ({ pages: state.pages.map(p => p._id === pageId ? page : p) }))
         return page
-      } else {
-        throw new Error(data.message || 'Failed to refresh content')
       }
+      const errorMessage = data.message || 'Failed to refresh content'
+      throw new Error(errorMessage)
     } catch (e) {
+      console.error('Refresh content error:', e)
       set({ error: e.message || 'Failed to refresh content' })
       throw e
     }
@@ -106,15 +116,25 @@ const usePagesStore = create((set, get) => ({
           'Authorization': `Bearer ${token}`
         }
       })
+      
+      if (!resp.ok) {
+        const errorText = await resp.text()
+        console.error('Recrawl HTTP error:', resp.status, errorText)
+        throw new Error(`Server error: ${resp.status}`)
+      }
+      
       const data = await resp.json()
+      console.log('Recrawl response:', data)
+      
       if (data.status === 'success') {
         const page = data.data.page
         set(state => ({ pages: state.pages.map(p => p._id === pageId ? page : p) }))
         return page
-      } else {
-        throw new Error(data.message || 'Failed to recrawl page')
       }
+      const errorMessage = data.message || 'Failed to recrawl page'
+      throw new Error(errorMessage)
     } catch (e) {
+      console.error('Recrawl error:', e)
       set({ error: e.message || 'Failed to recrawl page' })
       throw e
     }
