@@ -25,9 +25,13 @@ export default function Pages() {
   
   // Get primary keywords for the selected client
   const getPrimaryKeywordsForClient = (pageClientId) => {
-    return (keywords || []).filter(kw => 
-      kw.clientId?._id === pageClientId && kw.keywordType === 'Primary'
-    )
+    // Handle both string ID and populated object
+    const clientIdToMatch = typeof pageClientId === 'string' ? pageClientId : pageClientId?._id
+    
+    return (keywords || []).filter(kw => {
+      const kwClientId = typeof kw.clientId === 'string' ? kw.clientId : kw.clientId?._id
+      return kwClientId === clientIdToMatch && kw.keywordType === 'Primary'
+    })
   }
 
   return (
