@@ -10,7 +10,74 @@ const rateLimit = require('express-rate-limit');
 const http = require('http');
 const socketIO = require('socket.io');
 const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 require('dotenv').config();
+
+// Configure Passport Google Strategy
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  const User = require('./models/User.model');
+  
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: `${process.env.BACKEND_URL || 'http://localhost:5001'}/api/auth/google/callback`,
+      },
+      async (accessToken, refreshToken, profile, done) => {
+        try {
+          logger.info('🔐 Google OAuth Profile:', { id: profile.id, name: profile.displayName, email: profile.emails[0].value });
+
+          let user = await User.findOne({ googleId: profile.id });
+
+          if (!user) {
+            user = await User.findOne({ email: profile.emails[0].value });
+
+            if (user) {
+              user.googleId = profile.id;
+              user.picture = profile.photos[0]?.value;
+              await user.save();
+              logger.info('✅ Linked Google account to existing user:', user.email);
+            } else {
+              user = await User.create({
+                name: profile.displayName,
+                email: profile.emails[0].value,
+                googleId: profile.id,
+                picture: profile.photos[0]?.value,
+                role: 'Staff',
+                password: Math.random().toString(36).slice(-12),
+              });
+              logger.info('✅ Created new Staff user via Google:', user.email);
+            }
+          }
+
+          return done(null, user);
+        } catch (error) {
+          logger.error('❌ Google OAuth Error:', error);
+          return done(error, null);
+        }
+      }
+    )
+  );
+
+  passport.serializeUser((user, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id, done) => {
+    try {
+      const User = require('./models/User.model');
+      const user = await User.findById(id);
+      done(null, user);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+
+  logger.info('✅ Google OAuth strategy configured');
+} else {
+  logger.warn('⚠️  Google OAuth credentials not configured. Google Sign-In will be disabled.');
+}
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
