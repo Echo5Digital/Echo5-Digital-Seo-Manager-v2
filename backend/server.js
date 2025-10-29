@@ -9,12 +9,15 @@ const xss = require('xss-clean');
 const rateLimit = require('express-rate-limit');
 const http = require('http');
 const socketIO = require('socket.io');
+const passport = require('passport');
 require('dotenv').config();
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
+const googleAuthRoutes = require('./routes/googleAuth.routes');
 const clientRoutes = require('./routes/client.routes');
 const keywordRoutes = require('./routes/keyword.routes');
+const keywordPlannerRoutes = require('./routes/keywordPlanner.routes');
 const taskRoutes = require('./routes/task.routes');
 const auditRoutes = require('./routes/audit.routes');
 const reportRoutes = require('./routes/report.routes');
@@ -132,6 +135,9 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// Initialize Passport
+app.use(passport.initialize());
+
 // Database connection
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
@@ -154,9 +160,11 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
+app.use('/api/auth', googleAuthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/keywords', keywordRoutes);
+app.use('/api/keyword-planner', keywordPlannerRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/audits', auditRoutes);
 app.use('/api/reports', reportRoutes);

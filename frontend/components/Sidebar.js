@@ -11,7 +11,8 @@ import {
   DocumentTextIcon,
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
-  UsersIcon
+  UsersIcon,
+  LightBulbIcon
 } from '@heroicons/react/24/outline'
 
 export default function Sidebar() {
@@ -23,6 +24,7 @@ export default function Sidebar() {
     { name: 'Clients', href: '/clients', icon: UserGroupIcon, isNew: true },
     { name: 'SEO Audits', href: '/audits', icon: DocumentCheckIcon, isNew: true },
     { name: 'Keywords', href: '/keywords', icon: MagnifyingGlassIcon },
+    { name: 'Keyword Planner', href: '/keyword-planner', icon: LightBulbIcon, isNew: true },
     { name: 'Backlinks', href: '/backlinks', icon: LinkIcon },
     { name: 'Pages', href: '/pages', icon: DocumentTextIcon, isNew: true },
     { name: 'Tasks', href: '/tasks', icon: ClipboardDocumentListIcon, isNew: true },

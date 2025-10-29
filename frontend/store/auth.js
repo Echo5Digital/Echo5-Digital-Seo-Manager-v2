@@ -80,6 +80,34 @@ const useAuthStore = create((set, get) => ({
     })
   },
 
+  // Set token (for Google OAuth)
+  setToken: async (token) => {
+    try {
+      // Fetch user details using the token
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (data.status === 'success') {
+        localStorage.setItem('token', token)
+        localStorage.setItem('user', JSON.stringify(data.data.user))
+        set({
+          token,
+          user: data.data.user,
+          isAuthenticated: true,
+          loading: false
+        })
+      }
+    } catch (error) {
+      console.error('Error setting token:', error)
+      set({ error: error.message })
+    }
+  },
+
   // Clear error
   clearError: () => set({ error: null })
 }))

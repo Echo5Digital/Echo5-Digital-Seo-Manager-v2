@@ -258,6 +258,119 @@ Return ONLY valid JSON, no additional text.`;
   }
 
   /**
+   * Keyword Planner - Get comprehensive keyword data with location-based insights
+   * @param {Array<string>} keywords - Array of keywords to analyze
+   * @param {string} location - Target location (e.g., "Kochi, Kerala" or "United States")
+   * @returns {Promise<Object>} Keyword planner data with results and ideas
+   */
+  async getKeywordPlannerData(keywords, location) {
+    try {
+      logger.info(`Generating keyword planner data for ${keywords.length} keywords in ${location}`);
+
+      const prompt = `You are an expert SEO keyword researcher. Analyze these keywords for the location "${location}":
+
+Keywords: ${keywords.join(', ')}
+
+For EACH keyword, provide:
+1. **searchVolume**: Estimated average monthly search volume (number)
+2. **competition**: Competition level (Low/Medium/High)
+3. **cpc**: Estimated cost-per-click in USD (e.g., "1.50")
+4. **intent**: Search intent (Informational/Navigational/Transactional/Commercial)
+5. **difficulty**: SEO difficulty score (0-100)
+
+Also generate 10 RELATED keyword ideas that:
+- Are relevant to the original keywords
+- Target the same location
+- Include long-tail variations
+- Mix different search intents
+- Have good potential for the business
+
+**Location Context Guidelines:**
+- For US/International: Higher search volumes, higher CPC
+- For India/Kerala/Kochi: Lower search volumes (10-30% of US), lower CPC (₹50-200 = $0.60-2.40)
+- For local keywords: Add location modifiers where appropriate
+- Consider local language variations if applicable
+
+**Volume Guidelines by Location:**
+- US National keyword (1-2 words): 10,000-500,000
+- US Local keyword (city name): 500-50,000
+- India National: 1,000-100,000
+- Kerala/Kochi Local: 100-10,000
+- Long-tail (4+ words): Divide by 5-10
+
+**CPC Guidelines:**
+- US Competitive (legal, insurance): $5-50
+- US Commercial: $1-5
+- US Informational: $0.10-1
+- India Competitive: $0.80-3
+- India Commercial: $0.30-1.50
+- India Informational: $0.05-0.40
+
+Respond in this EXACT JSON format:
+{
+  "results": [
+    {
+      "keyword": "exact keyword from input",
+      "searchVolume": <number>,
+      "competition": "Low|Medium|High",
+      "cpc": "X.XX",
+      "intent": "Informational|Navigational|Transactional|Commercial",
+      "difficulty": <0-100>
+    }
+  ],
+  "ideas": [
+    {
+      "keyword": "related keyword suggestion",
+      "volume": <number>,
+      "competition": "Low|Medium|High",
+      "cpc": "X.XX",
+      "intent": "Informational|Navigational|Transactional|Commercial"
+    }
+  ]
+}`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert SEO keyword researcher with deep knowledge of search volumes, competition levels, and CPC data across different geographic markets. You provide realistic, location-specific keyword data based on actual market conditions.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.3, // Lower temperature for more consistent data
+      });
+
+      const content = completion.choices[0].message.content.trim();
+      
+      // Extract JSON from markdown code blocks if present
+      let jsonText = content;
+      if (content.includes('```json')) {
+        jsonText = content.split('```json')[1].split('```')[0].trim();
+      } else if (content.includes('```')) {
+        jsonText = content.split('```')[1].split('```')[0].trim();
+      }
+
+      const data = JSON.parse(jsonText);
+      
+      logger.info(`Keyword planner data generated: ${data.results?.length || 0} results, ${data.ideas?.length || 0} ideas`);
+
+      return {
+        results: data.results || [],
+        ideas: data.ideas || [],
+        location,
+        analyzedAt: new Date(),
+      };
+    } catch (error) {
+      logger.error('AI Keyword Planner Error:', error);
+      throw new Error('Failed to generate keyword planner data');
+    }
+  }
+
+  /**
    * Cluster keywords into topical groups
    * @param {Array} keywords - Array of keyword objects
    * @returns {Promise<Object>} Clustered keywords

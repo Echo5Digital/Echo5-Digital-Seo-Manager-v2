@@ -30,9 +30,20 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
+    required: function() {
+      // Password is not required if user signed up with Google
+      return !this.googleId;
+    },
     minlength: 6,
     select: false,
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true, // Allow null values, only enforce uniqueness when value exists
+  },
+  picture: {
+    type: String, // Google profile picture URL
   },
   role: {
     type: String,
