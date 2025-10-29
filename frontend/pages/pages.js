@@ -269,12 +269,26 @@ export default function Pages() {
                 <div className="bg-white border rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-gray-600">SEO Score</div>
-                    <div className={`px-2 py-1 rounded text-sm ${
-                      (selectedPage.seo?.seoScore || 0) >= 80 ? 'bg-green-100 text-green-800' :
-                      (selectedPage.seo?.seoScore || 0) >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                      (selectedPage.seo?.seoScore || 0) >= 40 ? 'bg-orange-100 text-orange-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>{selectedPage.seo?.seoScore ?? 'N/A'}</div>
+                    <div className="flex items-center gap-2">
+                      <div className={`px-2 py-1 rounded text-sm font-semibold ${
+                        (selectedPage.seo?.seoScore || 0) >= 80 ? 'bg-green-100 text-green-800' :
+                        (selectedPage.seo?.seoScore || 0) >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                        (selectedPage.seo?.seoScore || 0) >= 40 ? 'bg-orange-100 text-orange-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>{selectedPage.seo?.seoScore ?? 'N/A'}</div>
+                      <button
+                        className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                        onClick={async () => {
+                          try {
+                            await checkSEO(selectedPage._id)
+                            alert('SEO analysis complete!')
+                          } catch (err) {
+                            console.error('SEO check error:', err)
+                            alert(`Failed to analyze SEO: ${err.message}`)
+                          }
+                        }}
+                      >Analyze</button>
+                    </div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 mb-1">Focus keyword</div>

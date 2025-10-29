@@ -228,4 +228,24 @@ For issues or questions, contact the development team.
 
 ---
 
-**Built with ❤️ for Echo5 SEO Agency**
+**Built By Developers | Echo5 Digital SEO Agency**
+
+
+## Changelog
+
+**29-10-2025**
+
+-When you save a focus keyword in the page view, it automatically becomes a primary keyword for that client
+-You can track which pages target which keywords
+-The keyword appears in the client's keyword list
+-Multiple pages can target the same keyword
+
+-Reduced batch sizes: From 5 to 3 concurrent requests (high memory tier)
+-Increased delays:
+--Batch delay increased from 1000ms to 2000ms
+--Group delay increased from 500ms to 2000ms
+-Added random delay of 500-1500ms before each page request
+-Added random delay of 1-3 seconds for content refresh
+-Rotating user agents: Uses 5 different realistic browser user agents instead of identifying as a bot
+-More realistic headers: Added Accept, Accept-Language, etc. to look like a real browser
+- fixed the keyword creation to use the correct schema fields
