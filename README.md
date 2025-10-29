@@ -261,4 +261,7 @@ For issues or questions, contact the development team.
 ✅ Structured data (JSON-LD)
 ✅ Social meta tags (Open Graph, Twitter Cards)
 
+Fix:The page will now correctly show the real SEO title
+Feat:added pdf export suggstions
+
 
