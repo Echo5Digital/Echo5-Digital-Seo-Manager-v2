@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import jsPDF from 'jspdf'
 
 export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClose, onAssign }) {
   const [localSuggestions, setLocalSuggestions] = useState([])
@@ -26,11 +27,15 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
       <html>
       <head>
         <meta charset="UTF-8">
-        <title>Echo5 Digital AI-Powered SEO Fix Suggestions</title>
+        <title>Echo5 Digital AI-Powered SEO Fix Suggestions - ${new Date().toLocaleDateString()}</title>
         <style>
+          @media print {
+            @page { margin: 0.5in; }
+            body { margin: 0; }
+          }
           body { font-family: Arial, sans-serif; margin: 40px; color: #333; line-height: 1.6; }
           h1 { color: #5b21b6; border-bottom: 3px solid #5b21b6; padding-bottom: 10px; }
-          h2 { color: #4c1d95; margin-top: 30px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
+          h2 { color: #4c1d95; margin-top: 30px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; page-break-after: avoid; }
           .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 30px 0; }
           .stat-card { padding: 15px; border-radius: 8px; text-align: center; }
           .stat-card.high { background: #fef2f2; border: 2px solid #fca5a5; }
@@ -47,7 +52,42 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
           .fix.high { border-color: #dc2626; background: #fef2f2; }
           .fix.medium { border-color: #ca8a04; background: #fefce8; }
           .fix.low { border-color: #2563eb; background: #eff6ff; }
-          .fix-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+          .fix-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+          .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
+          .badge.category { background: #ddd6fe; color: #5b21b6; }
+          .badge.impact { background: #fce7f3; color: #be123c; }
+          .badge.priority { background: #fee2e2; color: #991b1b; }
+          .badge.time { background: #e0f2fe; color: #075985; }
+          .fix-title { font-size: 16px; font-weight: bold; color: #1f2937; margin: 10px 0; }
+          .fix-section { margin: 12px 0; }
+          .fix-label { font-weight: bold; color: #4b5563; font-size: 13px; margin-bottom: 4px; }
+          .fix-value { background: white; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; font-family: 'Courier New', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+          .fix-value.current { border-left: 4px solid #ef4444; }
+          .fix-value.suggested { border-left: 4px solid #10b981; }
+          .reasoning { font-style: italic; color: #6b7280; padding: 10px; background: #f3f4f6; border-radius: 6px; }
+          .footer { margin-top: 50px; padding-top: 20px; border-top: 2px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; }
+          .print-note { background: #fef3c7; border: 2px solid #fbbf24; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; }
+          @media print {
+            .print-note { display: none; }
+          }
+        </style>
+        <script>
+          window.onload = function() {
+            // Auto-trigger print dialog to save as PDF
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          }
+        </script>
+      </head>
+      <body>
+        <div class="print-note">
+          <strong>📄 How to Save as PDF:</strong><br>
+          In the print dialog, select "Save as PDF" or "Microsoft Print to PDF" as your printer, then click Save.
+        </div>
+        
+        <h1>Echo5 Digital AI-Powered SEO Fix Suggestions</h1>
+        <p style="color: #6b7280; font-size: 14px;">Generated on ${new Date().toLocaleString()}</p>
           .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
           .badge.category { background: #ddd6fe; color: #5b21b6; }
           .badge.impact { background: #fce7f3; color: #be123c; }
@@ -190,11 +230,256 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
       </html>
     `
 
-    const printWindow = window.open('', '_blank')
-    printWindow.document.write(html)
-    printWindow.document.close()
-    setTimeout(() => printWindow.print(), 500)
-  }
+    // Generate PDF directly using jsPDF
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 15
+    const maxWidth = pageWidth - (margin * 2)
+    let yPos = margin
+
+    // Helper to check if we need a new page
+    const checkNewPage = (requiredSpace) => {
+      if (yPos + requiredSpace > pageHeight - margin) {
+        doc.addPage()
+        yPos = margin
+      }
+    }
+
+    // Add Echo5 logo
+    try {
+      const logoImg = new Image()
+      logoImg.src = '/echo5-logo.png'
+      
+      // Wait for image to load, then add to PDF
+      logoImg.onload = () => {
+        // Add logo at top center
+        const logoWidth = 40
+        const logoHeight = 20
+        const logoX = (pageWidth - logoWidth) / 2
+        doc.addImage(logoImg, 'PNG', logoX, 5, logoWidth, logoHeight)
+        
+        // Continue with the rest of the PDF generation
+        generatePDFContent()
+      }
+      
+      // Fallback if image fails to load
+      logoImg.onerror = () => {
+        generatePDFContent()
+      }
+    } catch (err) {
+      console.error('Error loading logo:', err)
+      generatePDFContent()
+    }
+
+    // Function to generate the PDF content
+    const generatePDFContent = () => {
+      yPos = margin + 10 // Start after logo with margin
+
+      // Title with background
+      doc.setFillColor(91, 33, 182)
+      doc.rect(0, 27, pageWidth, 15, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(16)
+      doc.setFont('helvetica', 'bold')
+      doc.text('AI-Powered SEO Fix Suggestions', pageWidth / 2, 36, { align: 'center' })
+      
+      yPos = 47
+
+      // Date
+      doc.setTextColor(100, 100, 100)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Generated on ${new Date().toLocaleString()}`, margin, yPos)
+      yPos += 10
+
+      // Stats boxes
+      const statBoxWidth = (maxWidth - 9) / 4
+      const statY = yPos
+      
+      // High Priority
+      doc.setFillColor(254, 242, 242)
+      doc.setDrawColor(252, 165, 165)
+      doc.rect(margin, statY, statBoxWidth, 20, 'FD')
+      doc.setTextColor(220, 38, 38)
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text(highPriorityFixes.length.toString(), margin + statBoxWidth/2, statY + 12, { align: 'center' })
+      doc.setFontSize(8)
+      doc.setTextColor(100, 100, 100)
+      doc.text('High Priority', margin + statBoxWidth/2, statY + 17, { align: 'center' })
+
+      // Medium Priority
+      doc.setFillColor(254, 252, 232)
+      doc.setDrawColor(253, 224, 71)
+      doc.rect(margin + statBoxWidth + 3, statY, statBoxWidth, 20, 'FD')
+      doc.setTextColor(202, 138, 4)
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text(mediumPriorityFixes.length.toString(), margin + statBoxWidth + 3 + statBoxWidth/2, statY + 12, { align: 'center' })
+      doc.setFontSize(8)
+      doc.setTextColor(100, 100, 100)
+      doc.text('Medium Priority', margin + statBoxWidth + 3 + statBoxWidth/2, statY + 17, { align: 'center' })
+
+      // Low Priority
+      doc.setFillColor(239, 246, 255)
+      doc.setDrawColor(147, 197, 253)
+      doc.rect(margin + (statBoxWidth + 3) * 2, statY, statBoxWidth, 20, 'FD')
+      doc.setTextColor(37, 99, 235)
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text(lowPriorityFixes.length.toString(), margin + (statBoxWidth + 3) * 2 + statBoxWidth/2, statY + 12, { align: 'center' })
+      doc.setFontSize(8)
+      doc.setTextColor(100, 100, 100)
+      doc.text('Low Priority', margin + (statBoxWidth + 3) * 2 + statBoxWidth/2, statY + 17, { align: 'center' })
+
+      // Total
+      doc.setFillColor(240, 253, 244)
+      doc.setDrawColor(134, 239, 172)
+      doc.rect(margin + (statBoxWidth + 3) * 3, statY, statBoxWidth, 20, 'FD')
+      doc.setTextColor(22, 163, 74)
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text(localSuggestions.length.toString(), margin + (statBoxWidth + 3) * 3 + statBoxWidth/2, statY + 12, { align: 'center' })
+      doc.setFontSize(8)
+      doc.setTextColor(100, 100, 100)
+      doc.text('Total Fixes', margin + (statBoxWidth + 3) * 3 + statBoxWidth/2, statY + 17, { align: 'center' })
+
+      yPos = statY + 30
+
+      // Function to add a fix to PDF
+      const addFix = (fix, index, bgColor, borderColor) => {
+          checkNewPage(60)
+        
+        const boxStartY = yPos
+        yPos += 5
+
+        // Category badge
+        doc.setFillColor(221, 214, 254)
+        doc.roundedRect(margin, yPos, 30, 5, 1, 1, 'F')
+        doc.setTextColor(91, 33, 182)
+        doc.setFontSize(8)
+        doc.setFont('helvetica', 'bold')
+        doc.text(fix.category, margin + 15, yPos + 3.5, { align: 'center' })
+        yPos += 8
+
+        // Title
+        doc.setTextColor(31, 41, 55)
+        doc.setFontSize(11)
+        doc.setFont('helvetica', 'bold')
+        const titleText = `${index + 1}. ${fix.issue}`
+        const titleLines = doc.splitTextToSize(titleText, maxWidth - 10)
+        doc.text(titleLines, margin + 5, yPos)
+        yPos += titleLines.length * 5 + 3
+
+        // Current Value
+        doc.setTextColor(75, 85, 99)
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Current Value:', margin + 5, yPos)
+        yPos += 4
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(50, 50, 50)
+        doc.setFontSize(8)
+        const currentLines = doc.splitTextToSize(fix.currentValue || 'Not set', maxWidth - 10)
+        doc.text(currentLines, margin + 5, yPos)
+        yPos += currentLines.length * 3.5 + 3
+
+        // Suggested Value
+        doc.setTextColor(22, 163, 74)
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Suggested Fix:', margin + 5, yPos)
+        yPos += 4
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(30, 30, 30)
+        doc.setFontSize(8)
+        const suggestedLines = doc.splitTextToSize(fix.suggestedValue, maxWidth - 10)
+        doc.text(suggestedLines, margin + 5, yPos)
+        yPos += suggestedLines.length * 3.5 + 3
+
+        // Reasoning
+        doc.setTextColor(75, 85, 99)
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Why This Matters:', margin + 5, yPos)
+        yPos += 4
+        doc.setFont('helvetica', 'italic')
+        doc.setTextColor(100, 100, 100)
+        doc.setFontSize(8)
+        const reasonLines = doc.splitTextToSize(fix.reasoning, maxWidth - 10)
+        doc.text(reasonLines, margin + 5, yPos)
+        yPos += reasonLines.length * 3.5 + 3
+
+        // Draw colored left border
+        doc.setDrawColor(...borderColor)
+        doc.setLineWidth(2)
+        doc.line(margin, boxStartY, margin, yPos)
+
+        yPos += 5
+      }
+
+      // Add High Priority Fixes
+      if (highPriorityFixes.length > 0) {
+        checkNewPage(15)
+        doc.setFillColor(220, 38, 38)
+        doc.rect(margin, yPos, maxWidth, 8, 'F')
+        doc.setTextColor(255, 255, 255)
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        doc.text(`High Priority Fixes (${highPriorityFixes.length})`, margin + 3, yPos + 5.5)
+        yPos += 12
+
+        highPriorityFixes.forEach((fix, idx) => {
+          addFix(fix, idx, [254, 242, 242], [220, 38, 38])
+        })
+      }
+
+      // Add Medium Priority Fixes
+      if (mediumPriorityFixes.length > 0) {
+        checkNewPage(15)
+        doc.setFillColor(202, 138, 4)
+        doc.rect(margin, yPos, maxWidth, 8, 'F')
+        doc.setTextColor(255, 255, 255)
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        doc.text(`Medium Priority Fixes (${mediumPriorityFixes.length})`, margin + 3, yPos + 5.5)
+        yPos += 12
+
+        mediumPriorityFixes.forEach((fix, idx) => {
+          addFix(fix, idx, [254, 252, 232], [202, 138, 4])
+        })
+      }
+
+      // Add Low Priority Fixes
+      if (lowPriorityFixes.length > 0) {
+        checkNewPage(15)
+        doc.setFillColor(37, 99, 235)
+        doc.rect(margin, yPos, maxWidth, 8, 'F')
+        doc.setTextColor(255, 255, 255)
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        doc.text(`Low Priority Fixes (${lowPriorityFixes.length})`, margin + 3, yPos + 5.5)
+        yPos += 12
+
+        lowPriorityFixes.forEach((fix, idx) => {
+          addFix(fix, idx, [239, 246, 255], [37, 99, 235])
+        })
+      }
+
+      // Footer on last page
+      doc.setTextColor(150, 150, 150)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      const footerY = pageHeight - 10
+      doc.text('Echo5 Digital SEO Operations - AI-Powered Analysis', pageWidth / 2, footerY, { align: 'center' })
+      doc.text(`© Echo5 Digital ${new Date().getFullYear()}`, pageWidth / 2, footerY + 4, { align: 'center' })
+
+      // Save the PDF - direct download!
+      const fileName = `SEO-Fix-Suggestions-${new Date().toISOString().split('T')[0]}.pdf`
+      doc.save(fileName)
+    } // End of generatePDFContent function
+  } // End of exportToPDF function
 
   if (!isOpen) return null
 
