@@ -3,6 +3,30 @@ const cheerio = require('cheerio');
 const { logger } = require('../utils/logger');
 const Page = require('../models/Page.model');
 
+// Rotating user agents to avoid detection
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0'
+];
+
+let userAgentIndex = 0;
+
+// Get next user agent in rotation
+function getNextUserAgent() {
+  const ua = USER_AGENTS[userAgentIndex];
+  userAgentIndex = (userAgentIndex + 1) % USER_AGENTS.length;
+  return ua;
+}
+
+// Random delay helper to add jitter
+async function randomDelay(min = 1000, max = 3000) {
+  const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+  await new Promise(resolve => setTimeout(resolve, delay));
+}
+
 /**
  * Site Audit Service - Crawls and analyzes websites for SEO issues
  */
@@ -19,8 +43,8 @@ class AuditService {
         tier: 'high',
         maxDiscovery: 200,
         maxAnalysis: 100,
-        batchSize: 5,
-        batchDelay: 1000,
+        batchSize: 3,      // Reduced from 5 to prevent IP blocking
+        batchDelay: 2000,  // Increased from 1000ms to 2000ms
         enableDeepAnalysis: true
       };
     } else if (totalMemoryMB >= 1500) {
@@ -29,8 +53,8 @@ class AuditService {
         tier: 'medium',
         maxDiscovery: 100,
         maxAnalysis: 50,
-        batchSize: 3,
-        batchDelay: 1500,
+        batchSize: 2,      // Reduced from 3
+        batchDelay: 3000,  // Increased from 1500ms to 3000ms
         enableDeepAnalysis: true
       };
     } else {
@@ -39,8 +63,8 @@ class AuditService {
         tier: 'low',
         maxDiscovery: 50,
         maxAnalysis: 25,
-        batchSize: 2,
-        batchDelay: 2000,
+        batchSize: 1,      // Reduced from 2
+        batchDelay: 4000,  // Increased from 2000ms to 4000ms
         enableDeepAnalysis: false // Skip some heavy operations
       };
     }
@@ -176,9 +200,9 @@ class AuditService {
           global.gc();
         }
         
-        // Small delay between groups to prevent overwhelming the target server
+        // Delay between groups to prevent IP blocking
         if (groupIndex + parallelBatches < allBatches.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Increased from 500ms to 2000ms
         }
       }
       
@@ -765,10 +789,18 @@ class AuditService {
    */
   async analyzePageSEO(url, baseUrl, enableDeepAnalysis = true) {
     try {
+      // Add random delay before making request to avoid rate limiting
+      await randomDelay(500, 1500);
+      
       const response = await axios.get(url, { 
-        timeout: 20000, // Increased to 20 seconds
+        timeout: 20000,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; SEO-Audit-Bot/1.0; +https://seo-audit.example.com)'
+          'User-Agent': getNextUserAgent(), // Use rotating user agents
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1'
         },
         validateStatus: () => true, // Accept all status codes
         maxRedirects: 5

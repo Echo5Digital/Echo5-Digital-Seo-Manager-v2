@@ -808,7 +808,26 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     const url = page.url
     if (!url) return res.status(400).json({ status: 'error', message: 'Page URL missing' })
 
-    const response = await axios.get(url, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEO-Tool/1.0)' } })
+    // Add random delay to avoid rate limiting
+    const delay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds
+    await new Promise(resolve => setTimeout(resolve, delay));
+
+    // Rotating user agents
+    const userAgents = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
+    ];
+    const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+
+    const response = await axios.get(url, { 
+      timeout: 15000, 
+      headers: { 
+        'User-Agent': userAgent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5'
+      } 
+    })
     const $ = cheerio.load(response.data)
 
     // Remove scripts, styles, and other non-content elements
