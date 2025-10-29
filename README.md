@@ -235,6 +235,54 @@ For issues or questions, contact the development team.
 
 **29-10-2025**
 
+### 🔐 Google OAuth Authentication
+- Implemented Google Sign-In with automatic Staff role assignment
+- Added `googleId` and `picture` fields to User model
+- Integrated Passport.js with Google OAuth 2.0 strategy
+- Auto-links Google accounts to existing email addresses
+- New users signing in with Google automatically get "Staff" role
+- JWT token generation on successful OAuth authentication
+- Production-ready OAuth flow with Render and Vercel deployment support
+
+### 🔍 Keyword Planner Feature
+- Built complete keyword research tool with AI-powered metrics
+- Client selection dropdown with real-time data loading
+- Location autocomplete using OpenStreetMap Nominatim API
+- Real-time location suggestions with formatted hierarchy (city, state, country)
+- AI-generated keyword metrics: search volume, competition, CPC, intent, difficulty
+- Location-aware estimates (US, India, regional data)
+- 10 related keyword ideas with clickable suggestions
+- Added to sidebar navigation with LightBulb icon
+- Zustand store integration for state management
+- Backend API route: `/api/keyword-planner/analyze`
+
+### 🎨 Enhanced Content Display
+- Color-coded HTML element styling (H2=blue, H3=purple, H4=green)
+- Left border highlights with background colors
+- Proper typography hierarchy and spacing
+- Bullet points for list items
+- "Refresh content" button always visible
+
+### 🔧 Bug Fixes & Improvements
+- Fixed Passport strategy initialization order (logger before configuration)
+- Fixed Google OAuth redirect URI mismatch errors
+- Fixed frontend API base URL configuration for production
+- Fixed client dropdown loading with proper Zustand selectors
+- Moved Passport configuration to server.js for proper initialization
+- Added conditional password requirement for Google OAuth users
+
+### 📦 Dependencies Added
+- `passport` - Authentication middleware
+- `passport-google-oauth20` - Google OAuth strategy
+
+### 🚀 Deployment Configuration
+- Added `BACKEND_URL` environment variable
+- Configured Google Cloud Console redirect URIs
+- Updated Vercel environment variables for production
+- Fixed Render environment variable naming (`GOOGLE_CLIENT_ID` without 's')
+
+### Previous Updates
+
 -When you save a focus keyword in the page view, it automatically becomes a primary keyword for that client
 -You can track which pages target which keywords
 -The keyword appears in the client's keyword list

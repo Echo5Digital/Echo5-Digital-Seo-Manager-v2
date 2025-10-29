@@ -5,6 +5,7 @@ import useNotificationsStore from '../store/notifications'
 import { 
   BellIcon, 
   UserCircleIcon, 
+  ArrowRightOnRectangleIcon,
   ClipboardDocumentListIcon,
   ArrowPathIcon,
   CheckCircleIcon,
@@ -204,14 +205,32 @@ export default function Navbar() {
                 <p className="text-sm font-medium text-gray-700">{user?.name || 'User'}</p>
                 <p className="text-xs text-gray-500">{user?.role || 'Staff'}</p>
               </div>
+              
+              {/* User Avatar */}
               <div className="relative">
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
-                >
-                  <UserCircleIcon className="h-6 w-6 text-gray-600" />
-                </button>
+                {user?.picture ? (
+                  <img
+                    src={user.picture}
+                    alt={user.name}
+                    className="w-10 h-10 rounded-full border-2 border-gray-300"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-200">
+                    <UserCircleIcon className="h-6 w-6 text-gray-600" />
+                  </div>
+                )}
               </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Logout"
+              >
+                <ArrowRightOnRectangleIcon className="h-5 w-5" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
             </div>
           </div>
         </div>
