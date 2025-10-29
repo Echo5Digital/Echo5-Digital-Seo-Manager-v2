@@ -612,38 +612,84 @@ The alt text should:
    */
   async generateSEOFixSuggestions(pageData, seoReport) {
     try {
+      // Extract current SEO data
+      const currentTitle = pageData.title || 'Not set';
+      const currentMeta = pageData.metaDescription || 'Not set';
+      const currentH1 = pageData.h1 || 'Not set';
+      const focusKeyword = pageData.seo?.focusKeyword || 'Not set';
+      const wordCount = pageData.content?.wordCount || 0;
+      const internalLinks = pageData.content?.links?.internal || 0;
+      const externalLinks = pageData.content?.links?.external || 0;
+      const totalImages = Array.isArray(pageData.images) ? pageData.images.length : 0;
+      const imagesWithoutAlt = totalImages > 0 ? pageData.images?.filter(img => !img.alt || img.alt.trim() === '').length : 0;
+      const canonical = pageData.seo?.canonical || 'Not set';
+      const robots = pageData.seo?.robots || 'index,follow';
+      const hasOG = pageData.openGraph?.title && pageData.openGraph?.description;
+      const hasTwitterCard = pageData.twitter?.card && pageData.twitter?.title;
+      const hasStructuredData = pageData.structuredData?.schema && Object.keys(pageData.structuredData.schema).length > 0;
+
       const prompt = `You are a world-class SEO specialist and technical SEO expert. Analyze this page and provide ACTUAL, READY-TO-USE content fixes - NOT instructions.
 
 Page Information:
-- Title: ${pageData.title || 'Not set'}
+- Title: ${currentTitle} (Length: ${currentTitle.length} chars)
 - URL: ${pageData.url || 'Not set'}
-- Meta Description: ${pageData.metaDescription || 'Not set'}
-- H1: ${pageData.content?.headings?.h1 || 'Not set'}
-- Focus Keyword: ${pageData.seo?.focusKeyword || 'Not set'}
+- Meta Description: ${currentMeta} (Length: ${currentMeta.length} chars)
+- H1: ${currentH1}
+- Focus Keyword: ${focusKeyword}
 - Secondary Keywords: ${pageData.seo?.secondaryKeywords?.join(', ') || 'None'}
-- Content Sample: ${pageData.content?.sample || 'Not available'}
-- Content Length: ${pageData.content?.wordCount || 0} words
+- Word Count: ${wordCount} words
+- Internal Links: ${internalLinks}
+- External Links: ${externalLinks}
+- Images: ${totalImages} total, ${imagesWithoutAlt} without alt tags
+- Canonical URL: ${canonical}
+- Robots Meta: ${robots}
+- Open Graph Tags: ${hasOG ? 'Present' : 'Missing'}
+- Twitter Card: ${hasTwitterCard ? 'Present' : 'Missing'}
+- Structured Data: ${hasStructuredData ? 'Present' : 'Missing'}
 - Current SEO Score: ${seoReport.score}/100
 
-SEO Analysis Issues:
-${JSON.stringify(seoReport.issues, null, 2)}
+Content Sample:
+${pageData.content?.sample ? pageData.content.sample.substring(0, 500) + '...' : 'Not available'}
+
+SEO Analysis Results:
+Issues Found: ${JSON.stringify(seoReport.issues, null, 2)}
+Passed Checks: ${JSON.stringify(seoReport.checks, null, 2)}
+Recommendations: ${JSON.stringify(seoReport.recommendations, null, 2)}
 
 CRITICAL INSTRUCTIONS:
 - DO NOT give instructions like "Include keyword in content" or "Add alt text to images"
 - INSTEAD provide the ACTUAL rewritten content, the EXACT new title, the SPECIFIC alt text, etc.
-- For titles: Write the complete optimized title ready to copy-paste
-- For meta descriptions: Write the complete optimized meta description ready to use
-- For H1s: Write the complete optimized H1 heading
-- For content: Write the actual rewritten paragraph or section with keywords included
-- For images: Write the exact alt text for each image
-- For links: Provide the exact anchor text to use
+- For titles: Write the complete optimized title ready to copy-paste (30-60 chars, include focus keyword)
+- For meta descriptions: Write the complete optimized meta description ready to use (120-160 chars, include focus keyword)
+- For H1s: Write the complete optimized H1 heading (include focus keyword naturally)
+- For content: Write the actual rewritten paragraph or section with keywords included naturally (aim for 0.5-2.5% keyword density)
+- For images: Write the exact alt text for each image (descriptive, includes keyword where relevant)
+- For internal links: Provide exact anchor text with target URLs (3-10 links recommended)
+- For external links: Suggest authoritative sources with exact anchor text
+- For technical SEO: Provide exact canonical URL, robots meta values, viewport meta tag
+- For structured data: Write the complete JSON-LD schema markup ready to implement
+- For social meta: Write exact Open Graph and Twitter Card meta tag values
+
+SEO OPTIMIZATION CHECKLIST - Address these if failing:
+✅ Title optimization: 30-60 chars, contains focus keyword near the beginning
+✅ Meta description: 120-160 chars, contains focus keyword, compelling call-to-action
+✅ H1 heading: One H1 per page, contains focus keyword, clear and descriptive
+✅ Content quality: 300+ words minimum, focus keyword density 0.5-2.5%, natural language
+✅ Images with alt tags: All images must have descriptive alt text, include keyword where relevant
+✅ Internal links: 3-10 contextual internal links with descriptive anchor text
+✅ External links: 2-5 links to authoritative sources for credibility
+✅ Technical SEO: HTTPS enabled, mobile-friendly viewport, canonical URL set, robots meta allows indexing
+✅ Structured data: JSON-LD schema markup appropriate for page type (Article, Product, etc.)
+✅ Social meta tags: Open Graph (og:title, og:description, og:image) and Twitter Card tags
 
 Example of GOOD suggestions:
-- Title: "currentValue": "Insurance", "suggestedValue": "Comprehensive Insurance Coverage Plans | Get Quotes Online 2024"
-- Meta: "currentValue": "Learn about insurance", "suggestedValue": "Compare insurance plans and get instant quotes. Expert guidance on health, auto, and life insurance coverage. Save up to 40% on premiums."
-- Content: "currentValue": "We offer various plans", "suggestedValue": "We offer comprehensive insurance plans tailored to your needs, including health insurance, auto insurance, and life insurance coverage with competitive rates."
+- Title: {"category": "Title", "issue": "Title too short (15 chars)", "currentValue": "Insurance", "suggestedValue": "Comprehensive Insurance Coverage Plans | Get Quotes 2024", "reasoning": "Optimized to 56 chars, includes focus keyword at start, adds value proposition and year for freshness", "impact": "High", "estimatedTime": "5min", "priority": 10}
+- Meta: {"category": "Meta", "issue": "Meta description missing", "currentValue": "Not set", "suggestedValue": "Compare insurance plans and get instant quotes online. Expert guidance on health, auto, and life insurance coverage. Save up to 40% on premiums today.", "reasoning": "150 chars, includes focus keyword early, highlights benefits with call-to-action", "impact": "High", "estimatedTime": "5min", "priority": 9}
+- H1: {"category": "Content", "issue": "Focus keyword not in H1", "currentValue": "Welcome to Our Site", "suggestedValue": "Affordable Insurance Plans for Every Need", "reasoning": "Includes focus keyword naturally, clear value proposition, engages readers", "impact": "High", "estimatedTime": "5min", "priority": 9}
+- Images: {"category": "Images", "issue": "3 images without alt tags", "currentValue": "", "suggestedValue": "Alt text for hero image: 'Family reviewing insurance coverage options with advisor'\nAlt text for icon 1: 'Health insurance coverage icon'\nAlt text for icon 2: 'Auto insurance policy document'", "reasoning": "Descriptive alt text improves accessibility and SEO, includes relevant keywords naturally", "impact": "Medium", "estimatedTime": "15min", "priority": 7}
+- Structured Data: {"category": "Technical", "issue": "Missing structured data", "currentValue": "None", "suggestedValue": "{\n  \"@context\": \"https://schema.org\",\n  \"@type\": \"Service\",\n  \"name\": \"Insurance Coverage Plans\",\n  \"description\": \"Comprehensive insurance solutions...\",\n  \"provider\": {\n    \"@type\": \"Organization\",\n    \"name\": \"Your Company\"\n  }\n}", "reasoning": "Service schema helps Google understand page content and enables rich snippets", "impact": "Medium", "estimatedTime": "30min", "priority": 6}
 
-For EACH issue found, provide a fix in this exact JSON format:
+For EACH issue, recommendation, or optimization opportunity found, provide a fix in this exact JSON format:
 {
   "category": "Title|Meta|Content|H1|Images|Links|Technical|Keywords",
   "issue": "Brief description of the issue",

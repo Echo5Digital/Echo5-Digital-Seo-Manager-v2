@@ -15,6 +15,187 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
     }
   }, [suggestions])
 
+  // Export suggestions as PDF
+  const exportToPDF = () => {
+    const highPriorityFixes = localSuggestions.filter(s => s.priority >= 8)
+    const mediumPriorityFixes = localSuggestions.filter(s => s.priority >= 5 && s.priority < 8)
+    const lowPriorityFixes = localSuggestions.filter(s => s.priority < 5)
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Echo5 Digital AI-Powered SEO Fix Suggestions</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; color: #333; line-height: 1.6; }
+          h1 { color: #5b21b6; border-bottom: 3px solid #5b21b6; padding-bottom: 10px; }
+          h2 { color: #4c1d95; margin-top: 30px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
+          .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 30px 0; }
+          .stat-card { padding: 15px; border-radius: 8px; text-align: center; }
+          .stat-card.high { background: #fef2f2; border: 2px solid #fca5a5; }
+          .stat-card.medium { background: #fefce8; border: 2px solid #fde047; }
+          .stat-card.low { background: #eff6ff; border: 2px solid #93c5fd; }
+          .stat-card.selected { background: #f0fdf4; border: 2px solid #86efac; }
+          .stat-label { font-size: 12px; color: #6b7280; margin-bottom: 5px; }
+          .stat-value { font-size: 32px; font-weight: bold; }
+          .stat-card.high .stat-value { color: #dc2626; }
+          .stat-card.medium .stat-value { color: #ca8a04; }
+          .stat-card.low .stat-value { color: #2563eb; }
+          .stat-card.selected .stat-value { color: #16a34a; }
+          .fix { padding: 20px; margin: 15px 0; border-left: 5px solid #6366f1; background: #f9fafb; page-break-inside: avoid; }
+          .fix.high { border-color: #dc2626; background: #fef2f2; }
+          .fix.medium { border-color: #ca8a04; background: #fefce8; }
+          .fix.low { border-color: #2563eb; background: #eff6ff; }
+          .fix-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+          .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; }
+          .badge.category { background: #ddd6fe; color: #5b21b6; }
+          .badge.impact { background: #fce7f3; color: #be123c; }
+          .badge.priority { background: #fee2e2; color: #991b1b; }
+          .badge.time { background: #e0f2fe; color: #075985; }
+          .fix-title { font-size: 16px; font-weight: bold; color: #1f2937; margin: 10px 0; }
+          .fix-section { margin: 12px 0; }
+          .fix-label { font-weight: bold; color: #4b5563; font-size: 13px; margin-bottom: 4px; }
+          .fix-value { background: white; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; font-family: 'Courier New', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+          .fix-value.current { border-left: 4px solid #ef4444; }
+          .fix-value.suggested { border-left: 4px solid #10b981; }
+          .reasoning { font-style: italic; color: #6b7280; padding: 10px; background: #f3f4f6; border-radius: 6px; }
+          .footer { margin-top: 50px; padding-top: 20px; border-top: 2px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; }
+          @media print {
+            .fix { page-break-inside: avoid; }
+          }
+        </style>
+      </head>
+      <body>
+        <div style="align-items: center; justify-content: center; display: flex;">
+        <img src="/echo5-logo.png" alt="Echo5 Logo" height="80" />
+        </div>
+        <h1><span style="align-items: center; justify-content: center; display: flex;">Echo5 Digital AI-Powered SEO Fix Suggestions</span></h1>
+        
+        <div class="stats">
+          <div class="stat-card high">
+            <div class="stat-label">High Priority</div>
+            <div class="stat-value">${highPriorityFixes.length}</div>
+          </div>
+          <div class="stat-card medium">
+            <div class="stat-label">Medium Priority</div>
+            <div class="stat-value">${mediumPriorityFixes.length}</div>
+          </div>
+          <div class="stat-card low">
+            <div class="stat-label">Low Priority</div>
+            <div class="stat-value">${lowPriorityFixes.length}</div>
+          </div>
+          <div class="stat-card selected">
+            <div class="stat-label">Total Suggestions</div>
+            <div class="stat-value">${localSuggestions.length}</div>
+          </div>
+        </div>
+
+        ${highPriorityFixes.length > 0 ? `
+        <h2>🔴 High Priority Fixes (${highPriorityFixes.length})</h2>
+        ${highPriorityFixes.map((fix, idx) => `
+          <div class="fix high">
+            <div class="fix-header">
+              <span class="badge category">${fix.category}</span>
+              <span class="badge impact">Impact: ${fix.impact}</span>
+              <span class="badge priority">Priority: ${fix.priority}/10</span>
+              <span class="badge time">⏱ ${fix.estimatedTime}</span>
+            </div>
+            <div class="fix-title">${idx + 1}. ${fix.issue}</div>
+            
+            <div class="fix-section">
+              <div class="fix-label">Current Value:</div>
+              <div class="fix-value current">${fix.currentValue || 'Not set'}</div>
+            </div>
+            
+            <div class="fix-section">
+              <div class="fix-label">✅ Suggested Fix (Ready to Use):</div>
+              <div class="fix-value suggested">${fix.suggestedValue}</div>
+            </div>
+            
+            <div class="fix-section">
+              <div class="fix-label">Why This Matters:</div>
+              <div class="reasoning">${fix.reasoning}</div>
+            </div>
+          </div>
+        `).join('')}
+        ` : ''}
+
+        ${mediumPriorityFixes.length > 0 ? `
+        <h2>🟡 Medium Priority Fixes (${mediumPriorityFixes.length})</h2>
+        ${mediumPriorityFixes.map((fix, idx) => `
+          <div class="fix medium">
+            <div class="fix-header">
+              <span class="badge category">${fix.category}</span>
+              <span class="badge impact">Impact: ${fix.impact}</span>
+              <span class="badge priority">Priority: ${fix.priority}/10</span>
+              <span class="badge time">⏱ ${fix.estimatedTime}</span>
+            </div>
+            <div class="fix-title">${idx + 1}. ${fix.issue}</div>
+            
+            <div class="fix-section">
+              <div class="fix-label">Current Value:</div>
+              <div class="fix-value current">${fix.currentValue || 'Not set'}</div>
+            </div>
+            
+            <div class="fix-section">
+              <div class="fix-label">✅ Suggested Fix (Ready to Use):</div>
+              <div class="fix-value suggested">${fix.suggestedValue}</div>
+            </div>
+            
+            <div class="fix-section">
+              <div class="fix-label">Why This Matters:</div>
+              <div class="reasoning">${fix.reasoning}</div>
+            </div>
+          </div>
+        `).join('')}
+        ` : ''}
+
+        ${lowPriorityFixes.length > 0 ? `
+        <h2>🔵 Low Priority Fixes (${lowPriorityFixes.length})</h2>
+        ${lowPriorityFixes.map((fix, idx) => `
+          <div class="fix low">
+            <div class="fix-header">
+              <span class="badge category">${fix.category}</span>
+              <span class="badge impact">Impact: ${fix.impact}</span>
+              <span class="badge priority">Priority: ${fix.priority}/10</span>
+              <span class="badge time">⏱ ${fix.estimatedTime}</span>
+            </div>
+            <div class="fix-title">${idx + 1}. ${fix.issue}</div>
+            
+            <div class="fix-section">
+              <div class="fix-label">Current Value:</div>
+              <div class="fix-value current">${fix.currentValue || 'Not set'}</div>
+            </div>
+            
+            <div class="fix-section">
+              <div class="fix-label">✅ Suggested Fix (Ready to Use):</div>
+              <div class="fix-value suggested">${fix.suggestedValue}</div>
+            </div>
+            
+            <div class="fix-section">
+              <div class="fix-label">Why This Matters:</div>
+              <div class="reasoning">${fix.reasoning}</div>
+            </div>
+          </div>
+        `).join('')}
+        ` : ''}
+
+        <div class="footer">
+          Generated by Echo5 Digital SEO Operations - AI-Powered SEO Analysis<br>
+          Generated on ${new Date().toLocaleString()}<br>
+          © Echo5 Digital ${new Date().getFullYear()} - All Rights Reserved
+        </div>
+      </body>
+      </html>
+    `
+
+    const printWindow = window.open('', '_blank')
+    printWindow.document.write(html)
+    printWindow.document.close()
+    setTimeout(() => printWindow.print(), 500)
+  }
+
   if (!isOpen) return null
 
   const highPriorityCount = localSuggestions.filter(s => s.priority >= 8).length
@@ -85,11 +266,9 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
           <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-                </svg>
+                <img src="/e5-white.png" alt="Echo5 Logo" className="w-10 h-10"/>
                 <div>
-                  <h2 className="text-2xl font-bold">AI-Powered SEO Fix Suggestions</h2>
+                  <h2 className="text-2xl font-bold">Echo5 Digital AI-Powered SEO Fix Suggestions</h2>
                   <p className="text-purple-100 text-sm mt-1">{localSuggestions.length} recommendations generated</p>
                 </div>
               </div>
@@ -233,6 +412,16 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
             </div>
             
             <div className="flex items-center space-x-3">
+              <button 
+                onClick={exportToPDF}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center space-x-2"
+                title="Export AI suggestions as PDF"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                </svg>
+                <span>Export PDF</span>
+              </button>
               <button 
                 onClick={onClose}
                 className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"

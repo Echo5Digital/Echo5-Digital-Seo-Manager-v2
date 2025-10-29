@@ -434,8 +434,13 @@ router.post('/:id/suggest-fixes', protect, async (req, res, next) => {
         title: page.title,
         url: page.url,
         metaDescription: page.metaDescription,
+        h1: page.h1,
         seo: page.seo,
         content: page.content,
+        images: page.images,
+        openGraph: page.openGraph,
+        twitter: page.twitter,
+        structuredData: page.structuredData,
       },
       seoReport
     );

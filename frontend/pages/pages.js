@@ -34,6 +34,140 @@ export default function Pages() {
 
   const selectedPage = useMemo(() => pages.find(p => p._id === selectedId), [pages, selectedId])
   
+  // Export SEO report as PDF
+  const exportToPDF = async (page) => {
+    try {
+      const seoReport = await checkSEO(page._id)
+      
+      // Create a clean HTML document for PDF
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>SEO Report - ${page.title || page.url}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+            h1 { color: #1a56db; border-bottom: 3px solid #1a56db; padding-bottom: 10px; }
+            h2 { color: #2563eb; margin-top: 30px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
+            h3 { color: #4b5563; margin-top: 20px; }
+            .score { font-size: 48px; font-weight: bold; text-align: center; margin: 20px 0; }
+            .score.excellent { color: #16a34a; }
+            .score.good { color: #ca8a04; }
+            .score.fair { color: #ea580c; }
+            .score.poor { color: #dc2626; }
+            .meta { background: #f9fafb; padding: 15px; border-left: 4px solid #2563eb; margin: 20px 0; }
+            .meta-item { margin: 8px 0; }
+            .meta-label { font-weight: bold; color: #4b5563; }
+            .issue { padding: 12px; margin: 10px 0; border-left: 4px solid #dc2626; background: #fef2f2; }
+            .issue.high { border-color: #dc2626; background: #fef2f2; }
+            .issue.medium { border-color: #ea580c; background: #fff7ed; }
+            .issue.low { border-color: #ca8a04; background: #fefce8; }
+            .check { padding: 12px; margin: 10px 0; border-left: 4px solid #16a34a; background: #f0fdf4; }
+            .recommendation { padding: 12px; margin: 10px 0; border-left: 4px solid #2563eb; background: #eff6ff; }
+            .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }
+            .stat { background: #f9fafb; padding: 15px; border-radius: 8px; text-align: center; }
+            .stat-value { font-size: 24px; font-weight: bold; color: #1a56db; }
+            .stat-label { font-size: 12px; color: #6b7280; margin-top: 5px; }
+            .severity { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+            .severity.critical { background: #dc2626; color: white; }
+            .severity.high { background: #ea580c; color: white; }
+            .severity.medium { background: #ca8a04; color: white; }
+            .severity.low { background: #eab308; color: #422006; }
+            .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <h1>SEO Analysis Report</h1>
+          
+          <div class="meta">
+            <div class="meta-item"><span class="meta-label">Page Title:</span> ${page.title || 'Not set'}</div>
+            <div class="meta-item"><span class="meta-label">URL:</span> ${page.url || 'Not set'}</div>
+            <div class="meta-item"><span class="meta-label">Generated:</span> ${new Date().toLocaleString()}</div>
+            <div class="meta-item"><span class="meta-label">Focus Keyword:</span> ${page.seo?.focusKeyword || 'Not set'}</div>
+          </div>
+
+          <h2>SEO Score</h2>
+          <div class="score ${
+            (seoReport.data?.seoReport?.score || 0) >= 80 ? 'excellent' :
+            (seoReport.data?.seoReport?.score || 0) >= 60 ? 'good' :
+            (seoReport.data?.seoReport?.score || 0) >= 40 ? 'fair' : 'poor'
+          }">${seoReport.data?.seoReport?.score || 0}/100</div>
+
+          <div class="stats">
+            <div class="stat">
+              <div class="stat-value">${page.content?.wordCount || 0}</div>
+              <div class="stat-label">Words</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">${page.content?.links?.internal || 0}</div>
+              <div class="stat-label">Internal Links</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">${Array.isArray(page.images) ? page.images.length : 0}</div>
+              <div class="stat-label">Images</div>
+            </div>
+          </div>
+
+          ${seoReport.data?.seoReport?.issues?.length > 0 ? `
+          <h2>Issues Found (${seoReport.data.seoReport.issues.length})</h2>
+          ${seoReport.data.seoReport.issues.map(issue => `
+            <div class="issue ${issue.severity}">
+              <span class="severity ${issue.severity}">${issue.severity.toUpperCase()}</span>
+              <strong>${issue.category}:</strong> ${issue.message}
+            </div>
+          `).join('')}
+          ` : ''}
+
+          ${seoReport.data?.seoReport?.checks?.length > 0 ? `
+          <h2>Passed Checks (${seoReport.data.seoReport.checks.length})</h2>
+          ${seoReport.data.seoReport.checks.map(check => `
+            <div class="check">
+              <strong>${check.category}:</strong> ${check.message}
+            </div>
+          `).join('')}
+          ` : ''}
+
+          ${seoReport.data?.seoReport?.recommendations?.length > 0 ? `
+          <h2>Recommendations (${seoReport.data.seoReport.recommendations.length})</h2>
+          ${seoReport.data.seoReport.recommendations.map(rec => `
+            <div class="recommendation">
+              <strong>${rec.category}:</strong> ${rec.message}
+            </div>
+          `).join('')}
+          ` : ''}
+
+          <h2>Page Details</h2>
+          <div class="meta">
+            <div class="meta-item"><span class="meta-label">H1:</span> ${page.h1 || 'Not set'}</div>
+            <div class="meta-item"><span class="meta-label">Meta Description:</span> ${page.metaDescription || 'Not set'}</div>
+            <div class="meta-item"><span class="meta-label">Canonical URL:</span> ${page.seo?.canonical || 'Not set'}</div>
+            <div class="meta-item"><span class="meta-label">Robots:</span> ${page.seo?.robots || 'index,follow'}</div>
+          </div>
+
+          <div class="footer">
+            Generated by Echo5 SEO Operations Platform<br>
+            © ${new Date().getFullYear()} - All Rights Reserved
+          </div>
+        </body>
+        </html>
+      `
+
+      // Create a new window with the HTML content
+      const printWindow = window.open('', '_blank')
+      printWindow.document.write(html)
+      printWindow.document.close()
+      
+      // Wait for content to load, then trigger print dialog
+      setTimeout(() => {
+        printWindow.print()
+      }, 500)
+    } catch (err) {
+      console.error('PDF export error:', err)
+      alert(`Failed to export PDF: ${err.message}`)
+    }
+  }
+  
   // Get primary keywords for the selected client
   const getPrimaryKeywordsForClient = (pageClientId) => {
     // Handle both string ID and populated object
@@ -288,6 +422,13 @@ export default function Pages() {
                           }
                         }}
                       >Analyze</button>
+                      <button
+                        className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                        onClick={() => exportToPDF(selectedPage)}
+                        title="Export SEO report as PDF"
+                      >
+                        📄 PDF
+                      </button>
                     </div>
                   </div>
                   <div>
