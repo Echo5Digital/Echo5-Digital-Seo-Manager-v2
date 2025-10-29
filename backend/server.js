@@ -13,6 +13,9 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 require('dotenv').config();
 
+// Import logger first (needed for Passport config)
+const { logger } = require('./utils/logger');
+
 // Configure Passport Google Strategy
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   const User = require('./models/User.model');
@@ -98,7 +101,6 @@ const emailService = require('./services/email.service');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
-const { logger } = require('./utils/logger');
 
 // Import jobs
 const { initScheduler } = require('./jobs/scheduler');
