@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Page = require('../models/Page.model');
+const Client = require('../models/Client.model');
+const Keyword = require('../models/Keyword.model');
 const { protect } = require('../middleware/auth');
 const aiService = require('../services/ai.service');
 const { default: mongoose } = require('mongoose');
@@ -532,6 +534,57 @@ router.patch('/:id/focus-keyword', protect, async (req, res, next) => {
     page.keywords.push(kw)
 
     await page.save()
+    
+    // Create or update primary keyword for the client
+    if (page.clientId) {
+      try {
+        // Check if this keyword already exists for the client
+        let keyword = await Keyword.findOne({ 
+          clientId: page.clientId, 
+          keyword: fk 
+        });
+        
+        if (keyword) {
+          // Keyword already exists - just log
+          console.log(`✅ Keyword "${fk}" already exists for client`);
+        } else {
+          // Create new primary keyword with correct schema fields
+          keyword = await Keyword.create({
+            clientId: page.clientId,
+            keyword: fk,
+            keywordType: 'Primary',
+            targetUrl: page.url || '',
+            status: 'Active',
+            tags: ['Priority'],
+            volume: 0,
+            competition: 'Medium',
+            intent: 'Informational',
+            addedBy: req.user._id
+          });
+          
+          // Also add to client's primaryKeywords array
+          await Client.findByIdAndUpdate(
+            page.clientId,
+            { 
+              $addToSet: { 
+                primaryKeywords: {
+                  keyword: fk,
+                  priority: 1,
+                  targetLocation: '',
+                  notes: `Auto-created from page: ${page.url || page.title}`
+                }
+              }
+            }
+          );
+          
+          console.log(`✅ Created new primary keyword "${fk}" for client`);
+        }
+      } catch (keywordError) {
+        console.error('Error creating/updating keyword:', keywordError);
+        // Don't fail the whole request if keyword creation fails
+      }
+    }
+    
     res.json({ status: 'success', data: { page, keyword: kw } })
   } catch (error) {
     next(error)

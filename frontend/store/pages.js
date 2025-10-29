@@ -64,6 +64,11 @@ const usePagesStore = create((set, get) => ({
         set(state => ({
           pages: state.pages.map(p => p._id === pageId ? data.data.page : p)
         }))
+        
+        // Refetch keywords to include the newly created primary keyword
+        const useKeywordStore = require('./keywords').default
+        await useKeywordStore.getState().fetchKeywords()
+        
         return data.data.page
       } else {
         throw new Error(data.message || 'Failed to update focus keyword')
