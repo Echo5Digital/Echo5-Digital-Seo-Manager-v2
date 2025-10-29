@@ -47,7 +47,8 @@ export default function Login() {
   }
 
   const handleGoogleLogin = () => {
-    window.location.href = 'http://localhost:5000/api/auth/google'
+    const backendUrl = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5001'
+    window.location.href = `${backendUrl}/api/auth/google`
   }
 
   return (
