@@ -613,9 +613,31 @@ The alt text should:
   async generateSEOFixSuggestions(pageData, seoReport) {
     try {
       // Extract current SEO data
-      const currentTitle = pageData.title || 'Not set';
+      // Detect if title/h1/meta look like URL slugs/paths and treat them as "Not set"
+      // Pattern: contains " / " or looks like a path (e.g., "services / wordpress-development-kochi")
+      const isSlugLike = (text) => {
+        if (!text || text === 'Not set') return false;
+        // Check if it contains " / " pattern (typical of converted URL paths)
+        if (text.includes(' / ')) return true;
+        // Check if it looks like a path (contains multiple hyphens and no spaces except " / ")
+        if (text.match(/^[a-z0-9-]+(\s\/\s[a-z0-9-]+)+$/i)) return true;
+        return false;
+      };
+      
+      let currentTitle = pageData.title || 'Not set';
+      let currentH1 = pageData.h1 || 'Not set';
       const currentMeta = pageData.metaDescription || 'Not set';
-      const currentH1 = pageData.h1 || 'Not set';
+      
+      // Clean up slug-like titles and h1s
+      if (isSlugLike(currentTitle)) {
+        console.log(`⚠️ Detected slug-like title: "${currentTitle}" - treating as "Not set"`);
+        currentTitle = 'Not set';
+      }
+      if (isSlugLike(currentH1)) {
+        console.log(`⚠️ Detected slug-like H1: "${currentH1}" - treating as "Not set"`);
+        currentH1 = 'Not set';
+      }
+      
       const focusKeyword = pageData.seo?.focusKeyword || 'Not set';
       const wordCount = pageData.content?.wordCount || 0;
       const internalLinks = pageData.content?.links?.internal || 0;
@@ -631,10 +653,11 @@ The alt text should:
       const prompt = `You are a world-class SEO specialist and technical SEO expert. Analyze this page and provide ACTUAL, READY-TO-USE content fixes - NOT instructions.
 
 Page Information:
-- Title: ${currentTitle} (Length: ${currentTitle.length} chars)
-- URL: ${pageData.url || 'Not set'}
-- Meta Description: ${currentMeta} (Length: ${currentMeta.length} chars)
-- H1: ${currentH1}
+- Current Title (SEO <title> tag): "${currentTitle}" (Length: ${currentTitle.length} chars)
+- URL Slug: ${pageData.slug || pageData.url || 'Not set'}
+- Full URL: ${pageData.url || 'Not set'}
+- Current Meta Description: "${currentMeta}" (Length: ${currentMeta.length} chars)
+- Current H1 Heading: "${currentH1}"
 - Focus Keyword: ${focusKeyword}
 - Secondary Keywords: ${pageData.seo?.secondaryKeywords?.join(', ') || 'None'}
 - Word Count: ${wordCount} words
@@ -647,6 +670,13 @@ Page Information:
 - Twitter Card: ${hasTwitterCard ? 'Present' : 'Missing'}
 - Structured Data: ${hasStructuredData ? 'Present' : 'Missing'}
 - Current SEO Score: ${seoReport.score}/100
+
+IMPORTANT - When providing currentValue:
+- For Title issues: Use the EXACT current title text from <title> tag: "${currentTitle}"
+- For Meta issues: Use the EXACT current meta description: "${currentMeta}"
+- For H1 issues: Use the EXACT current H1 text: "${currentH1}"
+- DO NOT use the URL slug as currentValue
+- DO NOT confuse URL path with page title or H1
 
 Content Sample:
 ${pageData.content?.sample ? pageData.content.sample.substring(0, 500) + '...' : 'Not available'}
@@ -682,18 +712,16 @@ SEO OPTIMIZATION CHECKLIST - Address these if failing:
 ✅ Structured data: JSON-LD schema markup appropriate for page type (Article, Product, etc.)
 ✅ Social meta tags: Open Graph (og:title, og:description, og:image) and Twitter Card tags
 
-Example of GOOD suggestions:
-- Title: {"category": "Title", "issue": "Title too short (15 chars)", "currentValue": "Insurance", "suggestedValue": "Comprehensive Insurance Coverage Plans | Get Quotes 2024", "reasoning": "Optimized to 56 chars, includes focus keyword at start, adds value proposition and year for freshness", "impact": "High", "estimatedTime": "5min", "priority": 10}
+Example of GOOD suggestions (notice currentValue uses ACTUAL title/meta/h1, NOT the URL slug):
+- Title: {"category": "Title", "issue": "Title does not include focus keyword", "currentValue": "Welcome to Our Insurance Site", "suggestedValue": "Comprehensive Insurance Coverage Plans | Get Quotes 2024", "reasoning": "Optimized to 56 chars, includes focus keyword at start, adds value proposition and year for freshness", "impact": "High", "estimatedTime": "5min", "priority": 10}
 - Meta: {"category": "Meta", "issue": "Meta description missing", "currentValue": "Not set", "suggestedValue": "Compare insurance plans and get instant quotes online. Expert guidance on health, auto, and life insurance coverage. Save up to 40% on premiums today.", "reasoning": "150 chars, includes focus keyword early, highlights benefits with call-to-action", "impact": "High", "estimatedTime": "5min", "priority": 9}
 - H1: {"category": "Content", "issue": "Focus keyword not in H1", "currentValue": "Welcome to Our Site", "suggestedValue": "Affordable Insurance Plans for Every Need", "reasoning": "Includes focus keyword naturally, clear value proposition, engages readers", "impact": "High", "estimatedTime": "5min", "priority": 9}
-- Images: {"category": "Images", "issue": "3 images without alt tags", "currentValue": "", "suggestedValue": "Alt text for hero image: 'Family reviewing insurance coverage options with advisor'\nAlt text for icon 1: 'Health insurance coverage icon'\nAlt text for icon 2: 'Auto insurance policy document'", "reasoning": "Descriptive alt text improves accessibility and SEO, includes relevant keywords naturally", "impact": "Medium", "estimatedTime": "15min", "priority": 7}
-- Structured Data: {"category": "Technical", "issue": "Missing structured data", "currentValue": "None", "suggestedValue": "{\n  \"@context\": \"https://schema.org\",\n  \"@type\": \"Service\",\n  \"name\": \"Insurance Coverage Plans\",\n  \"description\": \"Comprehensive insurance solutions...\",\n  \"provider\": {\n    \"@type\": \"Organization\",\n    \"name\": \"Your Company\"\n  }\n}", "reasoning": "Service schema helps Google understand page content and enables rich snippets", "impact": "Medium", "estimatedTime": "30min", "priority": 6}
 
 For EACH issue, recommendation, or optimization opportunity found, provide a fix in this exact JSON format:
 {
   "category": "Title|Meta|Content|H1|Images|Links|Technical|Keywords",
   "issue": "Brief description of the issue",
-  "currentValue": "The exact current text/content",
+  "currentValue": "The exact current text/content (use the actual title/meta/h1 text shown above, NOT the URL slug)",
   "suggestedValue": "The COMPLETE ready-to-use replacement text (not instructions)",
   "reasoning": "Why this fix improves SEO (1-2 sentences)",
   "impact": "High|Medium|Low",

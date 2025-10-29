@@ -432,6 +432,7 @@ router.post('/:id/suggest-fixes', protect, async (req, res, next) => {
     const suggestions = await aiService.generateSEOFixSuggestions(
       {
         title: page.title,
+        slug: page.slug,
         url: page.url,
         metaDescription: page.metaDescription,
         h1: page.h1,

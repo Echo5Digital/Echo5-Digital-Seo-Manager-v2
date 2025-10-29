@@ -22,6 +22,28 @@ export default function PageDetail() {
   const [generatingFixes, setGeneratingFixes] = useState(false)
   const page = useMemo(() => pages.find(p => p._id === id), [pages, id])
 
+  // Helper to detect if a value looks like a URL slug/path
+  const isSlugLike = (text) => {
+    if (!text) return false
+    // Check if it contains " / " pattern (typical of converted URL paths like "services / wordpress-development-kochi")
+    if (text.includes(' / ')) return true
+    // Check if it looks like a path (contains multiple hyphens and no spaces except " / ")
+    if (text.match(/^[a-z0-9-]+(\s\/\s[a-z0-9-]+)+$/i)) return true
+    return false
+  }
+
+  // Get clean title - if it looks like a slug, return empty/not set
+  const getCleanTitle = (title) => {
+    if (!title) return null
+    return isSlugLike(title) ? null : title
+  }
+
+  // Get clean H1 - if it looks like a slug, return empty/not set
+  const getCleanH1 = (h1) => {
+    if (!h1) return null
+    return isSlugLike(h1) ? null : h1
+  }
+
   useEffect(() => {
     let active = true
     async function run() {
@@ -81,7 +103,7 @@ export default function PageDetail() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-white border rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold text-gray-900">{page.title}</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{getCleanTitle(page.title) || page.url || 'Page Details'}</h2>
               </div>
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -95,13 +117,13 @@ export default function PageDetail() {
                 </div>
                 
                 {/* Show H1 First */}
-                {page.h1 && (
+                {getCleanH1(page.h1) && (
                   <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-3 mb-3">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-[10px] uppercase tracking-wide px-2 py-1 rounded-full bg-indigo-600 text-white font-bold">H1</span>
                       <span className="text-xs text-indigo-600 font-semibold">Main Heading</span>
                     </div>
-                    <div className="text-base font-bold text-gray-900">{page.h1}</div>
+                    <div className="text-base font-bold text-gray-900">{getCleanH1(page.h1)}</div>
                   </div>
                 )}
                 
@@ -291,7 +313,8 @@ export default function PageDetail() {
                   hasSeoReport={!!seoReport}
                 />
               </div>
-              <Meta label="H1" value={page?.h1} />
+              <Meta label="Title" value={getCleanTitle(page?.title)} />
+              <Meta label="H1" value={getCleanH1(page?.h1)} />
               <Meta label="Meta description" value={page?.metaDescription} long />
               <Meta label="Canonical" value={page?.seo?.canonical} />
               <Meta label="Robots" value={page?.seo?.robots || 'index,follow'} />

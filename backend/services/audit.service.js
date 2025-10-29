@@ -411,18 +411,18 @@ class AuditService {
           const content = pa.content || {}
           const perf = pa.performance || {}
           
-          // Extract title from multiple sources, prefer actual page title over path
-          let title = 'Untitled';
+          // Extract title from actual page <title> tag or H1, DO NOT use pathname as fallback
+          // This prevents slug/path from being confused with actual SEO title
+          let title = '';
           if (meta.title?.text && meta.title.text.trim()) {
             title = meta.title.text.trim();
           } else if (pa.title && pa.title.trim()) {
             title = pa.title.trim();
           } else if (Array.isArray(headings.h1Text) && headings.h1Text[0]) {
             title = headings.h1Text[0].trim();
-          } else {
-            // Only fall back to pathname if nothing else is available
-            title = u.pathname === '/' ? 'Homepage' : u.pathname.replace(/^\//, '').replace(/\//g, ' / ');
           }
+          // If no title found, leave empty - DO NOT fallback to pathname
+          // This allows AI to properly identify missing title as an SEO issue
           
           const h1 = Array.isArray(headings.h1Text) ? (headings.h1Text[0] || '') : ''
           const metaDescription = meta.description?.text || ''
@@ -436,7 +436,7 @@ class AuditService {
             clientId,
             url,
             slug,
-            title: title?.substring(0, 200) || 'Untitled', // Allow longer titles
+            title: title?.substring(0, 200) || '', // Empty if no title found, not pathname
             metaDescription: metaDescription?.substring(0, 160) || '',
             h1,
             excluded: existingExcluded !== undefined ? existingExcluded : false, // Preserve existing exclusion status
