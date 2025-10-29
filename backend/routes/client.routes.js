@@ -261,8 +261,11 @@ router.put(
       // Update client
       Object.assign(client, updateFields);
       
+      //Save the client first with the basic updates
+      let updatedClient;
+      
       // Handle staff assignment changes
-      if (assignedStaff) {
+      if (assignedStaff !== undefined) {
         console.log('🔄 Updating assignedStaff:', {
           clientId: client._id,
           clientName: client.name,
@@ -271,7 +274,6 @@ router.put(
         });
         
         const oldStaff = client.assignedStaff;
-        client.assignedStaff = assignedStaff;
         
         // Remove client from old staff
         await User.updateMany(
@@ -284,13 +286,22 @@ router.put(
           { _id: { $in: assignedStaff } },
           { $addToSet: { assignedClients: client._id } }
         );
-      }
-
-      await client.save();
-
-      const updatedClient = await Client.findById(client._id)
+        
+        // Update assignedStaff using findByIdAndUpdate to avoid version conflicts
+        updatedClient = await Client.findByIdAndUpdate(
+          client._id,
+          { ...updateFields, assignedStaff },
+          { new: true, runValidators: true }
+        )
         .populate('assignedStaff', 'name email')
         .populate('createdBy', 'name');
+      } else {
+        // Just save the basic updates
+        await client.save();
+        updatedClient = await Client.findById(client._id)
+          .populate('assignedStaff', 'name email')
+          .populate('createdBy', 'name');
+      }
 
       res.json({
         status: 'success',
