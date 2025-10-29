@@ -172,6 +172,92 @@ Provide:
   }
 
   /**
+   * Get keyword statistics (volume, competition, intent)
+   * Uses AI to estimate realistic keyword metrics
+   * @param {string} keyword - The keyword to analyze
+   * @returns {Promise<Object>} Keyword stats
+   */
+  async getKeywordStats(keyword) {
+    try {
+      const prompt = `Analyze this keyword and provide realistic SEO metrics: "${keyword}"
+
+Based on industry standards and keyword patterns, provide:
+1. Estimated Monthly Search Volume (be realistic based on keyword type and length)
+2. Competition Level (Low/Medium/High) - consider commercial intent and industry
+3. Search Intent (Informational/Navigational/Transactional/Commercial)
+4. Keyword Difficulty Score (0-100)
+5. Brief explanation of the metrics
+
+Respond in this exact JSON format:
+{
+  "volume": <number>,
+  "competition": "Low|Medium|High",
+  "intent": "Informational|Navigational|Transactional|Commercial",
+  "difficulty": <number 0-100>,
+  "explanation": "<brief 1-2 sentence explanation>"
+}
+
+Guidelines:
+- Long-tail keywords (4+ words): Lower volume (10-500), lower competition
+- Short keywords (1-2 words): Higher volume (1000-100000+), higher competition
+- Branded keywords: Medium volume, low competition
+- Commercial keywords (buy, best, review): Higher competition
+- Question keywords (how, what, why): Informational intent, medium volume
+- Location-based keywords: Medium volume, medium competition
+
+Return ONLY valid JSON, no additional text.`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert SEO keyword researcher with deep knowledge of search volumes, competition levels, and search intent patterns. Provide realistic, data-driven keyword metrics based on industry standards and keyword characteristics.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.3, // Lower temperature for more consistent data
+        max_tokens: 300,
+      });
+
+      const responseText = completion.choices[0].message.content.trim();
+      
+      // Extract JSON from response
+      let jsonText = responseText;
+      if (responseText.includes('```json')) {
+        jsonText = responseText.match(/```json\s*([\s\S]*?)\s*```/)?.[1] || responseText;
+      } else if (responseText.includes('```')) {
+        jsonText = responseText.match(/```\s*([\s\S]*?)\s*```/)?.[1] || responseText;
+      }
+
+      const stats = JSON.parse(jsonText);
+      
+      logger.info(`Keyword stats generated for "${keyword}":`, stats);
+      
+      return {
+        volume: stats.volume || 0,
+        competition: stats.competition || 'Medium',
+        intent: stats.intent || 'Informational',
+        difficulty: stats.difficulty || 50,
+        explanation: stats.explanation || 'AI-generated keyword metrics',
+      };
+    } catch (error) {
+      logger.error('AI Keyword Stats Error:', error);
+      // Return default values if AI fails
+      return {
+        volume: 0,
+        competition: 'Medium',
+        intent: 'Informational',
+        difficulty: 50,
+        explanation: 'Unable to fetch keyword stats. Please update manually.',
+      };
+    }
+  }
+
+  /**
    * Cluster keywords into topical groups
    * @param {Array} keywords - Array of keyword objects
    * @returns {Promise<Object>} Clustered keywords

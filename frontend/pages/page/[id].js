@@ -108,12 +108,12 @@ export default function PageDetail() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold text-gray-700">Content preview</h3>
-                  {!page?.content?.sample && (
-                    <button
-                      className="px-2 py-1 text-xs rounded bg-blue-600 text-white disabled:opacity-50"
-                      onClick={async () => { try { await refreshContent(page._id) } catch {} }}
-                    >Capture content</button>
-                  )}
+                  <button
+                    className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    onClick={async () => { try { await refreshContent(page._id) } catch {} }}
+                  >
+                    {page?.content?.sample ? 'Refresh content' : 'Capture content'}
+                  </button>
                 </div>
                 
                 {/* Show H1 First */}
@@ -128,18 +128,105 @@ export default function PageDetail() {
                 )}
                 
                 {Array.isArray(page?.content?.blocks) && page.content.blocks.length > 0 ? (
-                  <div className="bg-gray-50 border rounded p-3 max-h-[70vh] overflow-auto divide-y">
-                    {page.content.blocks.map((b, idx) => (
-                      <div key={idx} className="py-2">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border bg-white text-gray-700">{b.tag}</span>
-                          {/^h[1-6]$/.test(b.tag || '') && (
-                            <span className="text-xs text-gray-500">Heading</span>
-                          )}
+                  <div className="bg-white border rounded-lg p-4 max-h-[70vh] overflow-auto space-y-4">
+                    {page.content.blocks.map((b, idx) => {
+                      const tag = b.tag?.toLowerCase() || 'p';
+                      
+                      // H2 Styling
+                      if (tag === 'h2') {
+                        return (
+                          <div key={idx} className="border-l-4 border-blue-500 pl-4 py-2 bg-blue-50">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-blue-600 text-white font-bold">H2</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-gray-900">{b.text}</h2>
+                          </div>
+                        );
+                      }
+                      
+                      // H3 Styling
+                      if (tag === 'h3') {
+                        return (
+                          <div key={idx} className="border-l-4 border-purple-500 pl-4 py-2 bg-purple-50">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-purple-600 text-white font-bold">H3</span>
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900">{b.text}</h3>
+                          </div>
+                        );
+                      }
+                      
+                      // H4 Styling
+                      if (tag === 'h4') {
+                        return (
+                          <div key={idx} className="border-l-4 border-green-500 pl-4 py-1 bg-green-50">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-green-600 text-white font-bold">H4</span>
+                            </div>
+                            <h4 className="text-base font-semibold text-gray-900">{b.text}</h4>
+                          </div>
+                        );
+                      }
+                      
+                      // H5 & H6 Styling
+                      if (tag === 'h5' || tag === 'h6') {
+                        return (
+                          <div key={idx} className="border-l-3 border-gray-400 pl-4 py-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-gray-600 text-white font-bold">{tag.toUpperCase()}</span>
+                            </div>
+                            <div className="text-sm font-semibold text-gray-800">{b.text}</div>
+                          </div>
+                        );
+                      }
+                      
+                      // List Item Styling
+                      if (tag === 'li') {
+                        return (
+                          <div key={idx} className="flex items-start gap-3 pl-4">
+                            <span className="text-blue-600 mt-1">•</span>
+                            <p className="text-sm text-gray-800 flex-1 leading-relaxed">{b.text}</p>
+                          </div>
+                        );
+                      }
+                      
+                      // Paragraph Styling
+                      if (tag === 'p') {
+                        return (
+                          <p key={idx} className="text-sm text-gray-700 leading-relaxed">
+                            {b.text}
+                          </p>
+                        );
+                      }
+                      
+                      // Strong/Bold Styling
+                      if (tag === 'strong' || tag === 'b') {
+                        return (
+                          <div key={idx} className="text-sm font-semibold text-gray-900">
+                            {b.text}
+                          </div>
+                        );
+                      }
+                      
+                      // Link Styling
+                      if (tag === 'a') {
+                        return (
+                          <div key={idx} className="text-sm text-blue-600 hover:underline">
+                            {b.text}
+                          </div>
+                        );
+                      }
+                      
+                      // Default for other tags
+                      return (
+                        <div key={idx} className="py-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border bg-gray-100 text-gray-600">{tag}</span>
+                          </div>
+                          <div className="text-sm text-gray-700">{b.text}</div>
                         </div>
-                        <div className={`text-sm ${/^h[1-6]$/.test(b.tag || '') ? 'font-semibold text-gray-900' : 'text-gray-800'}`}>{b.text}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 border rounded p-3 max-h-[70vh] overflow-auto">
