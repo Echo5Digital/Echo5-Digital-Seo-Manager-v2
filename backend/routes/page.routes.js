@@ -10,6 +10,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const Audit = require('../models/Audit.model');
 const auditService = require('../services/audit.service');
+const { fetchWebpage, detectBotProtection } = require('../utils/webFetcher');
 
 // GET /api/pages - Get all pages with filters
 router.get('/', protect, async (req, res, next) => {
@@ -878,64 +879,24 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     
     console.log('🔄 Refreshing content for:', url)
 
-    // Add random delay to avoid rate limiting
-    const delay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds
-    await new Promise(resolve => setTimeout(resolve, delay));
-
-    // Rotating user agents
-    const userAgents = [
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ];
-    const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
-
-    const response = await axios.get(url, { 
-      timeout: 20000,
-      maxRedirects: 5,
-      headers: { 
-        'User-Agent': userAgent,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Upgrade-Insecure-Requests': '1',
-        'Connection': 'keep-alive'
-      },
-      validateStatus: (status) => status < 500 // Accept any status < 500
-    })
+    // Use the enhanced web fetcher with retries and better headers
+    const html = await fetchWebpage(url, { 
+      timeout: 25000,
+      retries: 3,
+      useProxy: process.env.NODE_ENV === 'production' // Use proxy in production if configured
+    });
     
-    console.log('📄 Response status:', response.status, '| HTML size:', response.data.length, 'bytes')
-    
-    // Check for bot protection pages
-    const html = response.data;
-    const botProtectionPhrases = [
-      'please wait while your request is being verified',
-      'checking your browser',
-      'cloudflare',
-      'just a moment',
-      'enable javascript and cookies',
-      'security check',
-      'verify you are human',
-      'ddos protection by cloudflare',
-      'attention required'
-    ];
-    
-    const htmlLower = html.toLowerCase();
-    const detectedProtection = botProtectionPhrases.find(phrase => htmlLower.includes(phrase));
-    
-    if (detectedProtection) {
-      console.error('🚫 Bot protection detected:', detectedProtection);
+    // Final check for bot protection
+    const botCheck = detectBotProtection(html);
+    if (botCheck.detected) {
+      console.error('🚫 Bot protection still detected after retries:', botCheck.phrase);
       return res.status(403).json({
         status: 'error',
         message: 'Bot protection detected',
-        details: `The website is protected by security software (Cloudflare, etc.) that blocks automated requests. This is common when accessing from cloud servers. Try: 1) Access the page directly in a browser first, 2) Add your server's IP to the site's allowlist if you manage it, or 3) Use the online host which may have different IP reputation.`,
-        detectedPhrase: detectedProtection
+        details: `The website is blocking automated access. ${
+          botCheck.isCloudflare ? 'Cloudflare protection is active.' : ''
+        } Solutions: 1) Try again in a few minutes, 2) Access from localhost, 3) Configure a proxy service, 4) Contact the site owner to whitelist your server IP.`,
+        detectedPhrase: botCheck.phrase
       });
     }
     
@@ -1178,65 +1139,22 @@ router.post('/:id/recrawl', protect, async (req, res, next) => {
     // Fetch detailed content blocks for styled rendering
     // This ensures recrawl also populates blocks and internalLinks
     try {
-      const axios = require('axios')
-      const cheerio = require('cheerio')
-      
-      // Add delay and user agent rotation (same as refresh-content)
-      const delay = Math.floor(Math.random() * 2000) + 1000
-      await new Promise(resolve => setTimeout(resolve, delay))
-      
-      const userAgents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      ]
-      const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)]
-      
-      const response = await axios.get(url, {
-        timeout: 20000,
-        maxRedirects: 5,
-        headers: {
-          'User-Agent': userAgent,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none',
-          'Upgrade-Insecure-Requests': '1',
-          'Connection': 'keep-alive'
-        },
-        validateStatus: (status) => status < 500
-      })
-      
-      console.log('📄 Recrawl fetch - Status:', response.status, '| HTML size:', response.data.length, 'bytes')
+      // Use the enhanced web fetcher
+      const html = await fetchWebpage(url, {
+        timeout: 25000,
+        retries: 3,
+        useProxy: process.env.NODE_ENV === 'production'
+      });
       
       // Check for bot protection
-      const html = response.data
-      const botProtectionPhrases = [
-        'please wait while your request is being verified',
-        'checking your browser',
-        'cloudflare',
-        'just a moment',
-        'enable javascript and cookies',
-        'security check',
-        'verify you are human',
-        'ddos protection by cloudflare',
-        'attention required'
-      ]
+      const botCheck = detectBotProtection(html);
       
-      const htmlLower = html.toLowerCase()
-      const detectedProtection = botProtectionPhrases.find(phrase => htmlLower.includes(phrase))
-      
-      if (detectedProtection) {
-        console.error('🚫 Bot protection detected during recrawl:', detectedProtection)
+      if (botCheck.detected) {
+        console.error('🚫 Bot protection detected during recrawl:', botCheck.phrase)
         // Don't fail the entire recrawl, but set empty blocks with warning
         page.content.blocks = []
         page.content.internalLinks = []
-        page.content.sample = `⚠️ Bot protection detected: ${detectedProtection}. Content could not be extracted.`
+        page.content.sample = `⚠️ Bot protection detected: ${botCheck.phrase}. Content could not be extracted.`
       } else {
         const $ = cheerio.load(html)
       
