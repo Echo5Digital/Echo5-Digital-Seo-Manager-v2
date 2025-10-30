@@ -3,6 +3,7 @@ const router = express.Router();
 const { protect } = require('../middleware/auth');
 const aiService = require('../services/ai.service');
 const axios = require('axios');
+const RankHistory = require('../models/RankHistory.model');
 
 // Helper: shallow-domain match
 function normalizeDomain(u) {
@@ -174,7 +175,9 @@ router.post('/rank', protect, async (req, res, next) => {
         ];
 
         console.log('🔍 Calling DataForSEO LIVE API for keyword:', keyword, 'domain:', domain);
-        console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+        console.log('� Location:', location, '| Location Code:', locationCode);
+        console.log('🌐 Server environment:', process.env.NODE_ENV);
+        console.log('�📤 Payload:', JSON.stringify(payload, null, 2));
         
         const liveRes = await axios.post(liveUrl, payload, {
           headers: {
@@ -185,6 +188,7 @@ router.post('/rank', protect, async (req, res, next) => {
         });
 
         console.log('✅ DataForSEO Response Status:', liveRes.data?.status_code, liveRes.data?.status_message);
+        console.log('📊 Response cost:', liveRes.data?.cost || 'N/A');
         
         // Check for API errors
         if (liveRes.data?.status_code >= 40000) {
@@ -229,37 +233,59 @@ router.post('/rank', protect, async (req, res, next) => {
           }
           
           if (finalResult) {
+            // Save to database
+            const rankData = {
+              domain, 
+              keyword, 
+              rank: finalResult, 
+              inTop100: true, 
+              difficulty, 
+              location: location || `Location Code: ${locationCode}`, 
+              locationCode: locationCode,
+              checkedAt: new Date(), 
+              source: 'dataforseo'
+            };
+            
+            try {
+              await RankHistory.create(rankData);
+              console.log('✅ Rank history saved to database');
+            } catch (dbError) {
+              console.error('⚠️ Failed to save rank history:', dbError.message);
+              // Continue even if save fails
+            }
+            
             return res.json({ 
               status: 'success', 
-              data: { 
-                domain, 
-                keyword, 
-                rank: finalResult, 
-                inTop100: true, 
-                difficulty, 
-                location: location || `Location Code: ${locationCode}`, 
-                locationCode: locationCode,
-                checkedAt: new Date(), 
-                source: 'dataforseo' 
-              } 
+              data: rankData
             });
           } else {
             // Domain not found in top 100
             console.warn('⚠️ Domain not found in top 100 results');
+            
+            const rankData = {
+              domain,
+              keyword,
+              rank: null,
+              inTop100: false,
+              difficulty,
+              location: location || `Location Code: ${locationCode}`,
+              locationCode: locationCode,
+              checkedAt: new Date(),
+              source: 'dataforseo',
+              message: 'Not found in top 100 results'
+            };
+            
+            try {
+              await RankHistory.create(rankData);
+              console.log('✅ Rank history (not found) saved to database');
+            } catch (dbError) {
+              console.error('⚠️ Failed to save rank history:', dbError.message);
+              // Continue even if save fails
+            }
+            
             return res.json({
               status: 'success',
-              data: {
-                domain,
-                keyword,
-                rank: null,
-                inTop100: false,
-                difficulty,
-                location: location || `Location Code: ${locationCode}`,
-                locationCode: locationCode,
-                checkedAt: new Date(),
-                source: 'dataforseo',
-                message: 'Not found in top 100 results'
-              }
+              data: rankData
             });
           }
         } else {
@@ -293,6 +319,50 @@ router.post('/rank', protect, async (req, res, next) => {
     console.error('❌ Rank check error:', error);
     next(error);
   }
+});
+
+// Get rank history from database
+router.get('/rank-history', protect, async (req, res) => {
+  try {
+    const { limit = 100, domain, keyword } = req.query;
+    
+    const query = {};
+    if (domain) query.domain = { $regex: domain, $options: 'i' };
+    if (keyword) query.keyword = { $regex: keyword, $options: 'i' };
+    
+    const history = await RankHistory.find(query)
+      .sort({ checkedAt: -1 })
+      .limit(parseInt(limit));
+    
+    res.json({
+      status: 'success',
+      data: history
+    });
+  } catch (error) {
+    console.error('❌ Error fetching rank history:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch rank history'
+    });
+  }
+});
+
+// Debug endpoint to check environment configuration
+router.get('/debug-config', (req, res) => {
+  const locationCode = getLocationCode(req.query.location || 'United States');
+  res.json({
+    environment: process.env.NODE_ENV || 'development',
+    dataForSeoEmail: process.env.DATAFORSEO_EMAIL ? '***configured***' : '❌ missing',
+    dataForSeoPassword: process.env.DATAFORSEO_PASSWORD ? '***configured***' : '❌ missing',
+    requestLocation: req.query.location || 'United States',
+    mappedLocationCode: locationCode,
+    serverTime: new Date().toISOString(),
+    headers: {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'user-agent': req.headers['user-agent']
+    }
+  });
 });
 
 module.exports = router;

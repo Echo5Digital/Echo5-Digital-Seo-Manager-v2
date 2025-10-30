@@ -3,6 +3,7 @@ import Layout from '../components/Layout';
 import useClientStore from '../store/clients';
 import useKeywordPlannerStore from '../store/keywordPlanner';
 import useKeywordStore from '../store/keywords';
+import useAuthStore from '../store/auth';
 
 export default function RankChecker() {
   const clients = useClientStore(state => state.clients);
@@ -10,28 +11,16 @@ export default function RankChecker() {
   const checkRank = useKeywordPlannerStore(state => state.checkRank);
   const keywords = useKeywordStore(state => state.keywords);
   const fetchKeywords = useKeywordStore(state => state.fetchKeywords);
+  const token = useAuthStore(state => state.token);
   
   const [rankClientId, setRankClientId] = useState('');
   const [rankDomain, setRankDomain] = useState('');
   const [rankKeyword, setRankKeyword] = useState('');
   const [rankLocation, setRankLocation] = useState('United States');
   const [checkingRank, setCheckingRank] = useState(false);
-  const [rankResult, setRankResult] = useState(() => {
-    // Load last rank result from localStorage on initial render
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('lastRankResult');
-      return saved ? JSON.parse(saved) : null;
-    }
-    return null;
-  });
-  const [rankHistory, setRankHistory] = useState(() => {
-    // Load rank history from localStorage on initial render
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('rankHistory');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
+  const [rankResult, setRankResult] = useState(null);
+  const [rankHistory, setRankHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [rankError, setRankError] = useState(null);
   const [keywordSuggestions, setKeywordSuggestions] = useState([]);
   const [showKeywordDropdown, setShowKeywordDropdown] = useState(false);
