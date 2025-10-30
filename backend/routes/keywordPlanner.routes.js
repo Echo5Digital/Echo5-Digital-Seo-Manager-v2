@@ -120,11 +120,39 @@ router.post('/rank', protect, async (req, res, next) => {
         const liveUrl = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced';
 
         // Create a live request payload
+        // Note: DataForSEO uses location_code (numeric) not location_name
+        // Common codes: 2356 = India, 2840 = United States, 2826 = United Kingdom
+        // Default to India (2356) for Kochi/Kerala searches
+        let locationCode = 2356; // India default
+        let locationName = location || 'India';
+        
+        // Map common location strings to codes
+        if (location) {
+          const loc = location.toLowerCase();
+          if (loc.includes('united states') || loc.includes('usa') || loc.includes('us')) {
+            locationCode = 2840;
+            locationName = 'United States';
+          } else if (loc.includes('united kingdom') || loc.includes('uk')) {
+            locationCode = 2826;
+            locationName = 'United Kingdom';
+          } else if (loc.includes('india')) {
+            locationCode = 2356;
+            locationName = 'India';
+          } else if (loc.includes('canada')) {
+            locationCode = 2124;
+            locationName = 'Canada';
+          } else if (loc.includes('australia')) {
+            locationCode = 2036;
+            locationName = 'Australia';
+          }
+          // For other locations, try to use India as default or the user can specify location_code
+        }
+
         const payload = [
           {
             keyword: keyword,
             language_code: 'en',
-            location_name: location || 'India', // Default to India for Kochi searches
+            location_code: locationCode,
             device: 'desktop',
             os: 'windows',
             depth: 100, // Check top 100 results
@@ -133,6 +161,7 @@ router.post('/rank', protect, async (req, res, next) => {
         ];
 
         console.log('🔍 Calling DataForSEO LIVE API for keyword:', keyword, 'domain:', domain);
+        console.log('📍 Location:', locationName, '(code:', locationCode + ')');
         console.log('📤 Payload:', JSON.stringify(payload, null, 2));
         
         const liveRes = await axios.post(liveUrl, payload, {
@@ -193,7 +222,7 @@ router.post('/rank', protect, async (req, res, next) => {
                 rank: finalResult, 
                 inTop100: true, 
                 difficulty, 
-                location: location || 'India', 
+                location: locationName, 
                 checkedAt: new Date(), 
                 source: 'dataforseo' 
               } 
@@ -209,7 +238,7 @@ router.post('/rank', protect, async (req, res, next) => {
                 rank: null,
                 inTop100: false,
                 difficulty,
-                location: location || 'India',
+                location: locationName,
                 checkedAt: new Date(),
                 source: 'dataforseo',
                 message: 'Not found in top 100 results'
@@ -229,27 +258,19 @@ router.post('/rank', protect, async (req, res, next) => {
           console.error('⚠️ Possible IP whitelist issue - add your IP to DataForSEO whitelist');
         }
         
-        // Fall through to demo fallback
-        console.log('📊 Falling back to demo data');
+        // Return error instead of demo data
+        return res.status(500).json({
+          status: 'error',
+          message: 'DataForSEO API error: ' + (err.message || 'Unknown error'),
+          error: err.response?.data?.status_message || err.message
+        });
       }
     }
 
-    // Fallback: Simple deterministic pseudo-random rank based on input (demo)
-    const seed = Array.from((domain + '|' + keyword)).reduce((s, c) => s + c.charCodeAt(0), 0);
-    const rank = (seed % 100) + 1; // 1 - 100
-
-    res.json({
-      status: 'success',
-      data: {
-        domain,
-        keyword,
-        rank: rank <= 100 ? rank : null,
-        inTop100: rank <= 100,
-        difficulty,
-        location: location || 'Global',
-        checkedAt: new Date(),
-        source: 'demo'
-      }
+    // If DataForSEO credentials are not configured, return error
+    return res.status(400).json({
+      status: 'error',
+      message: 'DataForSEO credentials not configured. Please add DATAFORSEO_USER and DATAFORSEO_PASS to environment variables.'
     });
   } catch (error) {
     console.error('❌ Rank check error:', error);
