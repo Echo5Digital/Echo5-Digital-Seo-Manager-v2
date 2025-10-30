@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PlusIcon, MinusIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import useAuthStore from '../../../store/auth';
 
@@ -11,6 +11,12 @@ const ClientOnboardingForm = ({
   const { token, user } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(1);
   const [staffUsers, setStaffUsers] = useState([]);
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [activeLocationIndex, setActiveLocationIndex] = useState(null);
+  const [fetchingLocations, setFetchingLocations] = useState(false);
+  const locationInputRefs = useRef([]);
+  
   const [formData, setFormData] = useState(initialData || {
     name: '',
     industry: '',
@@ -36,6 +42,21 @@ const ClientOnboardingForm = ({
   useEffect(() => {
     console.log('ClientOnboardingForm - User role:', user?.role, 'Total steps:', totalSteps);
   }, [user, totalSteps]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (activeLocationIndex !== null && locationInputRefs.current[activeLocationIndex]) {
+        if (!locationInputRefs.current[activeLocationIndex].contains(event.target)) {
+          setShowLocationDropdown(false);
+          setActiveLocationIndex(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeLocationIndex]);
 
   // Fetch staff users
   useEffect(() => {
@@ -98,6 +119,96 @@ const ClientOnboardingForm = ({
       ...prev,
       [arrayField]: prev[arrayField].filter((_, i) => i !== index)
     }));
+  };
+
+  // Handle city input change with autocomplete
+  const handleCityInputChange = async (index, cityValue) => {
+    // Update city field immediately
+    setFormData(prev => ({
+      ...prev,
+      locations: prev.locations.map((item, i) => 
+        i === index ? { ...item, city: cityValue } : item
+      )
+    }));
+
+    setActiveLocationIndex(index);
+
+    // If city is at least 2 characters, fetch suggestions
+    if (cityValue.trim().length >= 2) {
+      setFetchingLocations(true);
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(cityValue)}&format=json&addressdetails=1&limit=10`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'SEO-Ops-ClientOnboarding/1.0'
+            }
+          }
+        );
+        
+        const data = await response.json();
+        
+        // Format location suggestions with proper hierarchy
+        const formatted = data.map(item => {
+          const parts = [];
+          
+          if (item.address.city) parts.push(item.address.city);
+          else if (item.address.town) parts.push(item.address.town);
+          else if (item.address.village) parts.push(item.address.village);
+          else if (item.address.municipality) parts.push(item.address.municipality);
+          
+          if (item.address.state) parts.push(item.address.state);
+          if (item.address.country) parts.push(item.address.country);
+          
+          return {
+            display: parts.length > 0 ? parts.join(', ') : item.display_name,
+            full: item.display_name,
+            city: item.address.city || item.address.town || item.address.village || item.address.municipality || '',
+            state: item.address.state || '',
+            country: item.address.country_code ? item.address.country_code.toUpperCase() : '',
+            zip: item.address.postcode || ''
+          };
+        });
+        
+        // Remove duplicates
+        const unique = formatted.filter((item, index, self) => 
+          index === self.findIndex(t => t.display === item.display)
+        );
+        
+        setLocationSuggestions(unique);
+        setShowLocationDropdown(unique.length > 0);
+      } catch (error) {
+        console.error('Error fetching locations:', error);
+        setLocationSuggestions([]);
+      } finally {
+        setFetchingLocations(false);
+      }
+    } else {
+      setLocationSuggestions([]);
+      setShowLocationDropdown(false);
+    }
+  };
+
+  // Select a location from dropdown
+  const selectLocation = (index, locationObj) => {
+    setFormData(prev => ({
+      ...prev,
+      locations: prev.locations.map((item, i) => 
+        i === index 
+          ? { 
+              ...item, 
+              city: locationObj.city,
+              state: locationObj.state,
+              country: locationObj.country,
+              zip: locationObj.zip || item.zip
+            } 
+          : item
+      )
+    }));
+    setShowLocationDropdown(false);
+    setLocationSuggestions([]);
+    setActiveLocationIndex(null);
   };
 
   const handleSubmit = (e) => {
@@ -221,17 +332,55 @@ const ClientOnboardingForm = ({
                 )}
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                  <div className="relative" ref={el => locationInputRefs.current[index] = el}>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       City *
                     </label>
                     <input
                       type="text"
                       value={location.city}
-                      onChange={(e) => handleArrayInputChange('locations', index, 'city', e.target.value)}
+                      onChange={(e) => handleCityInputChange(index, e.target.value)}
+                      onFocus={() => location.city && locationSuggestions.length > 0 && setShowLocationDropdown(true)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="City name"
+                      placeholder="Type city name"
                     />
+                    <p className="text-xs text-gray-500 mt-1">Type to search and auto-fill all fields</p>
+                    
+                    {/* Loading indicator */}
+                    {fetchingLocations && activeLocationIndex === index && (
+                      <div className="absolute right-3 top-9">
+                        <svg className="animate-spin h-4 w-4 text-blue-600" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      </div>
+                    )}
+                    
+                    {/* Location Suggestions Dropdown */}
+                    {showLocationDropdown && activeLocationIndex === index && locationSuggestions.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {locationSuggestions.map((locObj, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => selectLocation(index, locObj)}
+                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-b-0"
+                          >
+                            <div className="flex items-start gap-2">
+                              <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              <div className="flex-1">
+                                <div className="font-medium text-gray-900">{locObj.display}</div>
+                                {locObj.full !== locObj.display && (
+                                  <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{locObj.full}</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   
                   <div>
@@ -243,7 +392,7 @@ const ClientOnboardingForm = ({
                       value={location.state}
                       onChange={(e) => handleArrayInputChange('locations', index, 'state', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="State/Province"
+                      placeholder="Auto-filled from city"
                     />
                   </div>
                   
@@ -256,7 +405,20 @@ const ClientOnboardingForm = ({
                       value={location.zip}
                       onChange={(e) => handleArrayInputChange('locations', index, 'zip', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="ZIP/Postal code"
+                      placeholder="Auto-filled from city"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Country
+                    </label>
+                    <input
+                      type="text"
+                      value={location.country}
+                      onChange={(e) => handleArrayInputChange('locations', index, 'country', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Auto-filled from city"
                     />
                   </div>
                   

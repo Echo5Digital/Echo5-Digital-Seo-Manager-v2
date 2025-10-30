@@ -93,7 +93,7 @@ router.post('/analyze', protect, async (req, res, next) => {
 // POST /api/keyword-planner/rank - Check keyword rank for a domain (mock/AI)
 router.post('/rank', protect, async (req, res, next) => {
   try {
-    const { domain, keyword } = req.body;
+    const { domain, keyword, location } = req.body;
 
     if (!domain || !keyword) {
       return res.status(400).json({ status: 'error', message: 'Domain and keyword are required' });
@@ -124,11 +124,15 @@ router.post('/rank', protect, async (req, res, next) => {
               // Minimal payload - dataforseo accepts various shapes; if this fails we'll catch and fallback
               keywords: [keyword],
               language_code: 'en',
-              // location_code could be provided for accuracy; omit to keep generic
               device: 'desktop'
             }
           ]
         };
+
+        // Add location if provided (DataForSEO uses location_name or location_code)
+        if (location) {
+          payload.tasks[0].location_name = location;
+        }
 
         const postRes = await axios.post(postUrl, payload, {
           headers: {
@@ -146,7 +150,7 @@ router.post('/rank', protect, async (req, res, next) => {
         if (!taskIdentifier) {
           const immediatePosition = findPositionInResults(postRes?.data, domain);
           if (immediatePosition) {
-            return res.json({ status: 'success', data: { domain, keyword, rank: immediatePosition, inTop100: true, difficulty, checkedAt: new Date(), source: 'dataforseo' } });
+            return res.json({ status: 'success', data: { domain, keyword, rank: immediatePosition, inTop100: true, difficulty, location: location || 'Global', checkedAt: new Date(), source: 'dataforseo' } });
           }
         }
 
@@ -180,7 +184,7 @@ router.post('/rank', protect, async (req, res, next) => {
         }
 
         if (finalResult) {
-          return res.json({ status: 'success', data: { domain, keyword, rank: finalResult, inTop100: true, difficulty, checkedAt: new Date(), source: 'dataforseo' } });
+          return res.json({ status: 'success', data: { domain, keyword, rank: finalResult, inTop100: true, difficulty, location: location || 'Global', checkedAt: new Date(), source: 'dataforseo' } });
         }
 
         // If we reach here, DataForSEO didn't yield a match — fall through to demo fallback
@@ -203,6 +207,7 @@ router.post('/rank', protect, async (req, res, next) => {
         rank: rank <= 100 ? rank : null,
         inTop100: rank <= 100,
         difficulty,
+        location: location || 'Global',
         checkedAt: new Date(),
         source: 'demo'
       }

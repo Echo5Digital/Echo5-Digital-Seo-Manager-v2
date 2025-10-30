@@ -21,8 +21,10 @@ export default function KeywordPlanner() {
   const [results, setResults] = useState([]);
   const [keywordIdeas, setKeywordIdeas] = useState([]);
   // Rank checker state
+  const [rankClientId, setRankClientId] = useState('');
   const [rankDomain, setRankDomain] = useState('');
   const [rankKeyword, setRankKeyword] = useState('');
+  const [rankLocation, setRankLocation] = useState('');
   const [checkingRank, setCheckingRank] = useState(false);
   const [rankResult, setRankResult] = useState(null);
 
@@ -184,7 +186,17 @@ export default function KeywordPlanner() {
     setCheckingRank(true);
     setRankResult(null);
     try {
-      const resp = await checkRank({ domain: rankDomain.trim(), keyword: rankKeyword.trim() });
+      const payload = { 
+        domain: rankDomain.trim(), 
+        keyword: rankKeyword.trim() 
+      };
+      
+      // Add location if provided
+      if (rankLocation.trim()) {
+        payload.location = rankLocation.trim();
+      }
+      
+      const resp = await checkRank(payload);
       if (resp && resp.status === 'success') {
         setRankResult(resp.data);
       } else {
@@ -194,6 +206,28 @@ export default function KeywordPlanner() {
       console.error('Error checking rank:', err);
     } finally {
       setCheckingRank(false);
+    }
+  };
+
+  const handleRankClientChange = (e) => {
+    const clientId = e.target.value;
+    setRankClientId(clientId);
+    const client = clients.find(c => c._id === clientId);
+    if (client) {
+      // Auto-fill domain
+      if (client.website) {
+        try {
+          const url = client.website.startsWith('http') ? client.website : `https://${client.website}`;
+          const domain = new URL(url).hostname.replace('www.', '');
+          setRankDomain(domain);
+        } catch {
+          setRankDomain(client.website);
+        }
+      }
+      // Auto-fill location
+      if (client.location) {
+        setRankLocation(client.location);
+      }
     }
   };
 
@@ -484,6 +518,21 @@ export default function KeywordPlanner() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select Client</label>
+            <select
+              value={rankClientId}
+              onChange={handleRankClientChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <option value="">-- Select a client --</option>
+              {Array.isArray(clients) && clients.map((client) => (
+                <option key={client._id} value={client._id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
             <input
               type="text"
@@ -493,7 +542,20 @@ export default function KeywordPlanner() {
               onChange={(e) => setRankDomain(e.target.value)}
             />
           </div>
-          <div className="md:col-span-2">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Location (optional)</label>
+            <input
+              type="text"
+              placeholder="e.g., New York, USA"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              value={rankLocation}
+              onChange={(e) => setRankLocation(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Keyword</label>
             <input
               type="text"
@@ -517,7 +579,9 @@ export default function KeywordPlanner() {
             <div className="ml-4 text-sm text-gray-700">
               <div><strong>Rank:</strong> {rankResult.rank || 'Not in top 100'}</div>
               <div><strong>Difficulty:</strong> {rankResult.difficulty}</div>
+              {rankResult.location && <div className="text-xs text-gray-500">Location: {rankResult.location}</div>}
               <div className="text-xs text-gray-500">Checked at: {new Date(rankResult.checkedAt).toLocaleString()}</div>
+              {rankResult.source && <div className="text-xs text-gray-400">Source: {rankResult.source}</div>}
             </div>
           )}
         </div>
