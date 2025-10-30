@@ -862,10 +862,21 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
   try {
     const { id } = req.params
     const page = await Page.findById(id)
-    if (!page) return res.status(404).json({ status: 'error', message: 'Page not found' })
+    if (!page) {
+      console.error('❌ Refresh content: Page not found with ID:', id)
+      return res.status(404).json({ status: 'error', message: 'Page not found' })
+    }
 
     const url = page.url
-    if (!url) return res.status(400).json({ status: 'error', message: 'Page URL missing' })
+    if (!url) {
+      console.error('❌ Refresh content: Page URL missing for page:', page._id, 'Title:', page.title)
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Page URL is missing. Please add a URL to this page first.' 
+      })
+    }
+    
+    console.log('🔄 Refreshing content for:', url)
 
     // Add random delay to avoid rate limiting
     const delay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds
@@ -889,28 +900,65 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     })
     const $ = cheerio.load(response.data)
 
+    console.log('📄 HTML fetched, size:', response.data.length, 'bytes')
+
     // Remove scripts, styles, and other non-content elements
     $('script, style, noscript, iframe, svg').remove()
-    // Remove navigation menus, headers, footers, sidebars
-    $('nav, header, footer, aside, [role="navigation"], [class*="menu"], [class*="nav"], [id*="menu"], [id*="nav"]').remove()
+    
+    // Try to find main content area first
+    let $content = $('main, [role="main"], article, .content, #content, .main-content, #main-content, .post-content, .entry-content')
+    
+    if ($content.length === 0) {
+      console.log('⚠️ No main content area found, using body')
+      $content = $('body')
+    } else {
+      console.log('✅ Found main content area:', $content.length, 'elements')
+    }
+    
+    // Only remove nav/header/footer from the content area if we found a main content area
+    // Otherwise, we might remove everything
+    if ($content.length > 0 && $content.get(0).tagName !== 'body') {
+      $content.find('nav, header, footer, aside').remove()
+    }
 
     // Extract text sample and word count from clean content
-    const bodyText = $('body').text().replace(/\s+/g, ' ').trim()
+    const bodyText = $content.text().replace(/\s+/g, ' ').trim()
+    console.log('📝 Body text length:', bodyText.length)
+    
     const blocks = []
-    $('h1, h2, h3, h4, h5, h6, p').each((i, el) => {
+    $content.find('h1, h2, h3, h4, h5, h6, p').each((i, el) => {
       if (blocks.length >= 50) return false
       const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
       const text = $(el).text().replace(/\s+/g, ' ').trim()
       if (!text || text.length < 10) return // Skip very short text
       blocks.push({ tag, text })
     })
+    
+    console.log('📦 Extracted', blocks.length, 'content blocks')
+    
+    // If we got no blocks, try a more aggressive extraction from all text
+    if (blocks.length === 0) {
+      console.log('⚠️ No blocks found with h1-h6/p tags, trying all text elements')
+      $content.find('div, section, article, li, span').each((i, el) => {
+        if (blocks.length >= 50) return false
+        const $el = $(el)
+        // Only get direct text, not nested
+        const text = $el.clone().children().remove().end().text().replace(/\s+/g, ' ').trim()
+        if (!text || text.length < 15) return
+        blocks.push({ tag: 'div', text })
+      })
+      console.log('📦 Extracted', blocks.length, 'blocks from divs/sections')
+    }
+    
     const sampleText = (blocks.map(b => b.text).join(' ').trim() || bodyText).substring(0, 2000)
     const wordCount = (sampleText ? sampleText.split(/\s+/).filter(Boolean).length : 0)
+    
+    console.log('📊 Word count:', wordCount, '| Sample length:', sampleText.length)
 
-    // Extract internal links with anchor text
+    // Extract internal links with anchor text from content area
     const internalLinks = []
     const pageHost = (() => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' } })()
-    $('a[href]').each((i, el) => {
+    $content.find('a[href]').each((i, el) => {
       const href = $(el).attr('href')
       const anchorText = $(el).text().replace(/\s+/g, ' ').trim()
       const rel = $(el).attr('rel') || ''
@@ -931,18 +979,65 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     // Extract H1 and meta description
     const h1 = $('h1').first().text().trim()
     const metaDescription = ($('meta[name="description"]').attr('content') || '').substring(0, 160)
+    
+    // Extract title tag
+    const extractedTitle = $('title').first().text().trim()
 
-    page.content = page.content || {}
+    // Initialize content object if it doesn't exist
+    if (!page.content) {
+      page.content = {}
+    }
+    
+    // Update content fields
     page.content.sample = sampleText
     page.content.wordCount = wordCount
     page.content.blocks = blocks
     page.content.internalLinks = internalLinks
     
-    // Always update H1 and meta description if found
-    if (h1) page.h1 = h1
-    if (metaDescription && !page.metaDescription) page.metaDescription = metaDescription
+    // Mark the content field as modified so Mongoose saves it
+    page.markModified('content')
+    
+    // Update H1 if found
+    if (h1) {
+      page.h1 = h1
+    }
+    
+    // Update meta description if found and not already set
+    if (metaDescription && !page.metaDescription) {
+      page.metaDescription = metaDescription
+    }
+    
+    // Update title if it's missing or empty (to prevent validation error)
+    // Only update if we found a valid title from the page
+    if (!page.title || page.title.trim() === '') {
+      if (extractedTitle) {
+        page.title = extractedTitle.substring(0, 200)
+        console.log('📝 Set page title from <title> tag:', page.title)
+      } else if (h1) {
+        page.title = h1.substring(0, 200)
+        console.log('📝 Set page title from H1:', page.title)
+      } else {
+        // Last resort: use URL path
+        try {
+          const urlPath = new URL(url).pathname.split('/').filter(Boolean).pop() || 'Untitled Page'
+          page.title = urlPath.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()).substring(0, 200)
+          console.log('📝 Set page title from URL path:', page.title)
+        } catch {
+          page.title = 'Untitled Page'
+          console.log('📝 Set default page title: Untitled Page')
+        }
+      }
+    }
     
     await page.save()
+    
+    // Log what we're sending back
+    console.log(`✅ Content refreshed for page ${page._id}: ${blocks.length} blocks, ${wordCount} words`)
+
+    // Populate the page before returning to ensure all related data is included
+    await page.populate('clientId', 'name domain')
+    await page.populate('author', 'name email')
+    await page.populate('lastEditedBy', 'name email')
 
     res.json({ status: 'success', data: { page } })
   } catch (error) {
@@ -1040,6 +1135,84 @@ router.post('/:id/recrawl', protect, async (req, res, next) => {
       broken: analysis.links?.potentiallyBroken || 0,
     }
     page.content.sample = content.sampleText || undefined
+    
+    // Fetch detailed content blocks for styled rendering
+    // This ensures recrawl also populates blocks and internalLinks
+    try {
+      const axios = require('axios')
+      const cheerio = require('cheerio')
+      
+      // Add delay and user agent rotation (same as refresh-content)
+      const delay = Math.floor(Math.random() * 2000) + 1000
+      await new Promise(resolve => setTimeout(resolve, delay))
+      
+      const userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
+      ]
+      const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)]
+      
+      const response = await axios.get(url, {
+        timeout: 15000,
+        headers: {
+          'User-Agent': userAgent,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5'
+        }
+      })
+      
+      const $ = cheerio.load(response.data)
+      
+      // Remove non-content elements
+      $('script, style, noscript, iframe, svg').remove()
+      $('nav, header, footer, aside, [role="navigation"], [class*="menu"], [class*="nav"], [id*="menu"], [id*="nav"]').remove()
+      
+      // Extract content blocks
+      const blocks = []
+      $('h1, h2, h3, h4, h5, h6, p').each((i, el) => {
+        if (blocks.length >= 50) return false
+        const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
+        const text = $(el).text().replace(/\s+/g, ' ').trim()
+        if (!text || text.length < 10) return
+        blocks.push({ tag, text })
+      })
+      
+      // Extract internal links
+      const internalLinks = []
+      const pageHost = (() => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' } })()
+      $('a[href]').each((i, el) => {
+        const href = $(el).attr('href')
+        const anchorText = $(el).text().replace(/\s+/g, ' ').trim()
+        const rel = $(el).attr('rel') || ''
+        if (!href || !anchorText) return
+        try {
+          const absoluteUrl = new URL(href, url).href
+          const linkHost = new URL(absoluteUrl).hostname.toLowerCase().replace(/^www\./, '')
+          if (linkHost === pageHost && !absoluteUrl.includes('#') && internalLinks.length < 100) {
+            internalLinks.push({
+              url: absoluteUrl,
+              anchorText: anchorText.substring(0, 200),
+              isNofollow: rel.includes('nofollow')
+            })
+          }
+        } catch {}
+      })
+      
+      // Set the blocks and internal links
+      page.content.blocks = blocks
+      page.content.internalLinks = internalLinks
+      
+      console.log(`✅ Recrawl fetched ${blocks.length} content blocks and ${internalLinks.length} internal links`)
+    } catch (blockError) {
+      console.warn('⚠️ Failed to fetch content blocks during recrawl:', blockError.message)
+      // Set empty arrays if fetch failed
+      page.content.blocks = []
+      page.content.internalLinks = []
+    }
+    
+    // Mark the content field as modified so Mongoose saves it
+    page.markModified('content')
 
     page.images = (images.details || []).map(img => ({
       url: img.src,
@@ -1060,6 +1233,11 @@ router.post('/:id/recrawl', protect, async (req, res, next) => {
     }
 
     await page.save()
+    
+    // Populate the page before returning to ensure all related data is included
+    await page.populate('clientId', 'name domain')
+    await page.populate('author', 'name email')
+    await page.populate('lastEditedBy', 'name email')
 
     res.json({ status: 'success', data: { page } })
   } catch (error) {

@@ -90,18 +90,34 @@ const usePagesStore = create((set, get) => ({
       })
       
       if (!resp.ok) {
-        const errorText = await resp.text()
-        console.error('Refresh content HTTP error:', resp.status, errorText)
-        throw new Error(`Server error: ${resp.status}`)
+        const contentType = resp.headers.get('content-type')
+        let errorMessage = `Server error: ${resp.status}`
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await resp.json()
+          errorMessage = errorData.message || errorMessage
+          console.error('Refresh content error response:', errorData)
+        } else {
+          const errorText = await resp.text()
+          console.error('Refresh content HTTP error:', resp.status, errorText)
+        }
+        
+        throw new Error(errorMessage)
       }
       
       const data = await resp.json()
       console.log('Refresh content response:', data)
       
       if (data.status === 'success') {
-        const page = data.data.page
-        set(state => ({ pages: state.pages.map(p => p._id === pageId ? page : p) }))
-        return page
+        const updatedPage = data.data.page
+        console.log('Updated page content:', updatedPage.content)
+        
+        // Update the page in the store
+        set(state => ({ 
+          pages: state.pages.map(p => p._id === pageId ? updatedPage : p) 
+        }))
+        
+        return updatedPage
       }
       const errorMessage = data.message || 'Failed to refresh content'
       throw new Error(errorMessage)

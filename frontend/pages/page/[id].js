@@ -13,6 +13,7 @@ export default function PageDetail() {
   const { pages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage, checkSEO, suggestSEOFixes } = usePagesStore()
   const [loading, setLoading] = useState(false)
   const [recrawling, setRecrawling] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [checking, setChecking] = useState(false)
   const [seoReport, setSeoReport] = useState(null)
   const [showFixesModal, setShowFixesModal] = useState(false)
@@ -59,6 +60,19 @@ export default function PageDetail() {
     run()
     return () => { active = false }
   }, [id])
+  
+  // Debug: Log when page content changes
+  useEffect(() => {
+    if (page?.content) {
+      console.log('Page content updated:', {
+        hasBlocks: Array.isArray(page.content.blocks),
+        blocksCount: page.content.blocks?.length || 0,
+        hasSample: !!page.content.sample,
+        hasInternalLinks: Array.isArray(page.content.internalLinks),
+        internalLinksCount: page.content.internalLinks?.length || 0
+      })
+    }
+  }, [page?.content])
 
   return (
     <Layout>
@@ -109,14 +123,41 @@ export default function PageDetail() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold text-gray-700">Content preview</h3>
                   <button
-                    className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                    onClick={async () => { try { await refreshContent(page._id) } catch {} }}
+                    className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={refreshing}
+                    onClick={async () => { 
+                      try {
+                        setRefreshing(true)
+                        const updatedPage = await refreshContent(page._id)
+                        console.log('Content refreshed, updated page:', updatedPage)
+                        // Force re-fetch to ensure we have the latest data
+                        await fetchPage(page._id)
+                      } catch (err) {
+                        console.error('Refresh content error:', err)
+                        alert(`Failed to refresh content: ${err.message}`)
+                      } finally {
+                        setRefreshing(false)
+                      }
+                    }}
                   >
-                    {page?.content?.sample ? 'Refresh content' : 'Capture content'}
+                    {refreshing ? 'Refreshing...' : (page?.content?.sample ? 'Refresh content' : 'Capture content')}
                   </button>
                 </div>
                 
-                {/* Show H1 First */}
+                {/* Loading indicator during refresh */}
+                {refreshing && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span className="text-sm text-blue-700 font-medium">Fetching fresh content from the page...</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Show H1 First - Keep visible during refresh */}
                 {getCleanH1(page.h1) && (
                   <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-3 mb-3">
                     <div className="flex items-center gap-2 mb-2">
@@ -127,8 +168,9 @@ export default function PageDetail() {
                   </div>
                 )}
                 
+                {/* Content Blocks - Keep visible during refresh */}
                 {Array.isArray(page?.content?.blocks) && page.content.blocks.length > 0 ? (
-                  <div className="bg-white border rounded-lg p-4 max-h-[70vh] overflow-auto space-y-4">
+                  <div className={`bg-white border rounded-lg p-4 max-h-[70vh] overflow-auto space-y-4 ${refreshing ? 'opacity-50 pointer-events-none' : ''}`}>
                     {page.content.blocks.map((b, idx) => {
                       const tag = b.tag?.toLowerCase() || 'p';
                       
@@ -228,11 +270,11 @@ export default function PageDetail() {
                       );
                     })}
                   </div>
-                ) : (
+                ) : !refreshing ? (
                   <div className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 border rounded p-3 max-h-[70vh] overflow-auto">
-                    {page?.content?.sample || 'No content captured for this page.'}
+                    {page?.content?.sample || 'No content captured for this page. Click "Refresh content" to fetch it.'}
                   </div>
-                )}
+                ) : null}
               </div>
               {Array.isArray(page?.content?.internalLinks) && page.content.internalLinks.length > 0 && (
                 <div className="mt-4">
