@@ -134,7 +134,18 @@ export default function PageDetail() {
                         await fetchPage(page._id)
                       } catch (err) {
                         console.error('Refresh content error:', err)
-                        alert(`Failed to refresh content: ${err.message}`)
+                        
+                        // Check if it's a bot protection error
+                        if (err.message && err.message.toLowerCase().includes('bot protection')) {
+                          alert(
+                            '🚫 Bot Protection Detected\n\n' +
+                            err.message + '\n\n' +
+                            'This usually happens when accessing from cloud servers. ' +
+                            'The website may work better from localhost or after adding your server IP to an allowlist.'
+                          )
+                        } else {
+                          alert(`Failed to refresh content: ${err.message}`)
+                        }
                       } finally {
                         setRefreshing(false)
                       }

@@ -886,21 +886,60 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     const userAgents = [
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     ];
     const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
 
     const response = await axios.get(url, { 
-      timeout: 15000, 
+      timeout: 20000,
+      maxRedirects: 5,
       headers: { 
         'User-Agent': userAgent,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5'
-      } 
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Upgrade-Insecure-Requests': '1',
+        'Connection': 'keep-alive'
+      },
+      validateStatus: (status) => status < 500 // Accept any status < 500
     })
-    const $ = cheerio.load(response.data)
-
-    console.log('📄 HTML fetched, size:', response.data.length, 'bytes')
+    
+    console.log('📄 Response status:', response.status, '| HTML size:', response.data.length, 'bytes')
+    
+    // Check for bot protection pages
+    const html = response.data;
+    const botProtectionPhrases = [
+      'please wait while your request is being verified',
+      'checking your browser',
+      'cloudflare',
+      'just a moment',
+      'enable javascript and cookies',
+      'security check',
+      'verify you are human',
+      'ddos protection by cloudflare',
+      'attention required'
+    ];
+    
+    const htmlLower = html.toLowerCase();
+    const detectedProtection = botProtectionPhrases.find(phrase => htmlLower.includes(phrase));
+    
+    if (detectedProtection) {
+      console.error('🚫 Bot protection detected:', detectedProtection);
+      return res.status(403).json({
+        status: 'error',
+        message: 'Bot protection detected',
+        details: `The website is protected by security software (Cloudflare, etc.) that blocks automated requests. This is common when accessing from cloud servers. Try: 1) Access the page directly in a browser first, 2) Add your server's IP to the site's allowlist if you manage it, or 3) Use the online host which may have different IP reputation.`,
+        detectedPhrase: detectedProtection
+      });
+    }
+    
+    const $ = cheerio.load(html)
 
     // Remove scripts, styles, and other non-content elements
     $('script, style, noscript, iframe, svg').remove()
@@ -1149,61 +1188,99 @@ router.post('/:id/recrawl', protect, async (req, res, next) => {
       const userAgents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       ]
       const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)]
       
       const response = await axios.get(url, {
-        timeout: 15000,
+        timeout: 20000,
+        maxRedirects: 5,
         headers: {
           'User-Agent': userAgent,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5'
-        }
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Upgrade-Insecure-Requests': '1',
+          'Connection': 'keep-alive'
+        },
+        validateStatus: (status) => status < 500
       })
       
-      const $ = cheerio.load(response.data)
+      console.log('📄 Recrawl fetch - Status:', response.status, '| HTML size:', response.data.length, 'bytes')
       
-      // Remove non-content elements
-      $('script, style, noscript, iframe, svg').remove()
-      $('nav, header, footer, aside, [role="navigation"], [class*="menu"], [class*="nav"], [id*="menu"], [id*="nav"]').remove()
+      // Check for bot protection
+      const html = response.data
+      const botProtectionPhrases = [
+        'please wait while your request is being verified',
+        'checking your browser',
+        'cloudflare',
+        'just a moment',
+        'enable javascript and cookies',
+        'security check',
+        'verify you are human',
+        'ddos protection by cloudflare',
+        'attention required'
+      ]
       
-      // Extract content blocks
-      const blocks = []
-      $('h1, h2, h3, h4, h5, h6, p').each((i, el) => {
-        if (blocks.length >= 50) return false
-        const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
-        const text = $(el).text().replace(/\s+/g, ' ').trim()
-        if (!text || text.length < 10) return
-        blocks.push({ tag, text })
-      })
+      const htmlLower = html.toLowerCase()
+      const detectedProtection = botProtectionPhrases.find(phrase => htmlLower.includes(phrase))
       
-      // Extract internal links
-      const internalLinks = []
-      const pageHost = (() => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' } })()
-      $('a[href]').each((i, el) => {
-        const href = $(el).attr('href')
-        const anchorText = $(el).text().replace(/\s+/g, ' ').trim()
-        const rel = $(el).attr('rel') || ''
-        if (!href || !anchorText) return
-        try {
-          const absoluteUrl = new URL(href, url).href
-          const linkHost = new URL(absoluteUrl).hostname.toLowerCase().replace(/^www\./, '')
-          if (linkHost === pageHost && !absoluteUrl.includes('#') && internalLinks.length < 100) {
-            internalLinks.push({
-              url: absoluteUrl,
-              anchorText: anchorText.substring(0, 200),
-              isNofollow: rel.includes('nofollow')
-            })
-          }
-        } catch {}
-      })
+      if (detectedProtection) {
+        console.error('🚫 Bot protection detected during recrawl:', detectedProtection)
+        // Don't fail the entire recrawl, but set empty blocks with warning
+        page.content.blocks = []
+        page.content.internalLinks = []
+        page.content.sample = `⚠️ Bot protection detected: ${detectedProtection}. Content could not be extracted.`
+      } else {
+        const $ = cheerio.load(html)
       
-      // Set the blocks and internal links
-      page.content.blocks = blocks
-      page.content.internalLinks = internalLinks
-      
-      console.log(`✅ Recrawl fetched ${blocks.length} content blocks and ${internalLinks.length} internal links`)
+        // Remove non-content elements
+        $('script, style, noscript, iframe, svg').remove()
+        $('nav, header, footer, aside, [role="navigation"], [class*="menu"], [class*="nav"], [id*="menu"], [id*="nav"]').remove()
+        
+        // Extract content blocks
+        const blocks = []
+        $('h1, h2, h3, h4, h5, h6, p').each((i, el) => {
+          if (blocks.length >= 50) return false
+          const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
+          const text = $(el).text().replace(/\s+/g, ' ').trim()
+          if (!text || text.length < 10) return
+          blocks.push({ tag, text })
+        })
+        
+        // Extract internal links
+        const internalLinks = []
+        const pageHost = (() => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' } })()
+        $('a[href]').each((i, el) => {
+          const href = $(el).attr('href')
+          const anchorText = $(el).text().replace(/\s+/g, ' ').trim()
+          const rel = $(el).attr('rel') || ''
+          if (!href || !anchorText) return
+          try {
+            const absoluteUrl = new URL(href, url).href
+            const linkHost = new URL(absoluteUrl).hostname.toLowerCase().replace(/^www\./, '')
+            if (linkHost === pageHost && !absoluteUrl.includes('#') && internalLinks.length < 100) {
+              internalLinks.push({
+                url: absoluteUrl,
+                anchorText: anchorText.substring(0, 200),
+                isNofollow: rel.includes('nofollow')
+              })
+            }
+          } catch {}
+        })
+        
+        // Set the blocks and internal links
+        page.content.blocks = blocks
+        page.content.internalLinks = internalLinks
+        
+        console.log(`✅ Recrawl fetched ${blocks.length} content blocks and ${internalLinks.length} internal links`)
+      }
     } catch (blockError) {
       console.warn('⚠️ Failed to fetch content blocks during recrawl:', blockError.message)
       // Set empty arrays if fetch failed

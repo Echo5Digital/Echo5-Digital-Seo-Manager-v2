@@ -28,7 +28,7 @@ export default function Sidebar() {
     { name: 'Keyword Planner', href: '/keyword-planner', icon: LightBulbIcon, isNew: true },
     { name: 'Rank Checker', href: '/rank-checker', icon: ChartBarSquareIcon, isNew: true },
     { name: 'Backlinks', href: '/backlinks', icon: LinkIcon },
-    { name: 'Pages', href: '/pages', icon: DocumentTextIcon, isNew: true },
+    { name: 'Page Optimizer', href: '/pages', icon: DocumentTextIcon, isNew: true },
     { name: 'Tasks', href: '/tasks', icon: ClipboardDocumentListIcon, isNew: true },
     { name: 'Reports', href: '/reports', icon: ChartBarIcon },
     { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
@@ -72,7 +72,7 @@ export default function Sidebar() {
                   {item.name}
                 </div>
                 {item.isNew && (
-                  <span className="px-2 py-0.5 text-xs font-semibold text-white bg-green-500 rounded-full">
+                  <span className="px-2 py-0.5 text-xs font-semibold text-white bg-orange-500 rounded-full">
                     NEW
                   </span>
                 )}
