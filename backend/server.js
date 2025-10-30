@@ -291,32 +291,4 @@ process.on('uncaughtException', (err) => {
   // Otherwise, log and continue
 });
 
-// Graceful shutdown
-async function gracefulShutdown(signal) {
-  logger.info(`${signal} received. Starting graceful shutdown...`);
-  
-  // Close browser if it's running
-  try {
-    const { closeBrowser } = require('./utils/browserFetcher');
-    await closeBrowser();
-  } catch (error) {
-    // Browser fetcher might not be loaded yet, that's OK
-  }
-  
-  // Close server
-  server.close(() => {
-    logger.info('Server closed');
-    process.exit(0);
-  });
-  
-  // Force shutdown after 30 seconds
-  setTimeout(() => {
-    logger.error('Forced shutdown after timeout');
-    process.exit(1);
-  }, 30000);
-}
-
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
 module.exports = { app, server, io };
