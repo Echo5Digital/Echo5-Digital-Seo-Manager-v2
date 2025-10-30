@@ -10,7 +10,8 @@ async function fetchWebpage(url, options = {}) {
   const {
     timeout = 25000,
     retries = 2,
-    useProxy = false
+    useProxy = false,
+    useBrowser = false // Set to true to force browser usage
   } = options;
 
   // More comprehensive user agent list
@@ -115,7 +116,17 @@ async function fetchWebpage(url, options = {}) {
           continue;
         }
         
-        throw new Error(`Bot protection detected: ${detectedProtection}`);
+        // Last attempt failed - try browser if available
+        console.log('💡 Trying browser-based fetch as fallback...');
+        try {
+          const { fetchWithBrowser } = require('./browserFetcher');
+          const browserHtml = await fetchWithBrowser(url, { timeout });
+          console.log('✅ Browser fetch succeeded!');
+          return browserHtml;
+        } catch (browserError) {
+          console.error('❌ Browser fetch also failed:', browserError.message);
+          throw new Error(`Bot protection detected: ${detectedProtection}`);
+        }
       }
       
       return response.data;

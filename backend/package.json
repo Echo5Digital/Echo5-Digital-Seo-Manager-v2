@@ -18,6 +18,7 @@
   "author": "Echo5 SEO Agency",
   "license": "ISC",
   "dependencies": {
+    "@sparticuz/chromium": "^119.0.2",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.0.0-rc.12",
@@ -39,6 +40,7 @@
     "openai": "^4.20.1",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "puppeteer-core": "^21.6.1",
     "socket.io": "^4.6.0",
     "winston": "^3.11.0",
     "xss-clean": "^0.1.4"
