@@ -879,25 +879,29 @@ router.post('/:id/refresh-content', protect, async (req, res, next) => {
     
     console.log('🔄 Refreshing content for:', url)
 
-    // Use the enhanced web fetcher with retries and better headers
-    const html = await fetchWebpage(url, { 
-      timeout: 25000,
-      retries: 3,
-      useProxy: process.env.NODE_ENV === 'production' // Use proxy in production if configured
-    });
-    
-    // Final check for bot protection
-    const botCheck = detectBotProtection(html);
-    if (botCheck.detected) {
-      console.error('🚫 Bot protection still detected after retries:', botCheck.phrase);
-      return res.status(403).json({
-        status: 'error',
-        message: 'Bot protection detected',
-        details: `The website is blocking automated access. ${
-          botCheck.isCloudflare ? 'Cloudflare protection is active.' : ''
-        } Solutions: 1) Try again in a few minutes, 2) Access from localhost, 3) Configure a proxy service, 4) Contact the site owner to whitelist your server IP.`,
-        detectedPhrase: botCheck.phrase
+    // Use the enhanced web fetcher with retries and browser fallback
+    let html;
+    try {
+      html = await fetchWebpage(url, { 
+        timeout: 25000,
+        retries: 3,
+        useProxy: process.env.NODE_ENV === 'production' // Use proxy in production if configured
       });
+    } catch (error) {
+      console.error('❌ All fetch attempts failed:', error.message);
+      
+      // Check if it's a bot protection error
+      if (error.message.includes('Bot protection detected')) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Bot protection detected',
+          details: `The website is blocking automated access even with browser fallback. This is a strong Cloudflare challenge or CAPTCHA. Solutions: 1) Try from localhost, 2) Use a residential proxy service, 3) Contact site owner to whitelist your server IP.`,
+          detectedPhrase: error.message
+        });
+      }
+      
+      // Other errors (timeout, network, etc.)
+      throw error;
     }
     
     const $ = cheerio.load(html)
@@ -1139,66 +1143,66 @@ router.post('/:id/recrawl', protect, async (req, res, next) => {
     // Fetch detailed content blocks for styled rendering
     // This ensures recrawl also populates blocks and internalLinks
     try {
-      // Use the enhanced web fetcher
-      const html = await fetchWebpage(url, {
-        timeout: 25000,
-        retries: 3,
-        useProxy: process.env.NODE_ENV === 'production'
-      });
-      
-      // Check for bot protection
-      const botCheck = detectBotProtection(html);
-      
-      if (botCheck.detected) {
-        console.error('🚫 Bot protection detected during recrawl:', botCheck.phrase)
+      // Use the enhanced web fetcher with browser fallback
+      let html;
+      try {
+        html = await fetchWebpage(url, {
+          timeout: 25000,
+          retries: 3,
+          useProxy: process.env.NODE_ENV === 'production'
+        });
+      } catch (fetchError) {
+        console.warn('⚠️ Failed to fetch content blocks during recrawl:', fetchError.message);
         // Don't fail the entire recrawl, but set empty blocks with warning
-        page.content.blocks = []
-        page.content.internalLinks = []
-        page.content.sample = `⚠️ Bot protection detected: ${botCheck.phrase}. Content could not be extracted.`
-      } else {
-        const $ = cheerio.load(html)
-      
-        // Remove non-content elements
-        $('script, style, noscript, iframe, svg').remove()
-        $('nav, header, footer, aside, [role="navigation"], [class*="menu"], [class*="nav"], [id*="menu"], [id*="nav"]').remove()
-        
-        // Extract content blocks
-        const blocks = []
-        $('h1, h2, h3, h4, h5, h6, p').each((i, el) => {
-          if (blocks.length >= 50) return false
-          const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
-          const text = $(el).text().replace(/\s+/g, ' ').trim()
-          if (!text || text.length < 10) return
-          blocks.push({ tag, text })
-        })
-        
-        // Extract internal links
-        const internalLinks = []
-        const pageHost = (() => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' } })()
-        $('a[href]').each((i, el) => {
-          const href = $(el).attr('href')
-          const anchorText = $(el).text().replace(/\s+/g, ' ').trim()
-          const rel = $(el).attr('rel') || ''
-          if (!href || !anchorText) return
-          try {
-            const absoluteUrl = new URL(href, url).href
-            const linkHost = new URL(absoluteUrl).hostname.toLowerCase().replace(/^www\./, '')
-            if (linkHost === pageHost && !absoluteUrl.includes('#') && internalLinks.length < 100) {
-              internalLinks.push({
-                url: absoluteUrl,
-                anchorText: anchorText.substring(0, 200),
-                isNofollow: rel.includes('nofollow')
-              })
-            }
-          } catch {}
-        })
-        
-        // Set the blocks and internal links
-        page.content.blocks = blocks
-        page.content.internalLinks = internalLinks
-        
-        console.log(`✅ Recrawl fetched ${blocks.length} content blocks and ${internalLinks.length} internal links`)
+        page.content.blocks = [];
+        page.content.internalLinks = [];
+        page.content.sample = `⚠️ Could not extract content: ${fetchError.message}`;
+        throw fetchError; // Re-throw to skip the parsing below
       }
+      
+      const $ = cheerio.load(html)
+      
+      // Remove non-content elements
+      $('script, style, noscript, iframe, svg').remove()
+      $('nav, header, footer, aside, [role="navigation"], [class*="menu"], [class*="nav"], [id*="menu"], [id*="nav"]').remove()
+      
+      // Extract content blocks
+      const blocks = []
+      $('h1, h2, h3, h4, h5, h6, p').each((i, el) => {
+        if (blocks.length >= 50) return false
+        const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase()
+        const text = $(el).text().replace(/\s+/g, ' ').trim()
+        if (!text || text.length < 10) return
+        blocks.push({ tag, text })
+      })
+      
+      // Extract internal links
+      const internalLinks = []
+      const pageHost = (() => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' } })()
+      $('a[href]').each((i, el) => {
+        const href = $(el).attr('href')
+        const anchorText = $(el).text().replace(/\s+/g, ' ').trim()
+        const rel = $(el).attr('rel') || ''
+        if (!href || !anchorText) return
+        try {
+          const absoluteUrl = new URL(href, url).href
+          const linkHost = new URL(absoluteUrl).hostname.toLowerCase().replace(/^www\./, '')
+          if (linkHost === pageHost && !absoluteUrl.includes('#') && internalLinks.length < 100) {
+            internalLinks.push({
+              url: absoluteUrl,
+              anchorText: anchorText.substring(0, 200),
+              isNofollow: rel.includes('nofollow')
+            })
+          }
+        } catch {}
+      })
+      
+      // Set the blocks and internal links
+      page.content.blocks = blocks
+      page.content.internalLinks = internalLinks
+      
+      console.log(`✅ Recrawl fetched ${blocks.length} content blocks and ${internalLinks.length} internal links`)
+      
     } catch (blockError) {
       console.warn('⚠️ Failed to fetch content blocks during recrawl:', blockError.message)
       // Set empty arrays if fetch failed
