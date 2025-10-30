@@ -4,74 +4,6 @@ const { protect } = require('../middleware/auth');
 const aiService = require('../services/ai.service');
 const axios = require('axios');
 
-// Helper: Get DataForSEO location code from location string
-function getLocationCode(locationString) {
-  if (!locationString) return { code: 2356, name: 'India' }; // Default to India
-  
-  const loc = locationString.toLowerCase();
-  
-  // Indian cities (more specific codes for better targeting)
-  if (loc.includes('kochi') || loc.includes('cochin')) {
-    return { code: 1012270, name: 'Kochi, Kerala, India' }; // Kochi, India
-  }
-  if (loc.includes('mumbai') || loc.includes('bombay')) {
-    return { code: 1007785, name: 'Mumbai, Maharashtra, India' };
-  }
-  if (loc.includes('delhi')) {
-    return { code: 1007783, name: 'Delhi, India' };
-  }
-  if (loc.includes('bangalore') || loc.includes('bengaluru')) {
-    return { code: 1007744, name: 'Bangalore, Karnataka, India' };
-  }
-  if (loc.includes('chennai') || loc.includes('madras')) {
-    return { code: 1007748, name: 'Chennai, Tamil Nadu, India' };
-  }
-  if (loc.includes('hyderabad')) {
-    return { code: 1007771, name: 'Hyderabad, Telangana, India' };
-  }
-  if (loc.includes('pune')) {
-    return { code: 1007806, name: 'Pune, Maharashtra, India' };
-  }
-  if (loc.includes('kerala')) {
-    return { code: 1012270, name: 'Kochi, Kerala, India' }; // Use Kochi for Kerala
-  }
-  
-  // US cities
-  if (loc.includes('new york') || loc.includes('nyc')) {
-    return { code: 1023191, name: 'New York, NY, United States' };
-  }
-  if (loc.includes('los angeles') || loc.includes('la,')) {
-    return { code: 1023768, name: 'Los Angeles, CA, United States' };
-  }
-  if (loc.includes('chicago')) {
-    return { code: 1014044, name: 'Chicago, IL, United States' };
-  }
-  if (loc.includes('san francisco')) {
-    return { code: 1023829, name: 'San Francisco, CA, United States' };
-  }
-  
-  // Countries (fallback to country-level)
-  if (loc.includes('india')) {
-    return { code: 2356, name: 'India' };
-  }
-  if (loc.includes('united states') || loc.includes('usa')) {
-    return { code: 2840, name: 'United States' };
-  }
-  if (loc.includes('united kingdom') || loc.includes('uk')) {
-    return { code: 2826, name: 'United Kingdom' };
-  }
-  if (loc.includes('canada')) {
-    return { code: 2124, name: 'Canada' };
-  }
-  if (loc.includes('australia')) {
-    return { code: 2036, name: 'Australia' };
-  }
-  
-  // Default to India if no match
-  console.warn('⚠️ Unknown location:', locationString, '- defaulting to India');
-  return { code: 2356, name: 'India' };
-}
-
 // Helper: shallow-domain match
 function normalizeDomain(u) {
   try {
@@ -187,21 +119,53 @@ router.post('/rank', protect, async (req, res, next) => {
         // Use the LIVE endpoint for immediate results (costs slightly more but no polling needed)
         const liveUrl = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced';
 
-        // Get location code from location string
-        const locationData = getLocationCode(location);
+        // Determine location code based on provided location or default to India
+        let locationCode = 2356; // India default
         
-        // For live endpoint, we need to use different parameter structure
+        // Map common locations to DataForSEO location codes
+        const locationMap = {
+          'india': 2356,
+          'united states': 2840,
+          'usa': 2840,
+          'us': 2840,
+          'united kingdom': 2826,
+          'uk': 2826,
+          'canada': 2124,
+          'australia': 2036,
+          'uae': 2784,
+          'dubai': 2784,
+          'singapore': 2702,
+          'germany': 2276,
+          'france': 2250
+        };
+        
+        if (location) {
+          const normalizedLocation = location.toLowerCase().trim();
+          // Check if location matches any of our mapped countries
+          for (const [key, code] of Object.entries(locationMap)) {
+            if (normalizedLocation.includes(key)) {
+              locationCode = code;
+              break;
+            }
+          }
+          // If no match found in map, try to use as city name with India default
+          // For city-specific searches, we'll use location_name with a valid location_code
+        }
+
+        // Create a live request payload
         const payload = [
           {
             keyword: keyword,
-            language_name: 'English',
-            location_code: locationData.code,
-            depth: 100
+            language_code: 'en',
+            location_code: locationCode,
+            device: 'desktop',
+            os: 'windows',
+            depth: 100, // Check top 100 results
+            calculate_rectangles: false // Don't need visual data
           }
         ];
 
         console.log('🔍 Calling DataForSEO LIVE API for keyword:', keyword, 'domain:', domain);
-        console.log('📍 Location:', locationData.name, '(code:', locationData.code + ')');
         console.log('📤 Payload:', JSON.stringify(payload, null, 2));
         
         const liveRes = await axios.post(liveUrl, payload, {
@@ -262,7 +226,8 @@ router.post('/rank', protect, async (req, res, next) => {
                 rank: finalResult, 
                 inTop100: true, 
                 difficulty, 
-                location: locationData.name, 
+                location: location || `Location Code: ${locationCode}`, 
+                locationCode: locationCode,
                 checkedAt: new Date(), 
                 source: 'dataforseo' 
               } 
@@ -278,7 +243,8 @@ router.post('/rank', protect, async (req, res, next) => {
                 rank: null,
                 inTop100: false,
                 difficulty,
-                location: locationData.name,
+                location: location || `Location Code: ${locationCode}`,
+                locationCode: locationCode,
                 checkedAt: new Date(),
                 source: 'dataforseo',
                 message: 'Not found in top 100 results'

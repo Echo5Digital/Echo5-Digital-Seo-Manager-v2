@@ -151,24 +151,9 @@ export default function RankChecker() {
           setRankDomain(client.website);
         }
       }
-      
-      // Auto-fill location - use virtual 'location' field or build from locations array
-      let locationString = '';
+      // Auto-fill location
       if (client.location) {
-        // Virtual field from backend
-        locationString = client.location;
-      } else if (client.locations && client.locations.length > 0) {
-        // Build from locations array
-        const loc = client.locations[0];
-        const parts = [];
-        if (loc.city) parts.push(loc.city);
-        if (loc.state) parts.push(loc.state);
-        if (loc.country) parts.push(loc.country);
-        locationString = parts.join(', ');
-      }
-      
-      if (locationString) {
-        setRankLocation(locationString);
+        setRankLocation(client.location);
       }
     }
     
@@ -233,14 +218,26 @@ export default function RankChecker() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Location (Optional)</label>
-              <input
-                type="text"
-                placeholder="e.g., New York, USA"
+              <label className="block text-sm font-medium text-gray-700 mb-1">Country/Location</label>
+              <select
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 value={rankLocation}
                 onChange={(e) => setRankLocation(e.target.value)}
-              />
+              >
+                <option value="">-- Select Country --</option>
+                <option value="India">India</option>
+                <option value="United States">United States</option>
+                <option value="United Kingdom">United Kingdom</option>
+                <option value="Canada">Canada</option>
+                <option value="Australia">Australia</option>
+                <option value="UAE">UAE</option>
+                <option value="Singapore">Singapore</option>
+                <option value="Germany">Germany</option>
+                <option value="France">France</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Auto-filled from client or select manually
+              </p>
             </div>
           </div>
 
