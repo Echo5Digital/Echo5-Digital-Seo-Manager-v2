@@ -41,23 +41,31 @@ export default function RankChecker() {
     }
   }, []);
 
-  // Save rank result to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined' && rankResult) {
-      localStorage.setItem('lastRankResult', JSON.stringify(rankResult));
+  // Fetch rank history from database
+  const fetchRankHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/keyword-planner/rank-history`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const result = await response.json();
+      if (result.status === 'success') {
+        setRankHistory(result.data || []);
+        console.log('📊 Loaded rank history from database:', result.data?.length || 0, 'records');
+      }
+    } catch (error) {
+      console.error('❌ Error loading rank history:', error);
+    } finally {
+      setLoadingHistory(false);
     }
-  }, [rankResult]);
-
-  // Save rank history to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined' && rankHistory.length > 0) {
-      localStorage.setItem('rankHistory', JSON.stringify(rankHistory));
-    }
-  }, [rankHistory]);
+  };
 
   useEffect(() => {
     fetchClients();
     fetchKeywords();
+    fetchRankHistory(); // Load history from database
   }, [fetchClients, fetchKeywords]);
 
   // Close dropdown when clicking outside
@@ -147,13 +155,8 @@ export default function RankChecker() {
       if (resp && resp.status === 'success') {
         setRankResult(resp.data);
         
-        // Add to history
-        setRankHistory(prev => [{
-          ...resp.data,
-          id: Date.now(),
-          domain: rankDomain,
-          keyword: rankKeyword
-        }, ...prev.slice(0, 9)]); // Keep last 10 results
+        // Reload history from database to get the newly saved result
+        await fetchRankHistory();
       } else if (resp && resp.status === 'error') {
         setRankError(resp.message || 'Rank check failed');
       } else {
@@ -525,7 +528,12 @@ export default function RankChecker() {
         )}
 
         {/* Rank History - Grouped by Client and Date */}
-        {rankHistory.length > 0 && (
+        {loadingHistory ? (
+          <div className="bg-white border rounded-lg shadow-sm p-8 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="text-gray-600 mt-4">Loading rank history...</p>
+          </div>
+        ) : rankHistory.length > 0 ? (
           <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
             <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
               <div>
@@ -552,6 +560,10 @@ export default function RankChecker() {
             <div className="overflow-x-auto">
               {renderGroupedHistory()}
             </div>
+          </div>
+        ) : (
+          <div className="bg-white border rounded-lg shadow-sm p-8 text-center">
+            <p className="text-gray-600">No rank checks yet. Start by checking a keyword rank above.</p>
           </div>
         )}
 
