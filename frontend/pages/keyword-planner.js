@@ -7,6 +7,7 @@ export default function KeywordPlanner() {
   const clients = useClientStore(state => state.clients);
   const fetchClients = useClientStore(state => state.fetchClients);
   const analyzeKeywords = useKeywordPlannerStore(state => state.analyzeKeywords);
+  const checkRank = useKeywordPlannerStore(state => state.checkRank);
   
   const locationInputRef = useRef(null);
   
@@ -19,6 +20,11 @@ export default function KeywordPlanner() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
   const [keywordIdeas, setKeywordIdeas] = useState([]);
+  // Rank checker state
+  const [rankDomain, setRankDomain] = useState('');
+  const [rankKeyword, setRankKeyword] = useState('');
+  const [checkingRank, setCheckingRank] = useState(false);
+  const [rankResult, setRankResult] = useState(null);
 
   const selectedClient = clients.find(c => c._id === selectedClientId);
 
@@ -170,6 +176,24 @@ export default function KeywordPlanner() {
     
     if (!currentKeywords.includes(idea.keyword)) {
       setKeywordsInput([...currentKeywords, idea.keyword].join('\n'));
+    }
+  };
+
+  const handleCheckRank = async () => {
+    if (!rankDomain.trim() || !rankKeyword.trim()) return;
+    setCheckingRank(true);
+    setRankResult(null);
+    try {
+      const resp = await checkRank({ domain: rankDomain.trim(), keyword: rankKeyword.trim() });
+      if (resp && resp.status === 'success') {
+        setRankResult(resp.data);
+      } else {
+        console.error('Rank check failed', resp);
+      }
+    } catch (err) {
+      console.error('Error checking rank:', err);
+    } finally {
+      setCheckingRank(false);
     }
   };
 
@@ -448,6 +472,56 @@ export default function KeywordPlanner() {
           <p className="text-sm text-gray-600">Enter keywords above and click "Get Keyword Data" to start your research</p>
         </div>
       ) : null}
+
+      {/* Keyword Rank Checker - Always Visible */}
+      <div className="bg-white border rounded-lg p-6 shadow-sm mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Keyword Rank Checker</h2>
+            <p className="text-sm text-gray-600">Check where a keyword ranks for a specific domain</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
+            <input
+              type="text"
+              placeholder="example.com"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              value={rankDomain}
+              onChange={(e) => setRankDomain(e.target.value)}
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Keyword</label>
+            <input
+              type="text"
+              placeholder="enter keyword to check"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              value={rankKeyword}
+              onChange={(e) => setRankKeyword(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleCheckRank}
+            disabled={!rankDomain.trim() || !rankKeyword.trim() || checkingRank}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50"
+          >
+            {checkingRank ? 'Checking...' : 'Check Rank'}
+          </button>
+          {rankResult && (
+            <div className="ml-4 text-sm text-gray-700">
+              <div><strong>Rank:</strong> {rankResult.rank || 'Not in top 100'}</div>
+              <div><strong>Difficulty:</strong> {rankResult.difficulty}</div>
+              <div className="text-xs text-gray-500">Checked at: {new Date(rankResult.checkedAt).toLocaleString()}</div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
     </Layout>
   );
