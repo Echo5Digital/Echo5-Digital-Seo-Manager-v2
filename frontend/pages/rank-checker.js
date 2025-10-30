@@ -16,13 +16,55 @@ export default function RankChecker() {
   const [rankKeyword, setRankKeyword] = useState('');
   const [rankLocation, setRankLocation] = useState('United States');
   const [checkingRank, setCheckingRank] = useState(false);
-  const [rankResult, setRankResult] = useState(null);
-  const [rankHistory, setRankHistory] = useState([]);
+  const [rankResult, setRankResult] = useState(() => {
+    // Load last rank result from localStorage on initial render
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('lastRankResult');
+      return saved ? JSON.parse(saved) : null;
+    }
+    return null;
+  });
+  const [rankHistory, setRankHistory] = useState(() => {
+    // Load rank history from localStorage on initial render
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('rankHistory');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
   const [rankError, setRankError] = useState(null);
   const [keywordSuggestions, setKeywordSuggestions] = useState([]);
   const [showKeywordDropdown, setShowKeywordDropdown] = useState(false);
   const keywordInputRef = useRef(null);
   const dropdownRef = useRef(null);
+
+  // Load last search inputs from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedInputs = localStorage.getItem('lastRankSearch');
+      if (savedInputs) {
+        const { clientId, domain, keyword, location } = JSON.parse(savedInputs);
+        if (clientId) setRankClientId(clientId);
+        if (domain) setRankDomain(domain);
+        if (keyword) setRankKeyword(keyword);
+        if (location) setRankLocation(location);
+      }
+    }
+  }, []);
+
+  // Save rank result to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && rankResult) {
+      localStorage.setItem('lastRankResult', JSON.stringify(rankResult));
+    }
+  }, [rankResult]);
+
+  // Save rank history to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && rankHistory.length > 0) {
+      localStorage.setItem('rankHistory', JSON.stringify(rankHistory));
+    }
+  }, [rankHistory]);
 
   useEffect(() => {
     fetchClients();
@@ -176,6 +218,98 @@ export default function RankChecker() {
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString();
+  };
+
+  const formatDateOnly = (dateString) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  // Group rank history by client and date
+  const groupedHistory = () => {
+    if (rankHistory.length === 0) return {};
+    
+    const grouped = {};
+    
+    rankHistory.forEach(item => {
+      // Find client name from domain or use domain as key
+      const clientKey = item.domain;
+      const dateKey = formatDateOnly(item.checkedAt);
+      
+      if (!grouped[clientKey]) {
+        grouped[clientKey] = {};
+      }
+      
+      if (!grouped[clientKey][dateKey]) {
+        grouped[clientKey][dateKey] = [];
+      }
+      
+      grouped[clientKey][dateKey].push(item);
+    });
+    
+    return grouped;
+  };
+
+  const renderGroupedHistory = () => {
+    const grouped = groupedHistory();
+    const clientKeys = Object.keys(grouped).sort();
+    
+    if (clientKeys.length === 0) return null;
+    
+    return clientKeys.map(clientKey => (
+      <div key={clientKey} className="mb-6 last:mb-0">
+        <div className="bg-indigo-50 px-4 py-2 border-b border-indigo-100">
+          <h3 className="text-sm font-semibold text-indigo-900">{clientKey}</h3>
+        </div>
+        {Object.keys(grouped[clientKey]).sort((a, b) => new Date(b) - new Date(a)).map(dateKey => (
+          <div key={dateKey} className="border-l-4 border-indigo-200">
+            <div className="bg-gray-50 px-4 py-2 border-b">
+              <span className="text-xs font-medium text-gray-700">
+                {dateKey} ({grouped[clientKey][dateKey].length} check{grouped[clientKey][dateKey].length > 1 ? 's' : ''})
+              </span>
+            </div>
+            <table className="w-full">
+              <tbody className="divide-y divide-gray-100">
+                {grouped[clientKey][dateKey].map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-700 w-1/3">{item.keyword}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 w-1/4">{item.location || 'Global'}</td>
+                    <td className="px-4 py-3 w-1/6">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        item.rank && item.rank <= 10 
+                          ? 'bg-green-100 text-green-800' 
+                          : item.rank && item.rank <= 30
+                          ? 'bg-blue-100 text-blue-800'
+                          : item.rank
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {item.rank ? `#${item.rank}` : 'Not ranked'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 w-1/6">{item.difficulty}/100</td>
+                    <td className="px-4 py-3 w-1/6">
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                        item.source === 'dataforseo' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {item.source === 'dataforseo' && (
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                        {item.source === 'dataforseo' ? 'Live' : item.source}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{new Date(item.checkedAt).toLocaleTimeString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    ));
   };
 
   return (
@@ -401,65 +535,33 @@ export default function RankChecker() {
           </div>
         )}
 
-        {/* Rank History */}
+        {/* Rank History - Grouped by Client and Date */}
         {rankHistory.length > 0 && (
           <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-            <div className="p-4 border-b bg-gray-50">
-              <h2 className="text-lg font-semibold text-gray-900">Recent Checks</h2>
-              <p className="text-sm text-gray-600 mt-1">Your last {rankHistory.length} rank checks</p>
+            <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Recent Checks</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {rankHistory.length} total check{rankHistory.length > 1 ? 's' : ''} grouped by client and date
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-600">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-green-100 border border-green-300"></div>
+                  <span>Top 10</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-blue-100 border border-blue-300"></div>
+                  <span>Top 30</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-orange-100 border border-orange-300"></div>
+                  <span>Top 100</span>
+                </div>
+              </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Domain</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Keyword</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Location</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Rank</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Difficulty</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Source</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Checked</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {rankHistory.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.domain}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{item.keyword}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{item.location || 'Global'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          item.rank && item.rank <= 10 
-                            ? 'bg-green-100 text-green-800' 
-                            : item.rank && item.rank <= 30
-                            ? 'bg-blue-100 text-blue-800'
-                            : item.rank
-                            ? 'bg-orange-100 text-orange-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {item.rank ? `#${item.rank}` : 'Not ranked'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{item.difficulty}/100</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          item.source === 'dataforseo' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {item.source === 'dataforseo' && (
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                          {item.source === 'dataforseo' ? 'Live' : item.source}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{formatDate(item.checkedAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {renderGroupedHistory()}
             </div>
           </div>
         )}

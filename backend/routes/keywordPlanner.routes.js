@@ -123,20 +123,28 @@ router.post('/rank', protect, async (req, res, next) => {
         let locationCode = 2840; // United States default
         
         // Map common locations to DataForSEO location codes
+        // Grouped by region and sorted alphabetically
         const locationMap = {
-          'india': 2356,
+          // North America
+          'canada': 2124,
           'united states': 2840,
           'usa': 2840,
           'us': 2840,
+          
+          // Europe
+          'france': 2250,
+          'germany': 2276,
           'united kingdom': 2826,
           'uk': 2826,
-          'canada': 2124,
+          
+          // Asia-Pacific
           'australia': 2036,
-          'uae': 2784,
-          'dubai': 2784,
+          'india': 2356,
           'singapore': 2702,
-          'germany': 2276,
-          'france': 2250
+          
+          // Middle East
+          'dubai': 2784,
+          'uae': 2784
         };
         
         if (location) {
