@@ -190,15 +190,13 @@ router.post('/rank', protect, async (req, res, next) => {
         // Get location code from location string
         const locationData = getLocationCode(location);
         
+        // For live endpoint, we need to use different parameter structure
         const payload = [
           {
             keyword: keyword,
-            language_code: 'en',
+            language_name: 'English',
             location_code: locationData.code,
-            device: 'desktop',
-            os: 'windows',
-            depth: 100, // Check top 100 results
-            calculate_rectangles: false // Don't need visual data
+            depth: 100
           }
         ];
 
