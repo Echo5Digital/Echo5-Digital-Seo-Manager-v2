@@ -235,6 +235,23 @@ const clientSchema = new mongoose.Schema({
   timestamps: true,
 });
 
+// Virtual field: Primary location formatted for rank checking
+clientSchema.virtual('location').get(function() {
+  if (this.locations && this.locations.length > 0) {
+    const loc = this.locations[0];
+    const parts = [];
+    if (loc.city) parts.push(loc.city);
+    if (loc.state) parts.push(loc.state);
+    if (loc.country) parts.push(loc.country);
+    return parts.join(', ');
+  }
+  return '';
+});
+
+// Ensure virtuals are included in JSON
+clientSchema.set('toJSON', { virtuals: true });
+clientSchema.set('toObject', { virtuals: true });
+
 // Index for faster queries (domain already has unique index)
 clientSchema.index({ assignedStaff: 1 });
 clientSchema.index({ isActive: 1 });

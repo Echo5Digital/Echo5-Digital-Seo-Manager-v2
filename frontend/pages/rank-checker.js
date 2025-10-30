@@ -151,9 +151,24 @@ export default function RankChecker() {
           setRankDomain(client.website);
         }
       }
-      // Auto-fill location
+      
+      // Auto-fill location - use virtual 'location' field or build from locations array
+      let locationString = '';
       if (client.location) {
-        setRankLocation(client.location);
+        // Virtual field from backend
+        locationString = client.location;
+      } else if (client.locations && client.locations.length > 0) {
+        // Build from locations array
+        const loc = client.locations[0];
+        const parts = [];
+        if (loc.city) parts.push(loc.city);
+        if (loc.state) parts.push(loc.state);
+        if (loc.country) parts.push(loc.country);
+        locationString = parts.join(', ');
+      }
+      
+      if (locationString) {
+        setRankLocation(locationString);
       }
     }
     
