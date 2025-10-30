@@ -30,8 +30,8 @@ async function fetchWebpage(url, options = {}) {
 
   const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
 
-  // Random delay between 1-4 seconds to appear more human
-  const delay = Math.floor(Math.random() * 3000) + 1000;
+  // Reduced delay for faster processing (100-500ms instead of 1-4 seconds)
+  const delay = Math.floor(Math.random() * 400) + 100;
   await new Promise(resolve => setTimeout(resolve, delay));
 
   // Build request config

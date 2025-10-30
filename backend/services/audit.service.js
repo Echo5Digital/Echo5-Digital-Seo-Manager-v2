@@ -21,8 +21,8 @@ function getNextUserAgent() {
   return ua;
 }
 
-// Random delay helper to add jitter
-async function randomDelay(min = 1000, max = 3000) {
+// Random delay helper to add jitter (OPTIMIZED for faster audits)
+async function randomDelay(min = 100, max = 300) {
   const delay = Math.floor(Math.random() * (max - min + 1)) + min;
   await new Promise(resolve => setTimeout(resolve, delay));
 }
@@ -43,8 +43,8 @@ class AuditService {
         tier: 'high',
         maxDiscovery: 200,
         maxAnalysis: 100,
-        batchSize: 3,      // Reduced from 5 to prevent IP blocking
-        batchDelay: 2000,  // Increased from 1000ms to 2000ms
+        batchSize: 10,     // Increased for faster processing
+        batchDelay: 500,   // Reduced significantly
         enableDeepAnalysis: true
       };
     } else if (totalMemoryMB >= 1500) {
@@ -53,8 +53,8 @@ class AuditService {
         tier: 'medium',
         maxDiscovery: 100,
         maxAnalysis: 50,
-        batchSize: 2,      // Reduced from 3
-        batchDelay: 3000,  // Increased from 1500ms to 3000ms
+        batchSize: 5,      // Increased
+        batchDelay: 800,   // Reduced
         enableDeepAnalysis: true
       };
     } else {
@@ -63,8 +63,8 @@ class AuditService {
         tier: 'low',
         maxDiscovery: 50,
         maxAnalysis: 25,
-        batchSize: 1,      // Reduced from 2
-        batchDelay: 4000,  // Increased from 2000ms to 4000ms
+        batchSize: 2,      // Slight increase
+        batchDelay: 1500,  // Reduced
         enableDeepAnalysis: false // Skip some heavy operations
       };
     }

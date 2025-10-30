@@ -369,24 +369,44 @@ router.get('/details/:auditId', protect, async (req, res, next) => {
 // DELETE /api/audits/:auditId - Delete an audit
 router.delete('/:auditId', protect, async (req, res, next) => {
   try {
+    console.log('🗑️ DELETE /api/audits/:auditId - User:', req.user.email, 'Audit ID:', req.params.auditId);
+    
     const audit = await Audit.findById(req.params.auditId);
 
     if (!audit) {
+      console.log('❌ Audit not found:', req.params.auditId);
       return res.status(404).json({
         status: 'error',
         message: 'Audit not found',
       });
     }
 
+    console.log('📋 Found audit:', audit._id, 'for client:', audit.clientId);
+
     // Check if user has permission to delete this audit
-    // You might want to add additional checks here based on your business logic
+    // Staff can only delete audits for their assigned clients
+    if (req.user.role === 'Staff') {
+      const Client = require('../models/Client.model');
+      const client = await Client.findById(audit.clientId);
+      
+      if (!client || !client.assignedStaff.includes(req.user._id)) {
+        console.log('❌ Staff user not authorized to delete this audit');
+        return res.status(403).json({
+          status: 'error',
+          message: 'Not authorized to delete this audit'
+        });
+      }
+    }
+
     await Audit.findByIdAndDelete(req.params.auditId);
+    console.log('✅ Audit deleted successfully:', req.params.auditId);
 
     res.json({
       status: 'success',
       message: 'Audit deleted successfully',
     });
   } catch (error) {
+    console.error('❌ Error deleting audit:', error);
     next(error);
   }
 });

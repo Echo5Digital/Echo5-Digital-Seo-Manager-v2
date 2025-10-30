@@ -123,9 +123,28 @@ const useAuditStore = create((set, get) => ({
 
         // Poll for audit status
         let pollCount = 0
+        const maxPolls = 200 // Maximum 10 minutes (200 * 3 seconds)
         const pollInterval = setInterval(async () => {
           try {
             pollCount++
+            
+            // Safety check - stop polling after max attempts
+            if (pollCount > maxPolls) {
+              console.warn('⚠️ Max polling attempts reached, stopping...');
+              clearInterval(pollInterval);
+              set(state => ({
+                loading: false,
+                error: 'Audit is taking longer than expected',
+                auditProgress: {
+                  ...state.auditProgress,
+                  isRunning: false,
+                  progress: 0,
+                  step: 'Audit timeout - please check audit status'
+                }
+              }));
+              return;
+            }
+            
             const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/audits/${auditId}`, {
               headers: {
                 'Authorization': `Bearer ${token}`
@@ -137,11 +156,11 @@ const useAuditStore = create((set, get) => ({
             if (statusData.status === 'success') {
               const audit = statusData.data.audit
               
-              console.log('🔄 Polling received audit:', {
+              console.log('🔄 Poll #' + pollCount + ' - Audit status:', {
                 id: audit._id,
                 status: audit.status,
                 hasSummary: !!audit.summary,
-                summary: audit.summary
+                hasResults: !!audit.results
               })
               
               // Update audit in list
@@ -166,6 +185,7 @@ const useAuditStore = create((set, get) => ({
                 }))
               } else if (audit.status === 'Completed') {
                 // Audit completed
+                console.log('✅ Audit completed! Stopping polling...');
                 clearInterval(pollInterval)
                 set(state => ({
                   loading: false,
@@ -189,6 +209,7 @@ const useAuditStore = create((set, get) => ({
                 }, 2000)
               } else if (audit.status === 'Failed') {
                 // Audit failed
+                console.log('❌ Audit failed! Stopping polling...');
                 clearInterval(pollInterval)
                 set(state => ({
                   loading: false,
@@ -214,21 +235,9 @@ const useAuditStore = create((set, get) => ({
               }
             }
           } catch (error) {
-            console.error('Error polling audit status:', error)
+            console.error('❌ Error polling audit status:', error)
           }
         }, 3000) // Poll every 3 seconds
-
-        // Stop polling after 10 minutes (safety timeout)
-        setTimeout(() => {
-          clearInterval(pollInterval)
-          set(state => ({
-            loading: false,
-            auditProgress: {
-              ...state.auditProgress,
-              isRunning: false
-            }
-          }))
-        }, 600000)
 
         return data.data
       }
@@ -290,17 +299,32 @@ const useAuditStore = create((set, get) => ({
     set({ error: null })
     try {
       const token = useAuthStore.getState().token
-      await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/audits/${auditId}`, {
+      console.log('🗑️ Deleting audit:', auditId)
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/audits/${auditId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
 
+      console.log('📥 Delete response status:', response.status)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('✅ Audit deleted successfully')
+
       set(state => ({
         audits: state.audits.filter(a => a._id !== auditId)
       }))
+
+      return data
     } catch (error) {
+      console.error('❌ Error deleting audit:', error)
       set({
         error: error.message || 'Failed to delete audit'
       })
