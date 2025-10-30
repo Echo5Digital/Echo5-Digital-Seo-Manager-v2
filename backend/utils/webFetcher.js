@@ -1,5 +1,4 @@
 const axios = require('axios');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 
 /**
  * Fetch webpage content with anti-bot protection bypass techniques
@@ -68,11 +67,13 @@ async function fetchWebpage(url, options = {}) {
     } catch {}
   }
 
-  // Use proxy if configured (for production environments)
-  if (useProxy && process.env.HTTP_PROXY) {
-    config.httpsAgent = new HttpsProxyAgent(process.env.HTTP_PROXY);
-    console.log('🔄 Using proxy:', process.env.HTTP_PROXY.replace(/\/\/.*@/, '//***:***@'));
-  }
+  // Note: Proxy support removed to avoid extra dependencies
+  // To use a proxy, install https-proxy-agent and uncomment below:
+  // if (useProxy && process.env.HTTP_PROXY) {
+  //   const { HttpsProxyAgent } = require('https-proxy-agent');
+  //   config.httpsAgent = new HttpsProxyAgent(process.env.HTTP_PROXY);
+  //   console.log('🔄 Using proxy:', process.env.HTTP_PROXY.replace(/\/\/.*@/, '//***:***@'));
+  // }
 
   let lastError;
   
