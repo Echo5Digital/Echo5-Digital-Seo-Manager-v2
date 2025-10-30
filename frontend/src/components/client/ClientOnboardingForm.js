@@ -15,6 +15,7 @@ const ClientOnboardingForm = ({
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [activeLocationIndex, setActiveLocationIndex] = useState(null);
   const [fetchingLocations, setFetchingLocations] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const locationInputRefs = useRef([]);
   
   const [formData, setFormData] = useState(initialData || {
@@ -211,23 +212,46 @@ const ClientOnboardingForm = ({
     setActiveLocationIndex(null);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     console.log('Form submitted. Current step:', currentStep, 'Total steps:', totalSteps);
     
-    // Clean up data before submitting
-    const cleanedData = {
-      ...formData,
-      services: formData.services.filter(s => s.trim() !== ''),
-      competitors: formData.competitors.filter(c => c.trim() !== ''),
-      primaryKeywords: formData.primaryKeywords.filter(k => k.keyword.trim() !== ''),
-      secondaryKeywords: formData.secondaryKeywords.filter(k => k.keyword.trim() !== ''),
-      seedKeywords: formData.seedKeywords.filter(k => k.keyword.trim() !== ''),
-      locations: formData.locations.filter(l => l.city.trim() !== '' || l.state.trim() !== '')
-    };
+    // Only allow submission on the final step
+    if (currentStep !== totalSteps) {
+      console.log('Not on final step, preventing submission');
+      return;
+    }
+    
+    // Prevent double submission
+    if (isSubmitting) {
+      console.log('Already submitting, ignoring...');
+      return;
+    }
 
-    onComplete(cleanedData);
+    setIsSubmitting(true);
+    
+    try {
+      // Clean up data before submitting
+      const cleanedData = {
+        ...formData,
+        services: formData.services.filter(s => s.trim() !== ''),
+        competitors: formData.competitors.filter(c => c.trim() !== ''),
+        primaryKeywords: formData.primaryKeywords.filter(k => k.keyword.trim() !== ''),
+        secondaryKeywords: formData.secondaryKeywords.filter(k => k.keyword.trim() !== ''),
+        seedKeywords: formData.seedKeywords.filter(k => k.keyword.trim() !== ''),
+        locations: formData.locations.filter(l => l.city.trim() !== '' || l.state.trim() !== '')
+      };
+
+      console.log('Calling onComplete with cleaned data:', cleanedData);
+      await onComplete(cleanedData);
+      console.log('onComplete finished successfully');
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      alert(`Failed to submit: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const nextStep = () => {
@@ -243,7 +267,35 @@ const ClientOnboardingForm = ({
     }
   };
 
+  // Prevent form submission when pressing Enter on non-final steps
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && currentStep !== totalSteps) {
+      e.preventDefault();
+      // Move to next step instead
+      if (currentStep < totalSteps) {
+        nextStep();
+      }
+    }
+  };
+
   const renderStepContent = () => {
+    // Add debugging
+    console.log('Rendering step content. Step:', currentStep, 'User role:', user?.role, 'Total steps:', totalSteps);
+
+    // Helper function to determine if current step should show review
+    const isReviewStep = () => {
+      if (user?.role === 'Boss' || user?.role === 'Manager') {
+        return currentStep === 8;
+      } else {
+        return currentStep === 7;
+      }
+    };
+
+    // Helper function to determine if current step should show staff assignment
+    const isStaffAssignmentStep = () => {
+      return (user?.role === 'Boss' || user?.role === 'Manager') && currentStep === 7;
+    };
+
     switch (currentStep) {
       case 1:
         return (
@@ -269,16 +321,18 @@ const ClientOnboardingForm = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Website URL *
+                Website URL
               </label>
               <input
                 type="url"
                 value={formData.website}
                 onChange={(e) => handleInputChange('website', e.target.value)}
-                required
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="https://example.com"
+                placeholder="https://example.com (optional)"
               />
+              <p className="text-sm text-gray-500 mt-1">
+                If not provided, we'll generate a unique identifier from the client name
+              </p>
             </div>
 
             <div>
@@ -790,11 +844,148 @@ const ClientOnboardingForm = ({
         );
 
       case 7:
-        // Only show this step for Boss/Manager
+        // For Staff users, show Review step
         if (user?.role !== 'Boss' && user?.role !== 'Manager') {
-          return null;
+          return (
+            <div className="space-y-6">
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Review & Confirm</h2>
+                <p className="text-gray-600">Review your client information before submitting</p>
+              </div>
+
+              <div className="space-y-4">
+                {/* Basic Info */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-900 mb-3">Basic Information</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Client Name:</span>
+                      <span className="font-medium text-gray-900">{formData.name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Website:</span>
+                      <span className="font-medium text-gray-900">{formData.website}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Industry:</span>
+                      <span className="font-medium text-gray-900">{formData.industry}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Locations */}
+                {formData.locations && formData.locations.length > 0 && formData.locations.some(l => l.city) && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-gray-900 mb-3">Target Locations</h3>
+                    <div className="space-y-2">
+                      {formData.locations.filter(l => l.city).map((loc, idx) => (
+                        <div key={idx} className="text-sm text-gray-700">
+                          {loc.city}{loc.state ? `, ${loc.state}` : ''}{loc.country ? `, ${loc.country}` : ''} 
+                          {loc.radius ? ` (${loc.radius} ${loc.radiusUnit || 'miles'} radius)` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Services */}
+                {formData.services && formData.services.filter(s => s.trim()).length > 0 && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-gray-900 mb-3">Services</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {formData.services.filter(s => s.trim()).map((service, idx) => (
+                        <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                          {service}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Competitors */}
+                {formData.competitors && formData.competitors.filter(c => c.trim()).length > 0 && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-gray-900 mb-3">Competitors</h3>
+                    <div className="space-y-1">
+                      {formData.competitors.filter(c => c.trim()).map((competitor, idx) => (
+                        <div key={idx} className="text-sm text-gray-700">{competitor}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Keywords */}
+                {((formData.primaryKeywords && formData.primaryKeywords.filter(k => k.keyword.trim()).length > 0) ||
+                  (formData.secondaryKeywords && formData.secondaryKeywords.filter(k => k.keyword.trim()).length > 0)) && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-gray-900 mb-3">Keywords</h3>
+                    {formData.primaryKeywords && formData.primaryKeywords.filter(k => k.keyword.trim()).length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Primary Keywords:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {formData.primaryKeywords.filter(k => k.keyword.trim()).map((kw, idx) => (
+                            <span key={idx} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                              {kw.keyword}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {formData.secondaryKeywords && formData.secondaryKeywords.filter(k => k.keyword.trim()).length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Secondary Keywords:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {formData.secondaryKeywords.filter(k => k.keyword.trim()).map((kw, idx) => (
+                            <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                              {kw.keyword}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Integrations */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-900 mb-3">Integrations</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.integrations?.googleSearchConsole && (
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">Google Search Console</span>
+                    )}
+                    {formData.integrations?.googleAnalytics && (
+                      <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">Google Analytics</span>
+                    )}
+                    {formData.integrations?.googleBusinessProfile && (
+                      <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm">Google Business Profile</span>
+                    )}
+                    {!formData.integrations?.googleSearchConsole && 
+                     !formData.integrations?.googleAnalytics && 
+                     !formData.integrations?.googleBusinessProfile && (
+                      <span className="text-sm text-gray-500 italic">No integrations selected</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5">
+                    ✓
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-green-900 mb-1">Ready to Submit</h4>
+                    <p className="text-sm text-green-800">
+                      Click "Complete Onboarding" to create this client profile.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
         }
         
+        // For Boss/Manager users, show Assign Staff step
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
@@ -980,7 +1171,12 @@ const ClientOnboardingForm = ({
         );
 
       default:
-        return null;
+        console.warn('Unexpected step:', currentStep, 'User role:', user?.role);
+        return (
+          <div className="text-center py-8">
+            <p className="text-gray-600">Loading step content...</p>
+          </div>
+        );
     }
   };
 
@@ -1007,8 +1203,15 @@ const ClientOnboardingForm = ({
 
         {/* Form Content */}
         <div className="bg-white rounded-lg shadow-sm p-8">
-          <form onSubmit={handleSubmit}>
-            {renderStepContent()}
+          <form onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
+            {renderStepContent() || (
+              <div className="text-center py-8">
+                <p className="text-red-600">Error: No content for this step</p>
+                <p className="text-sm text-gray-600 mt-2">
+                  Step: {currentStep}, Role: {user?.role}, Total Steps: {totalSteps}
+                </p>
+              </div>
+            )}
 
             {/* Navigation Buttons */}
             <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
@@ -1044,9 +1247,16 @@ const ClientOnboardingForm = ({
                 ) : (
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                    disabled={isSubmitting}
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    {isEditing ? 'Update Client' : 'Complete Onboarding'}
+                    {isSubmitting && (
+                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    {isSubmitting ? 'Submitting...' : (isEditing ? 'Update Client' : 'Complete Onboarding')}
                   </button>
                 )}
               </div>

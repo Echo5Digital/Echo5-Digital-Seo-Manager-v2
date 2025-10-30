@@ -12,6 +12,8 @@ const useClientStore = create((set, get) => ({
     set({ loading: true, error: null })
     try {
       const token = useAuthStore.getState().token
+      console.log('🔄 Fetching clients from API...')
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/clients`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -19,14 +21,17 @@ const useClientStore = create((set, get) => ({
       })
 
       const data = await response.json()
+      console.log('📥 Fetched clients:', data)
 
       if (data.status === 'success') {
+        console.log('✅ Setting clients in store:', data.data.clients.length, 'clients')
         set({
           clients: data.data.clients,
           loading: false
         })
       }
     } catch (error) {
+      console.error('❌ Error fetching clients:', error)
       set({
         error: error.message || 'Failed to fetch clients',
         loading: false
@@ -67,6 +72,8 @@ const useClientStore = create((set, get) => ({
     set({ loading: true, error: null })
     try {
       const token = useAuthStore.getState().token
+      console.log('📤 Sending client data to API:', clientData)
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/clients`, {
         method: 'POST',
         headers: {
@@ -77,15 +84,19 @@ const useClientStore = create((set, get) => ({
       })
 
       const data = await response.json()
+      console.log('📥 API Response:', data)
 
       if (data.status === 'success') {
+        console.log('✅ Adding client to store:', data.data.client)
         set(state => ({
           clients: [...state.clients, data.data.client],
           loading: false
         }))
+        console.log('📊 Updated clients count:', get().clients.length)
         return data.data.client
       } else {
         // Handle error response
+        console.error('❌ API Error:', data.message)
         set({
           error: data.message || 'Failed to add client',
           loading: false
@@ -94,6 +105,7 @@ const useClientStore = create((set, get) => ({
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to add client'
+      console.error('❌ Error in addClient:', errorMessage, error)
       set({
         error: errorMessage,
         loading: false
@@ -139,17 +151,29 @@ const useClientStore = create((set, get) => ({
     set({ error: null })
     try {
       const token = useAuthStore.getState().token
-      await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/clients/${id}`, {
+      console.log('🗑️ Deleting client:', id)
+      
+      // Add ?permanent=true to actually delete from database
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/clients/${id}?permanent=true`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
 
-      set(state => ({
-        clients: state.clients.filter(c => c._id !== id)
-      }))
+      const data = await response.json()
+      console.log('✅ Delete response:', data)
+
+      if (data.status === 'success') {
+        set(state => ({
+          clients: state.clients.filter(c => c._id !== id)
+        }))
+        console.log('📊 Client removed from store')
+      } else {
+        throw new Error(data.message || 'Failed to delete client')
+      }
     } catch (error) {
+      console.error('❌ Error deleting client:', error)
       set({
         error: error.message || 'Failed to delete client'
       })

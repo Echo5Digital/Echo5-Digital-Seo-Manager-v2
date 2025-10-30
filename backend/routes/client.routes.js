@@ -16,6 +16,8 @@ router.get('/', protect, async (req, res, next) => {
   try {
     let query = { isActive: true };
 
+    console.log('📋 GET /api/clients - User:', req.user.email, 'Role:', req.user.role);
+
     // If user is Staff, only show assigned clients
     if (req.user.role === 'Staff') {
       query.assignedStaff = req.user._id;
@@ -39,6 +41,8 @@ router.get('/', protect, async (req, res, next) => {
       .populate('createdBy', 'name')
       .sort('-createdAt');
 
+    console.log(`✅ Found ${clients.length} clients for user ${req.user.email}`);
+
     if (req.user.role === 'Staff') {
       console.log('📊 Staff clients found:', clients.length);
       if (clients.length > 0) {
@@ -47,6 +51,8 @@ router.get('/', protect, async (req, res, next) => {
           assignedStaff: c.assignedStaff.map(s => s.email)
         })));
       }
+    } else {
+      console.log('👔 Boss/Manager clients:', clients.map(c => c.name));
     }
 
     res.json({
@@ -55,6 +61,7 @@ router.get('/', protect, async (req, res, next) => {
       data: { clients },
     });
   } catch (error) {
+    console.error('❌ Error fetching clients:', error);
     next(error);
   }
 });
@@ -102,7 +109,7 @@ router.get('/:id', protect, async (req, res, next) => {
 router.post(
   '/',
   protect,
-  authorize('Boss'),
+  authorize('Boss', 'Manager'),
   [
     body('name').trim().notEmpty().withMessage('Client name is required'),
     body('website').optional().trim(),
@@ -146,10 +153,28 @@ router.post(
           .split('/')[0];              // Take only the domain part
       }
 
+      // If no domain, generate one from the client name
+      if (!domain || domain.trim() === '') {
+        domain = name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')  // Replace non-alphanumeric with hyphens
+          .replace(/^-+|-+$/g, '')      // Remove leading/trailing hyphens
+          + '-client';
+      }
+
+      console.log('📝 Client creation attempt:', {
+        name,
+        website,
+        domain,
+        industry,
+        assignedStaff
+      });
+
       // Check if client with this domain already exists
       if (domain) {
         const existingClient = await Client.findOne({ domain });
         if (existingClient) {
+          console.log('⚠️ Client already exists with domain:', domain);
           // Return the existing client instead of error (idempotent behavior)
           const populatedClient = await Client.findById(existingClient._id)
             .populate('assignedStaff', 'name email')
@@ -185,10 +210,13 @@ router.post(
         createdBy: req.user._id,
       });
 
-      console.log('✅ Client created with assignedStaff:', {
+      console.log('✅ Client created successfully:', {
         clientId: client._id,
         clientName: client.name,
-        assignedStaff: client.assignedStaff
+        domain: client.domain,
+        assignedStaff: client.assignedStaff,
+        locations: client.locations?.length || 0,
+        services: client.services?.length || 0
       });
 
       // Generate initial site structure with AI
@@ -216,11 +244,33 @@ router.post(
         .populate('assignedStaff', 'name email')
         .populate('createdBy', 'name');
 
+      console.log('📤 Sending response with populated client');
+
       res.status(201).json({
         status: 'success',
         data: { client: populatedClient },
       });
     } catch (error) {
+      console.error('❌ Error creating client:', error);
+      
+      // Handle validation errors
+      if (error.name === 'ValidationError') {
+        const messages = Object.values(error.errors).map(err => err.message);
+        return res.status(400).json({
+          status: 'error',
+          message: 'Validation failed',
+          errors: messages
+        });
+      }
+      
+      // Handle duplicate key errors
+      if (error.code === 11000) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'A client with this domain already exists'
+        });
+      }
+      
       next(error);
     }
   }
@@ -316,9 +366,9 @@ router.put(
 /**
  * @route   DELETE /api/clients/:id
  * @desc    Delete (deactivate) client - Use ?permanent=true for hard delete
- * @access  Private (Boss only)
+ * @access  Private (Boss/Manager only)
  */
-router.delete('/:id', protect, authorize('Boss'), async (req, res, next) => {
+router.delete('/:id', protect, authorize('Boss', 'Manager'), async (req, res, next) => {
   try {
     const client = await Client.findById(req.params.id);
     
@@ -329,10 +379,20 @@ router.delete('/:id', protect, authorize('Boss'), async (req, res, next) => {
       });
     }
 
+    console.log('🗑️ Delete request for client:', {
+      clientId: req.params.id,
+      clientName: client.name,
+      permanent: req.query.permanent,
+      userId: req.user._id,
+      userEmail: req.user.email
+    });
+
     // Check if permanent delete is requested
     if (req.query.permanent === 'true') {
       // Hard delete - completely remove from database
       await Client.findByIdAndDelete(req.params.id);
+      
+      console.log('✅ Client permanently deleted from database');
       
       // Remove from assigned staff
       await User.updateMany(
@@ -349,6 +409,8 @@ router.delete('/:id', protect, authorize('Boss'), async (req, res, next) => {
       client.isActive = false;
       await client.save();
 
+      console.log('✅ Client soft deleted (deactivated)');
+
       // Remove from assigned staff
       await User.updateMany(
         { assignedClients: client._id },
@@ -361,6 +423,7 @@ router.delete('/:id', protect, authorize('Boss'), async (req, res, next) => {
       });
     }
   } catch (error) {
+    console.error('❌ Error deleting client:', error);
     next(error);
   }
 });

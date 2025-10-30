@@ -142,14 +142,20 @@ router.post('/', protect, async (req, res, next) => {
 // GET /api/audits - Get all audits (optional query: clientId)
 router.get('/', protect, async (req, res, next) => {
   try {
+    console.log('📋 GET /api/audits - User:', req.user.email, 'Role:', req.user.role);
+    
     const { clientId } = req.query;
     let filter = clientId ? { clientId } : {};
     
     // If user is Staff, only show audits for assigned clients
     if (req.user.role === 'Staff') {
       const Client = require('../models/Client.model');
+      console.log('🔍 Staff user, fetching assigned clients...');
+      
       const assignedClients = await Client.find({ assignedStaff: req.user._id, isActive: true }).select('_id');
       const clientIds = assignedClients.map(c => c._id);
+      
+      console.log('📊 Staff has access to', clientIds.length, 'clients');
       
       if (clientId) {
         // Check if the requested client is assigned to this staff
@@ -165,6 +171,8 @@ router.get('/', protect, async (req, res, next) => {
       }
     }
     
+    console.log('🔎 Querying audits with filter:', JSON.stringify(filter));
+    
     // Exclude heavy fields: results and logs to improve performance
     const audits = await Audit.find(filter)
       .select('-results -logs')
@@ -172,12 +180,15 @@ router.get('/', protect, async (req, res, next) => {
       .sort('-createdAt')
       .lean();
 
+    console.log('✅ Found', audits.length, 'audits');
+
     res.json({
       status: 'success',
       results: audits.length,
       data: { audits },
     });
   } catch (error) {
+    console.error('❌ Error fetching audits:', error);
     next(error);
   }
 });

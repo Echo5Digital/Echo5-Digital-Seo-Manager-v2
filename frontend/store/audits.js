@@ -28,25 +28,61 @@ const useAuditStore = create((set, get) => ({
     set({ loading: true, error: null })
     try {
       const token = useAuthStore.getState().token
+      console.log('🔄 Fetching audits from API...')
+      
+      // Add timeout to fetch
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/audits`, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        signal: controller.signal
       })
+      
+      clearTimeout(timeoutId)
 
+      console.log('📥 Audits response status:', response.status)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
+      console.log('📥 Audits data:', data)
 
       if (data.status === 'success') {
+        console.log('✅ Setting audits in store:', data.data.audits?.length || 0, 'audits')
         set({
           audits: data.data.audits || [],
           loading: false
         })
+      } else {
+        console.error('❌ API returned error:', data.message)
+        set({
+          error: data.message || 'Failed to fetch audits',
+          loading: false,
+          audits: []
+        })
+        throw new Error(data.message || 'Failed to fetch audits')
       }
     } catch (error) {
+      console.error('❌ Error fetching audits:', error)
+      
+      let errorMessage = 'Failed to fetch audits'
+      if (error.name === 'AbortError') {
+        errorMessage = 'Request timeout - the server took too long to respond'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
       set({
-        error: error.message || 'Failed to fetch audits',
-        loading: false
+        error: errorMessage,
+        loading: false,
+        audits: []
       })
+      throw error
     }
   },
 

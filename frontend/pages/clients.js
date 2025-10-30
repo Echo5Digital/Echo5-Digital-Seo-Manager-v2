@@ -40,10 +40,14 @@ export default function Clients() {
         await updateClient(editingClient._id, clientData)
         setEditingClient(null)
       } else {
-        await addClient(clientData)
+        const newClient = await addClient(clientData)
+        console.log('Client added successfully:', newClient)
       }
       
       setShowOnboarding(false)
+      
+      // Refresh the client list to ensure it's up to date
+      await fetchClients()
       
     } catch (error) {
       console.error('Failed to save client:', error)
@@ -488,11 +492,16 @@ export default function Clients() {
                 <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
                   <TrashIcon className="h-6 w-6 text-red-600" />
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Delete Client</h3>
-                <p className="text-sm text-gray-500 mb-6">
-                  Are you sure you want to delete <strong>{deletingClient.name}</strong>? 
-                  This action cannot be undone.
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Permanently Delete Client</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Are you sure you want to permanently delete <strong>{deletingClient.name}</strong>?
                 </p>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
+                  <p className="text-xs text-red-800">
+                    ⚠️ This will permanently remove the client and all associated data from the database. 
+                    This action cannot be undone.
+                  </p>
+                </div>
                 <div className="flex justify-center gap-3">
                   <button
                     onClick={() => setDeletingClient(null)}
@@ -504,7 +513,7 @@ export default function Clients() {
                     onClick={() => handleDelete(deletingClient._id)}
                     className="btn bg-red-600 text-white hover:bg-red-700"
                   >
-                    Delete
+                    Permanently Delete
                   </button>
                 </div>
               </div>

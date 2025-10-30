@@ -33,6 +33,7 @@ export default function Audits() {
   const { pages, fetchPages } = usePagesStore()
 
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [showRunModal, setShowRunModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [showRawData, setShowRawData] = useState(false)
@@ -49,11 +50,16 @@ export default function Audits() {
 
   useEffect(() => {
     const loadData = async () => {
+      console.log('🔄 Starting to load audits and clients...')
       try {
+        setError(null)
         await Promise.all([fetchClients(), fetchAudits()])
+        console.log('✅ Successfully loaded data')
       } catch (error) {
-        console.error('Error loading data:', error)
+        console.error('❌ Error loading data:', error)
+        setError(error.message || 'Failed to load audits')
       } finally {
+        console.log('🏁 Finished loading, setting loading to false')
         setLoading(false)
       }
     }
@@ -253,8 +259,29 @@ export default function Audits() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600">Loading audits...</p>
+        </div>
+      </Layout>
+    )
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col justify-center items-center h-64">
+          <div className="text-red-600 mb-4">
+            <ExclamationTriangleIcon className="h-12 w-12 mx-auto mb-2" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Audits</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn btn-primary"
+          >
+            Retry
+          </button>
         </div>
       </Layout>
     )
