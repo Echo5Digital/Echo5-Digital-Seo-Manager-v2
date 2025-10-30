@@ -119,8 +119,8 @@ router.post('/rank', protect, async (req, res, next) => {
         // Use the LIVE endpoint for immediate results (costs slightly more but no polling needed)
         const liveUrl = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced';
 
-        // Determine location code based on provided location or default to India
-        let locationCode = 2356; // India default
+        // Determine location code based on provided location or default to United States
+        let locationCode = 2840; // United States default
         
         // Map common locations to DataForSEO location codes
         const locationMap = {
@@ -204,14 +204,17 @@ router.post('/rank', protect, async (req, res, next) => {
           console.log('🔍 Searching for domain:', domain, '(normalized:', normalizedTarget + ')');
           
           let finalResult = null;
+          let organicPosition = 0; // Track organic-only position
+          
           for (let i = 0; i < items.length; i++) {
             const item = items[i];
             if (item.type === 'organic') {
+              organicPosition++; // Increment for each organic result
               const itemDomain = normalizeDomain(item.url || item.domain || '');
-              console.log(`  [${item.rank_absolute || i + 1}] ${item.url} -> ${itemDomain}`);
+              console.log(`  [Organic #${organicPosition}, Absolute #${item.rank_absolute || i + 1}] ${item.url} -> ${itemDomain}`);
               if (itemDomain && (itemDomain === normalizedTarget || itemDomain.includes(normalizedTarget))) {
-                finalResult = item.rank_absolute || item.rank_group || (i + 1);
-                console.log('🎯 Position found:', finalResult, 'URL:', item.url);
+                finalResult = organicPosition; // Use organic position instead of rank_absolute
+                console.log('🎯 Position found: Organic #' + finalResult + ' (Absolute #' + (item.rank_absolute || i + 1) + ') URL:', item.url);
                 break;
               }
             }

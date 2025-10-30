@@ -14,7 +14,7 @@ export default function RankChecker() {
   const [rankClientId, setRankClientId] = useState('');
   const [rankDomain, setRankDomain] = useState('');
   const [rankKeyword, setRankKeyword] = useState('');
-  const [rankLocation, setRankLocation] = useState('');
+  const [rankLocation, setRankLocation] = useState('United States');
   const [checkingRank, setCheckingRank] = useState(false);
   const [rankResult, setRankResult] = useState(null);
   const [rankHistory, setRankHistory] = useState([]);
