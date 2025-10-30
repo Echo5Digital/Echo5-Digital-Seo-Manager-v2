@@ -306,6 +306,8 @@ Also generate 10 RELATED keyword ideas that:
 - India Commercial: $0.30-1.50
 - India Informational: $0.05-0.40
 
+IMPORTANT: Return ONLY valid JSON with no comments, no trailing commas, and use double quotes for all strings.
+
 Respond in this EXACT JSON format:
 {
   "results": [
@@ -331,6 +333,7 @@ Respond in this EXACT JSON format:
 
       const completion = await openai.chat.completions.create({
         model: MODEL,
+        response_format: { type: "json_object" }, // Force JSON response
         messages: [
           {
             role: 'system',
@@ -346,6 +349,8 @@ Respond in this EXACT JSON format:
 
       const content = completion.choices[0].message.content.trim();
       
+      console.log('🤖 AI Response (first 500 chars):', content.substring(0, 500));
+      
       // Extract JSON from markdown code blocks if present
       let jsonText = content;
       if (content.includes('```json')) {
@@ -353,8 +358,24 @@ Respond in this EXACT JSON format:
       } else if (content.includes('```')) {
         jsonText = content.split('```')[1].split('```')[0].trim();
       }
+      
+      // Remove any comments from JSON
+      jsonText = jsonText.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      
+      // Try to fix common JSON issues
+      // Remove trailing commas before closing brackets/braces
+      jsonText = jsonText.replace(/,(\s*[}\]])/g, '$1');
+      
+      console.log('🔧 Cleaned JSON (first 500 chars):', jsonText.substring(0, 500));
 
-      const data = JSON.parse(jsonText);
+      let data;
+      try {
+        data = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error('❌ JSON Parse Error:', parseError.message);
+        console.error('📄 Problematic JSON:', jsonText);
+        throw new Error(`Invalid JSON from AI: ${parseError.message}`);
+      }
       
       logger.info(`Keyword planner data generated: ${data.results?.length || 0} results, ${data.ideas?.length || 0} ideas`);
 
@@ -366,6 +387,12 @@ Respond in this EXACT JSON format:
       };
     } catch (error) {
       logger.error('AI Keyword Planner Error:', error);
+      
+      // If it's a JSON parse error, provide more context
+      if (error.message.includes('JSON')) {
+        throw new Error(`Failed to parse AI response: ${error.message}`);
+      }
+      
       throw new Error('Failed to generate keyword planner data');
     }
   }
