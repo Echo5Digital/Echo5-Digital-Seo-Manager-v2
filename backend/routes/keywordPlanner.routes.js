@@ -115,83 +115,122 @@ router.post('/rank', protect, async (req, res, next) => {
     if (dfUser && dfPass) {
       try {
         const auth = Buffer.from(`${dfUser}:${dfPass}`).toString('base64');
-        const postUrl = 'https://api.dataforseo.com/v3/serp/google/organic/task_post';
+        
+        // Use the LIVE endpoint for immediate results (costs slightly more but no polling needed)
+        const liveUrl = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced';
 
-        // Create a task for the keyword. We'll request desktop results by default.
-        const payload = {
-          tasks: [
-            {
-              // Minimal payload - dataforseo accepts various shapes; if this fails we'll catch and fallback
-              keywords: [keyword],
-              language_code: 'en',
-              device: 'desktop'
-            }
-          ]
-        };
+        // Create a live request payload
+        const payload = [
+          {
+            keyword: keyword,
+            language_code: 'en',
+            location_name: location || 'India', // Default to India for Kochi searches
+            device: 'desktop',
+            os: 'windows',
+            depth: 100, // Check top 100 results
+            calculate_rectangles: false // Don't need visual data
+          }
+        ];
 
-        // Add location if provided (DataForSEO uses location_name or location_code)
-        if (location) {
-          payload.tasks[0].location_name = location;
-        }
-
-        const postRes = await axios.post(postUrl, payload, {
+        console.log('🔍 Calling DataForSEO LIVE API for keyword:', keyword, 'domain:', domain);
+        console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+        
+        const liveRes = await axios.post(liveUrl, payload, {
           headers: {
             Authorization: `Basic ${auth}`,
             'Content-Type': 'application/json'
           },
-          timeout: 15000
+          timeout: 30000 // 30s timeout for live results
         });
 
-        // Expect an id (task id) to poll. DataForSEO returns a 'tasks' array with an 'id' per item typically
-        const taskId = postRes?.data?.tasks?.[0]?.id || postRes?.data?.tasks?.[0]?.task_id || null;
-        const taskIdentifier = taskId || postRes?.data?.id || null;
+        console.log('✅ DataForSEO Response Status:', liveRes.data?.status_code, liveRes.data?.status_message);
+        
+        // Check for API errors
+        if (liveRes.data?.status_code >= 40000) {
+          const errorMsg = liveRes.data?.status_message || 'Unknown DataForSEO error';
+          console.error('❌ DataForSEO API Error:', errorMsg);
+          throw new Error(`DataForSEO: ${errorMsg}`);
+        }
 
-        // If no task id, try to parse immediate result (some accounts return result synchronously)
-        if (!taskIdentifier) {
-          const immediatePosition = findPositionInResults(postRes?.data, domain);
-          if (immediatePosition) {
-            return res.json({ status: 'success', data: { domain, keyword, rank: immediatePosition, inTop100: true, difficulty, location: location || 'Global', checkedAt: new Date(), source: 'dataforseo' } });
+        // Check for task-level errors
+        const taskData = liveRes.data?.tasks?.[0];
+        if (taskData?.status_code >= 40000) {
+          const taskError = taskData.status_message || 'Task error';
+          console.error('❌ DataForSEO Task Error:', taskError);
+          throw new Error(`DataForSEO Task: ${taskError}`);
+        }
+
+        // Live endpoint returns results immediately
+        const items = taskData?.result?.[0]?.items;
+        
+        if (items && Array.isArray(items)) {
+          console.log(`📦 Found ${items.length} search results from DataForSEO`);
+          
+          // Search through organic results for our domain
+          const normalizedTarget = normalizeDomain(domain);
+          console.log('🔍 Searching for domain:', domain, '(normalized:', normalizedTarget + ')');
+          
+          let finalResult = null;
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type === 'organic') {
+              const itemDomain = normalizeDomain(item.url || item.domain || '');
+              console.log(`  [${item.rank_absolute || i + 1}] ${item.url} -> ${itemDomain}`);
+              if (itemDomain && (itemDomain === normalizedTarget || itemDomain.includes(normalizedTarget))) {
+                finalResult = item.rank_absolute || item.rank_group || (i + 1);
+                console.log('🎯 Position found:', finalResult, 'URL:', item.url);
+                break;
+              }
+            }
           }
-        }
-
-        // Poll task_get until ready or timeout
-        const getUrl = 'https://api.dataforseo.com/v3/serp/google/organic/task_get';
-        const maxWait = 30000; // 30s max
-        const start = Date.now();
-        let finalResult = null;
-
-        while (Date.now() - start < maxWait) {
-          const getRes = await axios.post(getUrl, { /* task_id or id field depends on API */ id: taskIdentifier }, {
-            headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
-            timeout: 15000
-          });
-
-          const status = getRes?.data?.tasks?.[0]?.status || getRes?.data?.status || null;
-          // Try to extract results
-          const results = getRes?.data?.tasks?.[0]?.result || getRes?.data?.tasks?.[0]?.items || getRes?.data?.tasks?.[0]?.output || getRes?.data;
-
-          const pos = findPositionInResults(results, domain);
-          if (pos) {
-            finalResult = pos;
-            break;
+          
+          if (finalResult) {
+            return res.json({ 
+              status: 'success', 
+              data: { 
+                domain, 
+                keyword, 
+                rank: finalResult, 
+                inTop100: true, 
+                difficulty, 
+                location: location || 'India', 
+                checkedAt: new Date(), 
+                source: 'dataforseo' 
+              } 
+            });
+          } else {
+            // Domain not found in top 100
+            console.warn('⚠️ Domain not found in top 100 results');
+            return res.json({
+              status: 'success',
+              data: {
+                domain,
+                keyword,
+                rank: null,
+                inTop100: false,
+                difficulty,
+                location: location || 'India',
+                checkedAt: new Date(),
+                source: 'dataforseo',
+                message: 'Not found in top 100 results'
+              }
+            });
           }
-
-          // If status indicates finished but no position, break
-          if (status && ['ready', 'finished', 'done'].includes(String(status).toLowerCase())) break;
-
-          // Wait before retrying
-          await new Promise(r => setTimeout(r, 2500));
+        } else {
+          console.warn('⚠️ No items in DataForSEO response');
+          throw new Error('No results from DataForSEO');
         }
-
-        if (finalResult) {
-          return res.json({ status: 'success', data: { domain, keyword, rank: finalResult, inTop100: true, difficulty, location: location || 'Global', checkedAt: new Date(), source: 'dataforseo' } });
-        }
-
-        // If we reach here, DataForSEO didn't yield a match — fall through to demo fallback
-        console.warn('DataForSEO did not return a position for', domain, keyword);
       } catch (err) {
-        console.warn('DataForSEO lookup failed, falling back to demo. Error:', err.message || err);
-        // continue to fallback demo below
+        console.error('❌ DataForSEO lookup failed:', err.message || err);
+        console.error('Full error:', err.response?.data || err);
+        
+        // Check if it's an IP whitelist error
+        if (err.message?.includes('IP') || err.response?.data?.status_message?.includes('IP')) {
+          console.error('⚠️ Possible IP whitelist issue - add your IP to DataForSEO whitelist');
+        }
+        
+        // Fall through to demo fallback
+        console.log('📊 Falling back to demo data');
       }
     }
 
