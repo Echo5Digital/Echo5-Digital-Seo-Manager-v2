@@ -199,7 +199,7 @@ export default function Clients() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {clients.map(client => (
-              <div key={client._id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+              <div key={client._id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow flex flex-col">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">{client.name}</h3>
@@ -242,7 +242,7 @@ export default function Clients() {
                   </div>
                 </div>
                 
-                <div className="space-y-3">
+                <div className="space-y-3 flex-grow">
                   {/* Locations */}
                   {client.locations && client.locations.length > 0 && (
                     <div>
