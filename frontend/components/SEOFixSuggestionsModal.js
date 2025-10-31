@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import jsPDF from 'jspdf'
+import { jsPDF } from 'jspdf'
 
 export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClose, onAssign }) {
   const [localSuggestions, setLocalSuggestions] = useState([])
@@ -21,6 +21,20 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
     const highPriorityFixes = localSuggestions.filter(s => s.priority >= 8)
     const mediumPriorityFixes = localSuggestions.filter(s => s.priority >= 5 && s.priority < 8)
     const lowPriorityFixes = localSuggestions.filter(s => s.priority < 5)
+
+    // Helper to format values (handle objects/arrays)
+    const formatDisplayValue = (value) => {
+      if (value === null || value === undefined) return ''
+      if (typeof value === 'object') {
+        try {
+          // Use <pre> tag for formatted JSON
+          return `<pre style="margin: 0; white-space: pre-wrap; word-break: break-word;">${JSON.stringify(value, null, 2)}</pre>`
+        } catch (e) {
+          return String(value)
+        }
+      }
+      return String(value)
+    }
 
     const html = `
       <!DOCTYPE html>
@@ -238,6 +252,52 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
     const maxWidth = pageWidth - (margin * 2)
     let yPos = margin
 
+    // Helper function to split text into lines that fit within maxWidth
+    const splitTextToSize = (text, maxWidth) => {
+      if (!text) return ['']
+      
+      // Check if jsPDF has the built-in method
+      if (typeof doc.splitTextToSize === 'function') {
+        return doc.splitTextToSize(text, maxWidth)
+      }
+      
+      // Fallback: manual text wrapping
+      const words = text.toString().split(' ')
+      const lines = []
+      let currentLine = ''
+      
+      words.forEach(word => {
+        const testLine = currentLine ? `${currentLine} ${word}` : word
+        const testWidth = doc.getTextWidth(testLine)
+        
+        if (testWidth > maxWidth && currentLine) {
+          lines.push(currentLine)
+          currentLine = word
+        } else {
+          currentLine = testLine
+        }
+      })
+      
+      if (currentLine) {
+        lines.push(currentLine)
+      }
+      
+      return lines.length > 0 ? lines : ['']
+    }
+
+    // Helper function to format values (handle objects/arrays)
+    const formatValue = (value) => {
+      if (value === null || value === undefined) return ''
+      if (typeof value === 'object') {
+        try {
+          return JSON.stringify(value, null, 2)
+        } catch (e) {
+          return String(value)
+        }
+      }
+      return String(value)
+    }
+
     // Helper to check if we need a new page
     const checkNewPage = (requiredSpace) => {
       if (yPos + requiredSpace > pageHeight - margin) {
@@ -368,7 +428,7 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
         doc.setFontSize(11)
         doc.setFont('helvetica', 'bold')
         const titleText = `${index + 1}. ${fix.issue}`
-        const titleLines = doc.splitTextToSize(titleText, maxWidth - 10)
+        const titleLines = splitTextToSize(titleText, maxWidth - 10)
         doc.text(titleLines, margin + 5, yPos)
         yPos += titleLines.length * 5 + 3
 
@@ -381,7 +441,7 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
         doc.setFont('helvetica', 'normal')
         doc.setTextColor(50, 50, 50)
         doc.setFontSize(8)
-        const currentLines = doc.splitTextToSize(fix.currentValue || 'Not set', maxWidth - 10)
+        const currentLines = splitTextToSize(formatValue(fix.currentValue) || 'Not set', maxWidth - 10)
         doc.text(currentLines, margin + 5, yPos)
         yPos += currentLines.length * 3.5 + 3
 
@@ -394,7 +454,7 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
         doc.setFont('helvetica', 'normal')
         doc.setTextColor(30, 30, 30)
         doc.setFontSize(8)
-        const suggestedLines = doc.splitTextToSize(fix.suggestedValue, maxWidth - 10)
+        const suggestedLines = splitTextToSize(formatValue(fix.suggestedValue), maxWidth - 10)
         doc.text(suggestedLines, margin + 5, yPos)
         yPos += suggestedLines.length * 3.5 + 3
 
@@ -407,7 +467,7 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
         doc.setFont('helvetica', 'italic')
         doc.setTextColor(100, 100, 100)
         doc.setFontSize(8)
-        const reasonLines = doc.splitTextToSize(fix.reasoning, maxWidth - 10)
+        const reasonLines = splitTextToSize(fix.reasoning, maxWidth - 10)
         doc.text(reasonLines, margin + 5, yPos)
         yPos += reasonLines.length * 3.5 + 3
 
@@ -509,6 +569,19 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
     setLocalSuggestions(prev => prev.map((s, i) => 
       i === index ? { ...s, [field]: value } : s
     ))
+  }
+
+  // Helper to format display values (handle objects/arrays)
+  const formatDisplayValue = (value) => {
+    if (value === null || value === undefined) return ''
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value, null, 2)
+      } catch (e) {
+        return String(value)
+      }
+    }
+    return String(value)
   }
 
   const getBorderColor = (priority) => {
@@ -652,7 +725,9 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">Current Value</label>
                               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                <p className="text-sm text-gray-700">{suggestion.currentValue}</p>
+                                <pre className="text-sm text-gray-700 whitespace-pre-wrap break-words font-mono">
+                                  {formatDisplayValue(suggestion.currentValue)}
+                                </pre>
                               </div>
                             </div>
                           )}
@@ -661,10 +736,10 @@ export default function SEOFixSuggestionsModal({ isOpen, suggestions = [], onClo
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Suggested Fix</label>
                             <textarea 
-                              value={suggestion.suggestedValue}
+                              value={formatDisplayValue(suggestion.suggestedValue)}
                               onChange={(e) => updateSuggestion(index, 'suggestedValue', e.target.value)}
-                              rows="3"
-                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                              rows="6"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"
                               placeholder="Edit the suggested fix..."
                             />
                             <p className="text-xs text-gray-500 mt-1">You can manually edit this suggestion before assigning</p>

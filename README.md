@@ -233,6 +233,16 @@ For issues or questions, contact the development team.
 
 ## Changelog
 
+**31-10-2025**
+
+### 🐛 Bug Fixes
+- **AI Suggestions Display Fix**: Fixed `[object] [object]` display issue in SEO Fix Suggestions Modal
+  - Objects and arrays (like structured data/schema markup) now properly formatted as JSON
+  - Added `formatDisplayValue()` helper to convert objects to readable JSON strings
+  - Updated modal popup to display JSON with proper formatting and monospace font
+  - Updated PDF export to handle object values correctly
+  - Improved textarea for editing JSON-based suggestions (increased to 6 rows with monospace font)
+
 **30-10-2025**
 
 ### 🎨 UI/UX Improvements
