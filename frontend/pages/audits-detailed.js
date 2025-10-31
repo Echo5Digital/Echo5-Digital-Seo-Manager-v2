@@ -40,6 +40,8 @@ export default function AuditDetailed() {
   const [expandedIssues, setExpandedIssues] = useState({})
   const [openIssuesDropdown, setOpenIssuesDropdown] = useState(null)
   const [excludedPages, setExcludedPages] = useState(new Set())
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
 
   // Focus keyword per URL (persisted in localStorage per audit id)
   const [focusKeywords, setFocusKeywords] = useState({})
@@ -121,6 +123,11 @@ export default function AuditDetailed() {
     });
     setExcludedPages(excluded);
   }, [pages])
+
+  // Reset pagination when filters or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterBy, sortBy])
 
   const getClientName = (clientData) => {
     if (!clientData) return 'Unknown'
@@ -1201,19 +1208,25 @@ export default function AuditDetailed() {
                       });
                     }
 
+                    // Pagination
+                    const totalPages = Math.ceil(pages.length / ITEMS_PER_PAGE);
+                    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+                    const endIndex = startIndex + ITEMS_PER_PAGE;
+                    const paginatedPages = pages.slice(startIndex, endIndex);
+
                     if (pages.length === 0) {
                       return (
                         <tr>
                           <td colSpan="7" className="px-4 py-12 text-center text-gray-500">
                             <div className="text-5xl mb-3">🔍</div>
                             <div className="font-semibold text-lg">No pages found</div>
-                            <button onClick={() => { setSearchTerm(''); setFilterBy('all'); }} className="mt-3 text-blue-600 hover:underline">Clear filters</button>
+                            <button onClick={() => { setSearchTerm(''); setFilterBy('all'); setCurrentPage(1); }} className="mt-3 text-blue-600 hover:underline">Clear filters</button>
                           </td>
                         </tr>
                       );
                     }
 
-                    return pages.map((page, idx) => {
+                    return paginatedPages.map((page, idx) => {
                       const score = page.analysis?.seoAnalysis?.seoScore;
                       const allIssues = page.unifiedIssues || [];
                       const totalIssues = allIssues.length;
@@ -1349,6 +1362,145 @@ export default function AuditDetailed() {
                   })()}
                 </tbody>
               </table>
+
+              {/* Pagination Controls */}
+              {(() => {
+                let pages = audit.results?.discoveredPages || [];
+                
+                // Apply same filters and search as table
+                if (searchTerm) {
+                  pages = pages.filter(p => 
+                    p.url?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    p.title?.toLowerCase().includes(searchTerm.toLowerCase())
+                  );
+                }
+
+                // Apply filter logic (matching the table logic above)
+                if (filterBy !== 'all') {
+                  // Use the same filter logic from table rendering
+                  pages = pages.map((page, index) => {
+                    const analysis = getFromMap(lookups.analysisMap, page.url, audit.results?.pageAnalysis)
+                    const meta = getFromMap(lookups.metaMap, page.url, audit.results?.metaAnalysis)
+                    const headings = getFromMap(lookups.headingsMap, page.url, audit.results?.headingStructure)
+                    const images = getFromMap(lookups.imagesMap, page.url, audit.results?.imageAnalysis)
+                    const unifiedIssues = buildPageIssues({ analysis, meta, headings, images, page, focusKeyword: getFocusForUrl(page?.url) })
+                    const priorityCounts = { Critical: 0, High: 0, Medium: 0, Low: 0 }
+                    unifiedIssues.forEach(it => { priorityCounts[it.priority] = (priorityCounts[it.priority] || 0) + 1 })
+                    const checks = computePageChecks({ page, analysis, meta, headings, images })
+                    const catFail = {}
+                    ;(checks.categories || []).forEach(c => {
+                      const fails = (c.items || []).filter(it => it.status === 'fail').length
+                      if (fails > 0) catFail[c.title] = fails
+                    })
+                    return { ...page, analysis, unifiedIssues, priorityCounts, checksFailCount: checks.failCount || 0, checksFailedCategories: catFail }
+                  });
+
+                  if (filterBy === 'has-issues') pages = pages.filter(p => (p.unifiedIssues?.length || 0) > 0);
+                  else if (filterBy === 'has-failed-checks') pages = pages.filter(p => (p.checksFailCount || 0) > 0);
+                  else if (filterBy === 'critical') pages = pages.filter(p => (p.priorityCounts?.Critical || 0) > 0);
+                  else if (filterBy === 'high') pages = pages.filter(p => (p.priorityCounts?.High || 0) > 0);
+                  else if (filterBy === 'medium') pages = pages.filter(p => (p.priorityCounts?.Medium || 0) > 0);
+                  else if (filterBy === 'low') pages = pages.filter(p => (p.priorityCounts?.Low || 0) > 0);
+                  else if (filterBy === 'cat-tech-indexing') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Crawlability & Indexing'] > 0);
+                  else if (filterBy === 'cat-tech-performance') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Performance'] > 0);
+                  else if (filterBy === 'cat-onpage-meta') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Meta Tags'] > 0);
+                  else if (filterBy === 'cat-onpage-headings') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Headings'] > 0);
+                  else if (filterBy === 'cat-onpage-content') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Content'] > 0);
+                  else if (filterBy === 'cat-onpage-images') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Images'] > 0);
+                  else if (filterBy === 'cat-onpage-schema') pages = pages.filter(p => p.checksFailedCategories?.['On-Page • Schema'] > 0);
+                  else if (filterBy === 'cat-tech-mobile') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Mobile Optimization'] > 0);
+                  else if (filterBy === 'cat-tech-security') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Security'] > 0);
+                  else if (filterBy === 'cat-tech-links') pages = pages.filter(p => p.checksFailedCategories?.['Technical • Links'] > 0);
+                  else if (filterBy === 'cat-offpage-analytics') pages = pages.filter(p => p.checksFailedCategories?.['Off-Page & UX • Analytics'] > 0);
+                  else if (filterBy === 'cat-content-strategy') pages = pages.filter(p => p.checksFailedCategories?.['Content & Keyword Strategy'] > 0);
+                  else if (filterBy === 'warnings') pages = pages.filter(p => ((p.priorityCounts?.High || 0) + (p.priorityCounts?.Medium || 0)) > 0 && (p.priorityCounts?.Critical || 0) === 0);
+                  else if (filterBy === 'info') pages = pages.filter(p => (p.priorityCounts?.Low || 0) > 0 && ((p.priorityCounts?.Critical || 0) + (p.priorityCounts?.High || 0) + (p.priorityCounts?.Medium || 0)) === 0);
+                  else if (filterBy === 'good') pages = pages.filter(p => (p.analysis?.seoAnalysis?.seoScore || 0) >= 80);
+                  else if (filterBy === 'needs-work') pages = pages.filter(p => (p.analysis?.seoAnalysis?.seoScore || 0) < 60);
+                }
+
+                const totalPages = Math.ceil(pages.length / ITEMS_PER_PAGE);
+                
+                if (totalPages <= 1) return null;
+
+                const pageNumbers = [];
+                const maxVisible = 7;
+                let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+                let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+                
+                if (endPage - startPage < maxVisible - 1) {
+                  startPage = Math.max(1, endPage - maxVisible + 1);
+                }
+
+                for (let i = startPage; i <= endPage; i++) {
+                  pageNumbers.push(i);
+                }
+
+                return (
+                  <div className="flex items-center justify-between px-4 py-4 border-t bg-gray-50">
+                    <div className="text-sm text-gray-600">
+                      Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, pages.length)} of {pages.length} pages
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 text-sm font-medium rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                      >
+                        First
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 text-sm font-medium rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                      >
+                        Prev
+                      </button>
+                      
+                      {startPage > 1 && (
+                        <>
+                          <span className="px-2 text-gray-400">...</span>
+                        </>
+                      )}
+                      
+                      {pageNumbers.map(num => (
+                        <button
+                          key={num}
+                          onClick={() => setCurrentPage(num)}
+                          className={`px-3 py-1 text-sm font-medium rounded border ${
+                            currentPage === num 
+                              ? 'bg-blue-600 text-white border-blue-600' 
+                              : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                      
+                      {endPage < totalPages && (
+                        <>
+                          <span className="px-2 text-gray-400">...</span>
+                        </>
+                      )}
+                      
+                      <button
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1 text-sm font-medium rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                      >
+                        Next
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1 text-sm font-medium rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                      >
+                        Last
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             )}
           </div>
