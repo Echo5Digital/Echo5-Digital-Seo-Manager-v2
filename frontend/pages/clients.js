@@ -281,7 +281,9 @@ export default function Clients() {
                         <div className="flex -space-x-2">
                           {client.assignedStaff.slice(0, 3).map((staff, index) => (
                             <div key={index} className="relative group">
-                              <UserAvatar user={staff} size="sm" className="ring-2 ring-white" />
+                              <div className="transition-transform duration-200 ease-in-out group-hover:scale-125 group-hover:z-10">
+                                <UserAvatar user={staff} size="sm" className="" />
+                              </div>
                               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
                                 {staff.name}
                               </div>

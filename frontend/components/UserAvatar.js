@@ -48,7 +48,7 @@ export default function UserAvatar({ user, size = 'md', showName = false, classN
         <img
           src={user.picture}
           alt={user.name || 'User'}
-          className={`${avatarSize} rounded-full border-2 border-gray-300 object-cover`}
+          className={`${avatarSize} rounded-full object-cover`}
           referrerPolicy="no-referrer"
           onError={(e) => {
             e.target.style.display = 'none'
