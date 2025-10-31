@@ -13,7 +13,8 @@ import {
   Cog6ToothIcon,
   UsersIcon,
   LightBulbIcon,
-  ChartBarSquareIcon
+  ChartBarSquareIcon,
+  RectangleStackIcon
 } from '@heroicons/react/24/outline'
 
 export default function Sidebar() {
@@ -29,6 +30,8 @@ export default function Sidebar() {
     { name: 'Rank Checker', href: '/rank-checker', icon: ChartBarSquareIcon, isNew: true },
     { name: 'Backlinks', href: '/backlinks', icon: LinkIcon },
     { name: 'Page Optimizer', href: '/pages', icon: DocumentTextIcon, isNew: true },
+    { name: 'Blog Creator', href: '/blog-creator', icon: DocumentTextIcon, isNew: true },
+    { name: 'Briefs', href: '/briefs', icon: RectangleStackIcon, isNew: true },
     { name: 'Tasks', href: '/tasks', icon: ClipboardDocumentListIcon, isNew: true },
     { name: 'Reports', href: '/reports', icon: ChartBarIcon },
     { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },

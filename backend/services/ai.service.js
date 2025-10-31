@@ -994,6 +994,559 @@ Return ONLY a valid JSON array of fix objects, no additional text.`;
       throw new Error('Failed to generate SEO fix suggestions: ' + error.message);
     }
   }
+
+  /**
+   * Generate blog title suggestions
+   * @param {Object} options - Title generation options
+   * @returns {Promise<Array>} Array of 10 title suggestions
+   */
+  async generateBlogTitles(options) {
+    const { keyword, industry, clientName, tone = 'professional' } = options;
+    
+    try {
+      const prompt = `Generate 10 compelling, SEO-optimized blog post titles for the keyword "${keyword}".
+
+Context:
+- Industry: ${industry || 'General'}
+- Business: ${clientName || ''}
+- Tone: ${tone}
+- Target: Mobile-first, conversational yet professional
+
+CRITICAL REQUIREMENTS:
+- Include the focus keyword naturally
+- MAXIMUM 60 characters per title (STRICT LIMIT - anything over 60 will be rejected)
+- Ideal: 50-55 characters
+- Action-oriented and click-worthy
+- Varied formats (How-to, List, Guide, Questions, etc.)
+- SEO-friendly and engaging
+- No clickbait, authentic value proposition
+
+IMPORTANT: Count characters carefully. Each title MUST be 60 characters or less.
+
+Return a JSON object with a "titles" array containing exactly 10 title strings.
+Example: {"titles": ["Title 1 here", "Title 2 here", ...]}`
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert content strategist and SEO copywriter who creates high-performing, click-worthy titles that rank well and convert. You ALWAYS count characters and ensure titles are under 60 characters.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.9,
+        max_tokens: 500,
+        response_format: { type: "json_object" }
+      });
+
+      const responseText = completion.choices[0].message.content.trim();
+      const parsed = JSON.parse(responseText);
+      let titles = Array.isArray(parsed) ? parsed : (parsed.titles || Object.values(parsed));
+      
+      // Validate and filter titles to ensure they're under 60 characters
+      titles = titles.filter(title => title.length <= 60);
+      
+      // If we have less than 10 after filtering, truncate the longer ones
+      if (titles.length < 10) {
+        const allTitles = Array.isArray(parsed) ? parsed : (parsed.titles || Object.values(parsed));
+        const longTitles = allTitles.filter(title => title.length > 60);
+        
+        longTitles.forEach(title => {
+          if (titles.length < 10) {
+            // Truncate to 57 chars and add "..."
+            const truncated = title.substring(0, 57) + '...';
+            titles.push(truncated);
+          }
+        });
+      }
+      
+      return titles.slice(0, 10); // Ensure we return exactly 10
+    } catch (error) {
+      logger.error('Blog Title Generation Error:', error);
+      throw new Error('Failed to generate blog titles: ' + error.message);
+    }
+  }
+
+  /**
+   * Generate full blog post content
+   * @param {Object} options - Content generation options
+   * @returns {Promise<Object>} Blog content with structure
+   */
+  async generateBlogContent(options) {
+    const {
+      title,
+      focusKeyword,
+      secondaryKeywords = [],
+      semanticKeywords = [],
+      wordCount = 1000,
+      tone = 'professional',
+      industry,
+      clientName,
+      clientWebsite
+    } = options;
+
+    try {
+      const prompt = `Write a comprehensive, SEO-optimized blog post with the following specifications:
+
+TOPIC: ${title}
+FOCUS KEYWORD: ${focusKeyword}
+SECONDARY KEYWORDS: ${secondaryKeywords.join(', ')}
+SEMANTIC/LSI KEYWORDS TO WEAVE IN NATURALLY: ${semanticKeywords.join(', ')}
+TARGET WORD COUNT: ${wordCount} words (content only, excluding meta)
+TONE: ${tone}
+INDUSTRY: ${industry || 'General'}
+BUSINESS: ${clientName || ''}
+
+CRITICAL INSTRUCTIONS:
+1. Naturally incorporate ALL semantic keywords throughout the content in a way that feels organic
+2. Don't force keywords - use them where they fit contextually
+3. Distribute semantic keywords across different sections
+4. Use variations and synonyms alongside the semantic keywords
+5. Write in a natural, human-like style mimicking an industry expert
+6. Vary sentence structures - mix short punchy sentences with longer, flowing ones
+7. Include subtle imperfections (conversational asides, relatable phrases)
+8. Use specific examples, anecdotes, or case studies
+9. Avoid formulaic or overly polished language
+10. Write for mobile-first readers (short paragraphs, scannable)
+11. Include bullet points where appropriate
+12. 100% original content - no plagiarism
+13. Professional yet conversational tone
+
+STRUCTURE:
+- H1: ${title}
+- Introduction (2-3 paragraphs, include focus keyword)
+- 3-5 H2 sections with 2-4 subsections (H3) each
+- Include H4 where needed for deeper topics
+- Conclusion with clear takeaway
+- Use bullet points (with - or •) in at least 2-3 sections for better readability
+
+SEO REQUIREMENTS:
+- Focus keyword in H1, first paragraph, and 2-3 H2s
+- Secondary keywords distributed naturally
+- Semantic keywords woven throughout content (DO NOT list them separately)
+- Meta description (150-160 characters)
+- Engaging, valuable content that answers reader questions
+
+FORMATTING:
+- Use bullet points with "- " or "• " for lists
+- Separate paragraphs with double newlines (\n\n)
+- For bullet lists, put each item on a new line starting with "- "
+- DO NOT use HTML tags in the content
+- You can use **text** for emphasis which will be converted to bold
+
+Return a JSON object with:
+{
+  "h1": "The main H1 title",
+  "introduction": "Introduction paragraphs as plain text with double newlines between paragraphs",
+  "sections": [
+    {
+      "h2": "Section heading",
+      "content": "Section content as plain text",
+      "subsections": [
+        {
+          "h3": "Subsection heading",
+          "content": "Subsection content",
+          "h4Items": [{"h4": "H4 heading", "content": "H4 content"}]
+        }
+      ]
+    }
+  ],
+  "conclusion": "Conclusion paragraphs as plain text",
+  "metaDescription": "150-160 character meta description",
+  "wordCount": actual_word_count,
+  "semanticKeywordsUsed": ["list of semantic keywords that were actually used in the content"]
+}`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an award-winning content writer and SEO expert with 15+ years of experience. You write engaging, natural content that reads like it was written by a human expert, not AI. Your content ranks #1 on Google while being genuinely helpful and readable. IMPORTANT: Always return valid, properly escaped JSON. Escape all quotes, newlines, and special characters in string values.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.8,
+        max_tokens: Math.min(4000, Math.ceil(wordCount * 1.5)),
+        response_format: { type: "json_object" }
+      });
+
+      const responseText = completion.choices[0].message.content.trim();
+      
+      // Try to parse the JSON
+      let parsedData;
+      try {
+        parsedData = JSON.parse(responseText);
+      } catch (parseError) {
+        logger.error('JSON Parse Error:', parseError.message);
+        throw new Error('AI returned invalid JSON format. Please try again.');
+      }
+      
+      // Convert structured data to HTML
+      let htmlContent = '';
+      const allH2 = [];
+      const allH3 = [];
+      const allH4 = [];
+      
+      // H1
+      htmlContent += `<h1>${parsedData.h1 || title}</h1>\n\n`;
+      
+      // Introduction
+      if (parsedData.introduction) {
+        const introParagraphs = parsedData.introduction.split('\n\n');
+        introParagraphs.forEach(para => {
+          if (para.trim()) {
+            // Convert markdown bold to HTML
+            let processedPara = para.trim().replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            htmlContent += `<p>${processedPara}</p>\n`;
+          }
+        });
+        htmlContent += '\n';
+      }
+      
+      // Sections
+      if (parsedData.sections && Array.isArray(parsedData.sections)) {
+        parsedData.sections.forEach(section => {
+          // H2
+          htmlContent += `<h2>${section.h2}</h2>\n`;
+          allH2.push(section.h2);
+          
+          // Section content
+          if (section.content) {
+            const paragraphs = section.content.split('\n\n');
+            paragraphs.forEach(para => {
+              if (para.trim()) {
+                // Check if it's a bullet list
+                if (para.includes('- ') || para.includes('• ') || para.includes('\n-') || para.includes('\n•')) {
+                  const items = para.split('\n').filter(i => i.trim());
+                  htmlContent += '<ul>\n';
+                  items.forEach(item => {
+                    const cleaned = item.replace(/^[-•]\s*/, '').trim();
+                    if (cleaned) {
+                      // Convert markdown bold in list items
+                      const processedItem = cleaned.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                      htmlContent += `  <li>${processedItem}</li>\n`;
+                    }
+                  });
+                  htmlContent += '</ul>\n';
+                } else {
+                  // Convert markdown bold in paragraphs
+                  const processedPara = para.trim().replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                  htmlContent += `<p>${processedPara}</p>\n`;
+                }
+              }
+            });
+          }
+          
+          // Subsections
+          if (section.subsections && Array.isArray(section.subsections)) {
+            section.subsections.forEach(subsection => {
+              // H3
+              htmlContent += `<h3>${subsection.h3}</h3>\n`;
+              allH3.push(subsection.h3);
+              
+              // Subsection content
+              if (subsection.content) {
+                const paragraphs = subsection.content.split('\n\n');
+                paragraphs.forEach(para => {
+                  if (para.trim()) {
+                    if (para.includes('- ') || para.includes('• ') || para.includes('\n-') || para.includes('\n•')) {
+                      const items = para.split('\n').filter(i => i.trim());
+                      htmlContent += '<ul>\n';
+                      items.forEach(item => {
+                        const cleaned = item.replace(/^[-•]\s*/, '').trim();
+                        if (cleaned) {
+                          // Convert markdown bold in list items
+                          const processedItem = cleaned.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                          htmlContent += `  <li>${processedItem}</li>\n`;
+                        }
+                      });
+                      htmlContent += '</ul>\n';
+                    } else {
+                      // Convert markdown bold in paragraphs
+                      const processedPara = para.trim().replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                      htmlContent += `<p>${processedPara}</p>\n`;
+                    }
+                  }
+                });
+              }
+              
+              // H4 items
+              if (subsection.h4Items && Array.isArray(subsection.h4Items)) {
+                subsection.h4Items.forEach(h4Item => {
+                  htmlContent += `<h4>${h4Item.h4}</h4>\n`;
+                  allH4.push(h4Item.h4);
+                  
+                  if (h4Item.content) {
+                    const paragraphs = h4Item.content.split('\n\n');
+                    paragraphs.forEach(para => {
+                      if (para.trim()) {
+                        // Check for bullet lists in H4 content
+                        if (para.includes('- ') || para.includes('• ') || para.includes('\n-') || para.includes('\n•')) {
+                          const items = para.split('\n').filter(i => i.trim());
+                          htmlContent += '<ul>\n';
+                          items.forEach(item => {
+                            const cleaned = item.replace(/^[-•]\s*/, '').trim();
+                            if (cleaned) {
+                              const processedItem = cleaned.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                              htmlContent += `  <li>${processedItem}</li>\n`;
+                            }
+                          });
+                          htmlContent += '</ul>\n';
+                        } else {
+                          // Convert markdown bold
+                          const processedPara = para.trim().replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                          htmlContent += `<p>${processedPara}</p>\n`;
+                        }
+                      }
+                    });
+                  }
+                });
+              }
+            });
+          }
+          
+          htmlContent += '\n';
+        });
+      }
+      
+      // Conclusion
+      if (parsedData.conclusion) {
+        const conclusionParagraphs = parsedData.conclusion.split('\n\n');
+        conclusionParagraphs.forEach(para => {
+          if (para.trim()) {
+            // Convert markdown bold
+            const processedPara = para.trim().replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            htmlContent += `<p>${processedPara}</p>\n`;
+          }
+        });
+      }
+      
+      // Return formatted response
+      return {
+        content: htmlContent,
+        metaDescription: parsedData.metaDescription,
+        headings: {
+          h1: parsedData.h1 || title,
+          h2: allH2,
+          h3: allH3,
+          h4: allH4
+        },
+        wordCount: parsedData.wordCount,
+        semanticKeywordsUsed: parsedData.semanticKeywordsUsed || []
+      };
+    } catch (error) {
+      logger.error('Blog Content Generation Error:', error);
+      throw new Error('Failed to generate blog content: ' + error.message);
+    }
+  }
+
+  /**
+   * Generate FAQ section
+   * @param {Object} options - FAQ generation options
+   * @returns {Promise<Array>} Array of FAQ objects
+   */
+  async generateFAQs(options) {
+    const { topic, keyword, count = 5 } = options;
+
+    try {
+      const prompt = `Generate ${count} frequently asked questions and expert answers for the topic: "${topic}"
+
+Focus keyword: ${keyword}
+
+Requirements:
+- Questions should be natural, conversational (how people actually search)
+- Answers should be expert-level, concise yet comprehensive (50-100 words each)
+- Include the focus keyword naturally in at least 2 answers
+- Address common reader concerns and misconceptions
+- Actionable, specific answers
+- Professional yet conversational tone
+
+Return a JSON object with an array of FAQ objects:
+{
+  "faqs": [
+    {
+      "question": "Question text?",
+      "answer": "Detailed expert answer"
+    }
+  ]
+}`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an industry expert who answers questions with authority and clarity.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 1500,
+        response_format: { type: "json_object" }
+      });
+
+      const responseText = completion.choices[0].message.content.trim();
+      const parsed = JSON.parse(responseText);
+      // Handle both array response and object with faqs key
+      return Array.isArray(parsed) ? parsed : (parsed.faqs || Object.values(parsed));
+    } catch (error) {
+      logger.error('FAQ Generation Error:', error);
+      throw new Error('Failed to generate FAQs: ' + error.message);
+    }
+  }
+
+  /**
+   * Generate semantic keywords
+   * @param {string} focusKeyword - Main keyword
+   * @returns {Promise<Array>} Array of semantic keywords
+   */
+  async generateSemanticKeywords(focusKeyword) {
+    try {
+      const prompt = `Generate 15-20 semantic keywords and LSI (Latent Semantic Indexing) keywords related to: "${focusKeyword}"
+
+Requirements:
+- Keywords that Google associates with this topic
+- Related terms people search for
+- Topically relevant variations
+- Natural language variations
+- No exact duplicates of the focus keyword
+
+Return a JSON object with an array of keyword strings:
+{
+  "keywords": ["keyword1", "keyword2", ...]
+}`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an SEO keyword research expert with deep knowledge of semantic search and LSI keywords.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.6,
+        max_tokens: 500,
+        response_format: { type: "json_object" }
+      });
+
+      const responseText = completion.choices[0].message.content.trim();
+      const parsed = JSON.parse(responseText);
+      // Handle both array response and object with keywords key
+      return Array.isArray(parsed) ? parsed : (parsed.keywords || Object.values(parsed));
+    } catch (error) {
+      logger.error('Semantic Keywords Generation Error:', error);
+      throw new Error('Failed to generate semantic keywords: ' + error.message);
+    }
+  }
+
+  /**
+   * Generate image alt texts
+   * @param {Object} options - Alt text generation options
+   * @returns {Promise<Array>} Array of alt text pairs
+   */
+  async generateImageAltTexts(options) {
+    const { keyword, title, count = 3 } = options;
+
+    try {
+      const prompt = `Generate ${count} pairs of image alt texts for a blog post.
+
+Blog title: ${title}
+Focus keyword: ${keyword}
+
+For each image position, provide 2 alternative alt text options.
+
+Requirements:
+- Descriptive, specific, and keyword-optimized
+- Include focus keyword naturally in at least one alt per pair
+- 50-125 characters each
+- Helpful for screen readers
+- Different perspectives/variations
+
+Return a JSON object with an array of alt text pairs:
+{
+  "altTexts": [
+    {
+      "position": 1,
+      "alt1": "First alt text option",
+      "alt2": "Second alt text option"
+    }
+  ]
+}`;
+
+      const completion = await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an accessibility and SEO expert who writes descriptive, keyword-optimized alt texts.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 800,
+        response_format: { type: "json_object" }
+      });
+
+      const responseText = completion.choices[0].message.content.trim();
+      const parsed = JSON.parse(responseText);
+      // Handle both array response and object with altTexts key
+      return Array.isArray(parsed) ? parsed : (parsed.altTexts || Object.values(parsed));
+    } catch (error) {
+      logger.error('Image Alt Text Generation Error:', error);
+      throw new Error('Failed to generate image alt texts: ' + error.message);
+    }
+  }
+
+  /**
+   * Extract/suggest internal links
+   * @param {Object} options - Internal linking options
+   * @returns {Promise<Array>} Array of internal link suggestions
+   */
+  async extractInternalLinks(options) {
+    const { clientWebsite, keyword, content } = options;
+
+    try {
+      // This is a placeholder - in production, you'd want to:
+      // 1. Fetch actual pages from the client's website
+      // 2. Analyze their content
+      // 3. Suggest relevant internal links
+      
+      // For now, return structured suggestion format
+      return [
+        {
+          url: `${clientWebsite}/about`,
+          anchorText: 'Learn more about our services',
+          targetPage: 'About Page'
+        },
+        {
+          url: `${clientWebsite}/contact`,
+          anchorText: 'Get in touch with our team',
+          targetPage: 'Contact Page'
+        }
+      ];
+    } catch (error) {
+      logger.error('Internal Links Extraction Error:', error);
+      return [];
+    }
+  }
 }
 
 module.exports = new AIService();

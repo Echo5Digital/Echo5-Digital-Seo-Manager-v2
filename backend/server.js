@@ -95,6 +95,7 @@ const backlinkRoutes = require('./routes/backlink.routes');
 const userRoutes = require('./routes/user.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const pageRoutes = require('./routes/page.routes');
+const blogRoutes = require('./routes/blog.routes');
 
 // Import services
 const emailService = require('./services/email.service');
@@ -241,6 +242,7 @@ app.use('/api/backlinks', backlinkRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/pages', pageRoutes);
+app.use('/api/blogs', blogRoutes);
 
 // 404 handler
 app.use((req, res) => {
