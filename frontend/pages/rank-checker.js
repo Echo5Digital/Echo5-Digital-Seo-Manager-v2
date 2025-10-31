@@ -261,8 +261,8 @@ export default function RankChecker() {
             </div>
             <table className="w-full">
               <tbody className="divide-y divide-gray-100">
-                {grouped[clientKey][dateKey].map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                {grouped[clientKey][dateKey].map((item, index) => (
+                  <tr key={item._id || `${item.keyword}-${item.checkedAt}-${index}`} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-700 w-1/3">{item.keyword}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 w-1/4">{item.location || 'Global'}</td>
                     <td className="px-4 py-3 w-1/6">
