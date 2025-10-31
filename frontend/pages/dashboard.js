@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Layout from '../components/Layout'
 import useAuthStore from '../store/auth'
 import useClientStore from '../store/clients'
+import UserAvatar from '../components/UserAvatar'
 import { 
   UserGroupIcon, 
   DocumentCheckIcon, 
@@ -38,13 +39,16 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Welcome back, {user?.name || 'User'}!
-          </h1>
-          <p className="text-gray-600 mt-1">
-            Here is your SEO operations overview
-          </p>
+        <div className="flex items-center gap-4">
+          <UserAvatar user={user} size="xl" />
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Welcome back, {user?.name || 'User'}!
+            </h1>
+            <p className="text-gray-600 mt-1">
+              Here is your SEO operations overview
+            </p>
+          </div>
         </div>
 
         {loading ? (

@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Layout from '../components/Layout'
 import ClientOnboardingForm from '../src/components/client/ClientOnboardingForm'
 import useClientStore from '../store/clients'
+import UserAvatar from '../components/UserAvatar'
 import { PlusIcon, TrashIcon, PencilIcon, EyeIcon } from '@heroicons/react/24/outline'
 
 export default function Clients() {
@@ -276,14 +277,19 @@ export default function Clients() {
                   {client.assignedStaff && client.assignedStaff.length > 0 && (
                     <div>
                       <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Assigned Staff</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {client.assignedStaff.slice(0, 3).map((staff, index) => (
-                          <span key={index} className="inline-block px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded">
-                            {staff.name}
-                          </span>
-                        ))}
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="flex -space-x-2">
+                          {client.assignedStaff.slice(0, 3).map((staff, index) => (
+                            <div key={index} className="relative group">
+                              <UserAvatar user={staff} size="sm" className="ring-2 ring-white" />
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                                {staff.name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                         {client.assignedStaff.length > 3 && (
-                          <span className="inline-block px-2 py-1 text-xs text-gray-500">
+                          <span className="text-xs text-gray-500 font-medium">
                             +{client.assignedStaff.length - 3} more
                           </span>
                         )}

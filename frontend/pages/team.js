@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import useAuthStore from '../store/auth'
+import UserAvatar from '../components/UserAvatar'
 
 export default function Team() {
   const { token, user: currentUser } = useAuthStore()
@@ -270,14 +271,7 @@ export default function Team() {
                   {users.map((user) => (
                     <tr key={user._id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
-                            <span className="text-white font-semibold text-sm">{user.name.charAt(0).toUpperCase()}</span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                          </div>
-                        </div>
+                        <UserAvatar user={user} size="md" showName={true} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{user.email}</div>

@@ -236,6 +236,27 @@ For issues or questions, contact the development team.
 **31-10-2025**
 
 ### ✨ New Features
+- **Profile Settings Page**: Comprehensive user profile management
+  - Update name and profile picture
+  - Link Google account to import Google profile picture
+  - Manual profile picture URL input option
+  - Live preview of profile picture
+  - Automatic fallback to icon if image fails to load
+  - Green indicator when Google account is connected
+  - Save button with loading state
+  - Success/error messages for user feedback
+
+- **Google Avatar Integration**: Google profile pictures now displayed throughout the app
+  - Avatar automatically imported from Google account on OAuth login
+  - **Works for both Google OAuth and normal email/password login**
+  - Users can link Google account anytime from Settings page
+  - Displayed in Navbar with proper fallback to icon if not available
+  - Uses `referrerPolicy="no-referrer"` for cross-origin image loading
+  - Stored in `picture` field in User model
+  - Circular avatar with border styling for professional appearance
+  - Seamless integration with existing authentication flow
+  - Manual image URL option for users without Google accounts
+
 - **Styled PDF Audit Reports**: Replaced JSON download with professional PDF export
   - Echo5 Digital logo at the top
   - Clean, branded design matching AI suggestions PDF

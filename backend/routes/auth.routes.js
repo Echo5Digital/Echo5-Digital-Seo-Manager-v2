@@ -143,16 +143,18 @@ router.put(
   [
     body('name').optional().trim().notEmpty(),
     body('email').optional().isEmail(),
+    body('picture').optional().isURL().withMessage('Picture must be a valid URL'),
   ],
   validate,
   async (req, res, next) => {
     try {
-      const { name, email, avatar } = req.body;
+      const { name, email, avatar, picture } = req.body;
       
       const updateFields = {};
       if (name) updateFields.name = name;
       if (email) updateFields.email = email;
       if (avatar) updateFields.avatar = avatar;
+      if (picture) updateFields.picture = picture;
 
       const user = await User.findByIdAndUpdate(
         req.user._id,

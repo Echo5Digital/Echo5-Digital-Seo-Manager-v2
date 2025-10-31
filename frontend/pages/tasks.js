@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import useAuthStore from '../store/auth'
 import useTasksStore from '../store/tasks'
 import useClientsStore from '../store/clients'
+import UserAvatar from '../components/UserAvatar'
 
 export default function Tasks() {
   const { token, user } = useAuthStore()
@@ -421,6 +422,7 @@ export default function Tasks() {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
@@ -441,6 +443,13 @@ export default function Tasks() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className="text-sm text-gray-600">{task.type}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {task.assignedTo ? (
+                                <UserAvatar user={task.assignedTo} size="sm" showName={true} />
+                              ) : (
+                                <span className="text-sm text-gray-400">Unassigned</span>
+                              )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityColor(task.priority)}`}>
@@ -695,11 +704,19 @@ export default function Tasks() {
                   </div>
                   <div>
                     <h5 className="font-medium text-gray-700 mb-1">Assigned To</h5>
-                    <p className="text-gray-600">{selectedTask.assignedTo?.name || 'Unassigned'}</p>
+                    {selectedTask.assignedTo ? (
+                      <UserAvatar user={selectedTask.assignedTo} size="md" showName={true} />
+                    ) : (
+                      <p className="text-gray-600">Unassigned</p>
+                    )}
                   </div>
                   <div>
                     <h5 className="font-medium text-gray-700 mb-1">Created By</h5>
-                    <p className="text-gray-600">{selectedTask.createdBy?.name || 'N/A'}</p>
+                    {selectedTask.createdBy ? (
+                      <UserAvatar user={selectedTask.createdBy} size="md" showName={true} />
+                    ) : (
+                      <p className="text-gray-600">N/A</p>
+                    )}
                   </div>
                   <div>
                     <h5 className="font-medium text-gray-700 mb-1">Due Date</h5>
