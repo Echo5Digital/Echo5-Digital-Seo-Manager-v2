@@ -6,16 +6,16 @@ import useClientStore from '../store/clients'
 import usePagesStore from '../store/pages'
 import useAuthStore from '../store/auth'
 import { format } from 'date-fns'
+import { jsPDF } from 'jspdf'
 import {
   ArrowLeftIcon,
   DocumentMagnifyingGlassIcon,
   InformationCircleIcon,
   ExclamationTriangleIcon,
-  ChevronDownIcon,
+  DocumentArrowDownIcon,
   ChevronUpIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline'
-
 /**
  * Audit Detailed Page - Displays comprehensive SEO audit results
  * @returns {JSX.Element}
@@ -159,6 +159,317 @@ export default function AuditDetailed() {
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
+
+  // Export audit report as styled PDF
+  const exportAuditPDF = () => {
+    if (!audit) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 15;
+    const maxWidth = pageWidth - (margin * 2);
+    let yPos = margin;
+
+    // Helper function to split text
+    const splitTextToSize = (text, maxWidth) => {
+      if (!text) return [''];
+      if (typeof doc.splitTextToSize === 'function') {
+        return doc.splitTextToSize(text, maxWidth);
+      }
+      const words = text.toString().split(' ');
+      const lines = [];
+      let currentLine = '';
+      words.forEach(word => {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const testWidth = doc.getTextWidth(testLine);
+        if (testWidth > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      });
+      if (currentLine) lines.push(currentLine);
+      return lines.length > 0 ? lines : [''];
+    };
+
+    // Helper to check if we need a new page
+    const checkNewPage = (requiredSpace) => {
+      if (yPos + requiredSpace > pageHeight - margin) {
+        doc.addPage();
+        yPos = margin;
+      }
+    };
+
+    // Load and add logo
+    try {
+      const logoImg = new Image();
+      logoImg.src = '/echo5-logo.png';
+      
+      logoImg.onload = () => {
+        const logoWidth = 40;
+        const logoHeight = 20;
+        const logoX = (pageWidth - logoWidth) / 2;
+        doc.addImage(logoImg, 'PNG', logoX, 5, logoWidth, logoHeight);
+        generatePDFContent();
+      };
+      
+      logoImg.onerror = () => {
+        generatePDFContent();
+      };
+    } catch (err) {
+      console.error('Error loading logo:', err);
+      generatePDFContent();
+    }
+
+    const generatePDFContent = () => {
+      yPos = 30;
+
+      // Title with background
+      doc.setFillColor(37, 99, 235);
+      doc.rect(0, 27, pageWidth, 15, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('SEO Audit Report', pageWidth / 2, 36, { align: 'center' });
+      
+      yPos = 47;
+
+      // Client info
+      doc.setTextColor(31, 41, 55);
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text(getClientName(audit.clientId), margin, yPos);
+      yPos += 6;
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(75, 85, 99);
+      doc.text(audit.clientId?.domain || 'N/A', margin, yPos);
+      yPos += 5;
+      doc.text(`Generated on ${formatDate(audit.createdAt)}`, margin, yPos);
+      yPos += 10;
+
+      // Summary Stats Box
+      const statBoxWidth = (maxWidth - 6) / 3;
+      const statY = yPos;
+      
+      const totalPages = audit.results?.discoveredPages?.length || 0;
+      const avgScore = totalPages > 0
+        ? Math.round(audit.results.discoveredPages.reduce((sum, p) => {
+            const analysis = audit.results?.pageAnalysis?.find(a => a.url === p.url);
+            return sum + (analysis?.seoAnalysis?.seoScore || 0);
+          }, 0) / totalPages)
+        : 0;
+      const totalIssues = audit.results?.discoveredPages?.reduce((sum, p) => {
+        const analysis = audit.results?.pageAnalysis?.find(a => a.url === p.url);
+        const meta = audit.results?.metaAnalysis?.find(m => m.url === p.url);
+        return sum + (analysis?.seoAnalysis?.issues?.length || 0) + (meta?.issues?.length || 0);
+      }, 0) || 0;
+
+      // Pages Found
+      doc.setFillColor(239, 246, 255);
+      doc.setDrawColor(147, 197, 253);
+      doc.rect(margin, statY, statBoxWidth, 20, 'FD');
+      doc.setTextColor(37, 99, 235);
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text(totalPages.toString(), margin + statBoxWidth/2, statY + 12, { align: 'center' });
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Pages Found', margin + statBoxWidth/2, statY + 17, { align: 'center' });
+
+      // Average Score
+      const scoreColor = avgScore >= 80 ? [34, 197, 94] : avgScore >= 60 ? [234, 179, 8] : [239, 68, 68];
+      doc.setFillColor(avgScore >= 80 ? 240 : avgScore >= 60 ? 254 : 254, avgScore >= 80 ? 253 : avgScore >= 60 ? 252 : 242, avgScore >= 80 ? 244 : avgScore >= 60 ? 232 : 242);
+      doc.setDrawColor(...scoreColor);
+      doc.rect(margin + statBoxWidth + 3, statY, statBoxWidth, 20, 'FD');
+      doc.setTextColor(...scoreColor);
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text(avgScore.toString(), margin + statBoxWidth + 3 + statBoxWidth/2, statY + 12, { align: 'center' });
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Avg SEO Score', margin + statBoxWidth + 3 + statBoxWidth/2, statY + 17, { align: 'center' });
+
+      // Total Issues
+      doc.setFillColor(254, 242, 242);
+      doc.setDrawColor(252, 165, 165);
+      doc.rect(margin + (statBoxWidth + 3) * 2, statY, statBoxWidth, 20, 'FD');
+      doc.setTextColor(220, 38, 38);
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text(totalIssues.toString(), margin + (statBoxWidth + 3) * 2 + statBoxWidth/2, statY + 12, { align: 'center' });
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Total Issues', margin + (statBoxWidth + 3) * 2 + statBoxWidth/2, statY + 17, { align: 'center' });
+
+      yPos = statY + 30;
+
+      // Pages Section
+      checkNewPage(15);
+      doc.setFillColor(91, 33, 182);
+      doc.rect(margin, yPos, maxWidth, 8, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Page Analysis (${totalPages} pages)`, margin + 3, yPos + 5.5);
+      yPos += 12;
+
+      // Add ALL pages with their issues
+      const allPages = (audit.results?.discoveredPages || [])
+        .map(page => {
+          const analysis = audit.results?.pageAnalysis?.find(a => a.url === page.url);
+          const meta = audit.results?.metaAnalysis?.find(m => m.url === page.url);
+          const headings = audit.results?.headingStructure?.find(h => h.url === page.url);
+          const images = audit.results?.imageAnalysis?.find(i => i.url === page.url);
+          
+          // Collect all issues
+          const allIssues = [];
+          
+          // SEO Analysis issues
+          if (analysis?.seoAnalysis?.issues) {
+            allIssues.push(...analysis.seoAnalysis.issues.map(issue => ({
+              ...issue,
+              category: 'SEO'
+            })));
+          }
+          
+          // Meta issues
+          if (meta?.issues) {
+            allIssues.push(...meta.issues.map(issue => ({
+              ...issue,
+              category: 'Meta Tags'
+            })));
+          }
+          
+          // Heading issues
+          if (headings?.issues) {
+            allIssues.push(...headings.issues.map(issue => ({
+              ...issue,
+              category: 'Headings'
+            })));
+          }
+          
+          // Image issues
+          if (images?.issues) {
+            allIssues.push(...images.issues.map(issue => ({
+              ...issue,
+              category: 'Images'
+            })));
+          }
+          
+          return { 
+            ...page, 
+            allIssues,
+            issueCount: allIssues.length
+          };
+        })
+        .sort((a, b) => b.issueCount - a.issueCount);
+
+      allPages.forEach((page, idx) => {
+        checkNewPage(30);
+        
+        // Page number and URL
+        doc.setTextColor(75, 85, 99);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${idx + 1}.`, margin, yPos);
+        
+        const urlLines = splitTextToSize(page.url, maxWidth - 15);
+        doc.setTextColor(37, 99, 235);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.text(urlLines[0], margin + 5, yPos);
+        yPos += 5;
+
+        // Title
+        if (page.title) {
+          doc.setTextColor(100, 100, 100);
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(7);
+          const titleLines = splitTextToSize(page.title, maxWidth - 10);
+          doc.text(titleLines[0], margin + 5, yPos);
+          yPos += 4;
+        }
+
+        // Issues count header
+        if (page.issueCount > 0) {
+          doc.setTextColor(220, 38, 38);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.text(`⚠ ${page.issueCount} Issues Found:`, margin + 5, yPos);
+          yPos += 5;
+
+          // List all issues
+          page.allIssues.forEach((issue, issueIdx) => {
+            checkNewPage(15);
+            
+            // Issue bullet and category
+            doc.setTextColor(150, 150, 150);
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`•`, margin + 8, yPos);
+            
+            // Category badge
+            doc.setTextColor(91, 33, 182);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`[${issue.category}]`, margin + 11, yPos);
+            
+            // Issue description
+            doc.setTextColor(75, 85, 99);
+            doc.setFont('helvetica', 'normal');
+            const issueText = issue.message || issue.issue || issue.description || 'Unknown issue';
+            const issueLines = splitTextToSize(issueText, maxWidth - 35);
+            doc.text(issueLines[0], margin + 35, yPos);
+            yPos += 4;
+            
+            // Additional lines if issue text is long
+            if (issueLines.length > 1) {
+              for (let i = 1; i < Math.min(issueLines.length, 2); i++) {
+                checkNewPage(4);
+                doc.text(issueLines[i], margin + 35, yPos);
+                yPos += 4;
+              }
+            }
+          });
+          
+          yPos += 2;
+        } else {
+          // No issues found
+          doc.setTextColor(34, 197, 94);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.text('✓ No issues found', margin + 5, yPos);
+          yPos += 4;
+        }
+
+        yPos += 3;
+      });
+
+      // Footer on every page
+      const addFooter = () => {
+        doc.setTextColor(150, 150, 150);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        const footerY = pageHeight - 10;
+        doc.text('Echo5 Digital SEO Operations - Comprehensive Audit Report', pageWidth / 2, footerY, { align: 'center' });
+        doc.text(`© Echo5 Digital ${new Date().getFullYear()}`, pageWidth / 2, footerY + 4, { align: 'center' });
+      };
+      
+      // Add footer to all pages
+      const totalPagesCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesCount; i++) {
+        doc.setPage(i);
+        addFooter();
+      }
+
+      // Save PDF
+      const fileName = `SEO-Audit-${getClientName(audit.clientId)}-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+    };
+  };
   
   const handleExcludePage = async (pageUrl) => {
     try {
@@ -787,7 +1098,7 @@ export default function AuditDetailed() {
     <Layout>
       <div className="space-y-8 pb-12">
         {/* Header - Improved Layout */}
-        <div className="bg-white rounded-xl shadow-md p-6 flex items-center justify-between border-b-4 border-blue-500">
+        <div className="bg-white rounded-xl shadow-md p-6 flex items-center justify-between border-b-4 border-orange-500">
           <button
             onClick={() => router.push('/audits')}
             className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-all shadow-sm hover:shadow-md"
@@ -799,37 +1110,27 @@ export default function AuditDetailed() {
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-600 font-medium">Export:</span>
             <button
-              onClick={() => {
-                const dataStr = JSON.stringify(audit, null, 2)
-                const dataBlob = new Blob([dataStr], { type: 'application/json' })
-                const url = URL.createObjectURL(dataBlob)
-                const link = document.createElement('a')
-                link.href = url
-                link.download = `audit-${audit._id}-${new Date().toISOString().split('T')[0]}.json`
-                document.body.appendChild(link)
-                link.click()
-                document.body.removeChild(link)
-                URL.revokeObjectURL(url)
-              }}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all shadow-md hover:shadow-lg"
+              onClick={exportAuditPDF}
+              className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-all shadow-md hover:shadow-lg"
             >
-              📥 Download Report
+              <DocumentArrowDownIcon className="w-5 h-5" />
+              Download
             </button>
           </div>
         </div>
 
         {/* Audit Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl shadow-xl p-8">
+        <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl shadow-xl p-8">
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-4xl font-bold mb-3">
                 {getClientName(audit.clientId)}
               </h1>
-              <p className="text-blue-100 text-lg mb-2">{audit.clientId?.domain || 'N/A'}</p>
-              <p className="text-sm text-blue-200">
+              <p className="text-white-100 text-lg mb-2">{audit.clientId?.domain || 'N/A'}</p>
+              <p className="text-sm text-white-100">
                 📅 Audited on {formatDate(audit.createdAt)}
               </p>
-              <p className="text-sm text-blue-200">
+              <p className="text-sm text-white-100">
                 Status: <span className="font-semibold">{audit.status}</span>
               </p>
             </div>
@@ -837,7 +1138,7 @@ export default function AuditDetailed() {
               <div className="text-6xl font-bold mb-2">
                 {audit.summary?.overallScore || 'N/A'}
               </div>
-              <p className="text-sm text-blue-100">Overall SEO Score</p>
+              <p className="text-sm text-white-100">Overall SEO Score</p>
             </div>
           </div>
         </div>
@@ -869,7 +1170,7 @@ export default function AuditDetailed() {
         )}
 
         {/* Content Summary */}
-        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-6 shadow-lg">
+        <div className="bg-orange-50 border-2 border-orange-600 rounded-xl p-6 shadow-lg">
           <h3 className="text-xl font-bold text-indigo-900 mb-4 flex items-center">
             📊 Audit Content Summary
           </h3>

@@ -235,6 +235,21 @@ For issues or questions, contact the development team.
 
 **31-10-2025**
 
+### ✨ New Features
+- **Styled PDF Audit Reports**: Replaced JSON download with professional PDF export
+  - Echo5 Digital logo at the top
+  - Clean, branded design matching AI suggestions PDF
+  - Summary statistics: Total Pages, Average SEO Score, Total Issues
+  - **Shows ALL pages** (not just top 10)
+  - **Detailed issue listing** for each page with:
+    - Category badges (SEO, Meta Tags, Headings, Images)
+    - Complete issue descriptions
+    - Issues sorted by severity (pages with most issues first)
+  - Pages without issues marked with green checkmark
+  - Color-coded issue highlights (red for problems, green for clean pages)
+  - Professional footer with company branding on every page
+  - Auto-generated filename: `SEO-Audit-ClientName-Date.pdf`
+
 ### 🐛 Bug Fixes
 - **AI Suggestions Display Fix**: Fixed `[object] [object]` display issue in SEO Fix Suggestions Modal
   - Objects and arrays (like structured data/schema markup) now properly formatted as JSON

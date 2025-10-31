@@ -53,11 +53,11 @@ export default function AuditProgressBar() {
         <div className="mb-6">
           <div className="flex justify-between text-sm text-gray-600 mb-2">
             <span className="font-medium">Progress</span>
-            <span className="font-bold text-blue-600">{Math.round(auditProgress.progress)}%</span>
+            <span className="font-bold text-orange-600">{Math.round(auditProgress.progress)}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner">
             <div 
-              className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-full transition-all duration-700 ease-out relative transform-gpu"
+              className="h-full bg-orange-600 rounded-full transition-all duration-700 ease-out relative transform-gpu"
               style={{ width: `${auditProgress.progress}%` }}
             >
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 -skew-x-12 animate-shine"></div>
