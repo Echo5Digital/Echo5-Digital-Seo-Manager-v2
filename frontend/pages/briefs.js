@@ -22,6 +22,7 @@ export default function Briefs() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedClient, setSelectedClient] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('all')
+  const [expandedClients, setExpandedClients] = useState({})
 
   useEffect(() => {
     if (token) {
@@ -38,6 +39,33 @@ export default function Briefs() {
     
     return matchesSearch && matchesClient && matchesStatus
   })
+
+  // Group briefs by client
+  const groupedBriefs = filteredBriefs.reduce((acc, brief) => {
+    const clientId = typeof brief.clientId === 'object' ? brief.clientId?._id : brief.clientId
+    const clientName = typeof brief.clientId === 'object' ? brief.clientId?.name : 'Unknown Client'
+    
+    if (!acc[clientId]) {
+      acc[clientId] = {
+        clientName,
+        briefs: []
+      }
+    }
+    acc[clientId].briefs.push(brief)
+    return acc
+  }, {})
+
+  // Sort groups by client name
+  const sortedGroups = Object.entries(groupedBriefs).sort((a, b) => 
+    a[1].clientName.localeCompare(b[1].clientName)
+  )
+
+  const toggleClientExpand = (clientId) => {
+    setExpandedClients(prev => ({
+      ...prev,
+      [clientId]: !prev[clientId]
+    }))
+  }
 
   const handleDelete = async (id) => {
     if (confirm('Are you sure you want to delete this brief?')) {
@@ -184,81 +212,114 @@ export default function Briefs() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {filteredBriefs.map(brief => (
-              <div
-                key={brief._id}
-                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow p-6"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-start gap-3">
-                      <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg p-2">
-                        <DocumentTextIcon className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-900 mb-1">
-                          {brief.title || brief.metaTitle}
-                        </h3>
-                        <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                          {brief.metaDescription}
+          <div className="space-y-6">
+            {sortedGroups.map(([clientId, group]) => (
+              <div key={clientId} className="space-y-4">
+                {/* Client Header - Clickable */}
+                <div 
+                  onClick={() => toggleClientExpand(clientId)}
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg p-4 shadow-md cursor-pointer hover:from-purple-700 hover:to-pink-700 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <svg 
+                        className={`w-6 h-6 transition-transform ${expandedClients[clientId] !== false ? 'rotate-90' : ''}`}
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <div>
+                        <h2 className="text-2xl font-bold">{group.clientName}</h2>
+                        <p className="text-purple-100 text-sm mt-1">
+                          {group.briefs.length} {group.briefs.length === 1 ? 'brief' : 'briefs'}
                         </p>
-                        
-                        <div className="flex flex-wrap gap-3 text-sm text-gray-600">
-                          <div className="flex items-center gap-1">
-                            <CalendarIcon className="w-4 h-4" />
-                            {formatDate(brief.createdAt)}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="font-semibold">Client:</span>
-                            {typeof brief.clientId === 'object' ? brief.clientId?.name : 'N/A'}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="font-semibold">Keyword:</span>
-                            {brief.focusKeyword}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="font-semibold">Words:</span>
-                            {brief.wordCount || 'N/A'}
+                      </div>
+                    </div>
+                    <div className="bg-white bg-opacity-20 rounded-full px-4 py-2">
+                      <span className="text-2xl font-bold">{group.briefs.length}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Briefs in this group - Collapsible */}
+                {expandedClients[clientId] !== false && (
+                  <div className="grid grid-cols-1 gap-4">
+                    {group.briefs.map(brief => (
+                    <div
+                      key={brief._id}
+                      className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow p-6"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-start gap-3">
+                            <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg p-2">
+                              <DocumentTextIcon className="w-6 h-6 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="text-xl font-bold text-gray-900 mb-1">
+                                {brief.title || brief.metaTitle}
+                              </h3>
+                              <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                                {brief.metaDescription}
+                              </p>
+                              
+                              <div className="flex flex-wrap gap-3 text-sm text-gray-600">
+                                <div className="flex items-center gap-1">
+                                  <CalendarIcon className="w-4 h-4" />
+                                  {formatDate(brief.createdAt)}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-semibold">Keyword:</span>
+                                  {brief.focusKeyword}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-semibold">Words:</span>
+                                  {brief.wordCount || 'N/A'}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(brief.status)}`}>
+                                  {brief.status || 'draft'}
+                                </span>
+                                {brief.faqs && brief.faqs.length > 0 && (
+                                  <span className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
+                                    {brief.faqs.length} FAQs
+                                  </span>
+                                )}
+                                {brief.semanticKeywords && brief.semanticKeywords.length > 0 && (
+                                  <span className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
+                                    {brief.semanticKeywords.length} Keywords
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(brief.status)}`}>
-                            {brief.status || 'draft'}
-                          </span>
-                          {brief.faqs && brief.faqs.length > 0 && (
-                            <span className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
-                              {brief.faqs.length} FAQs
-                            </span>
-                          )}
-                          {brief.semanticKeywords && brief.semanticKeywords.length > 0 && (
-                            <span className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
-                              {brief.semanticKeywords.length} Keywords
-                            </span>
-                          )}
+                        <div className="flex gap-2 ml-4">
+                          <button
+                            onClick={() => handleView(brief._id)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="View"
+                          >
+                            <EyeIcon className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(brief._id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <TrashIcon className="w-5 h-5" />
+                          </button>
                         </div>
                       </div>
                     </div>
+                  ))}
                   </div>
-
-                  <div className="flex gap-2 ml-4">
-                    <button
-                      onClick={() => handleView(brief._id)}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="View"
-                    >
-                      <EyeIcon className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(brief._id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete"
-                    >
-                      <TrashIcon className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
+                )}
               </div>
             ))}
           </div>
