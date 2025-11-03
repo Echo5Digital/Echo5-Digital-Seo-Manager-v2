@@ -5,6 +5,22 @@ const aiService = require('../services/ai.service');
 const axios = require('axios');
 const RankHistory = require('../models/RankHistory.model');
 
+// Configure axios defaults for better connection handling
+axios.defaults.httpAgent = new (require('http').Agent)({ 
+  keepAlive: true,
+  keepAliveMsecs: 30000,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 90000
+});
+axios.defaults.httpsAgent = new (require('https').Agent)({ 
+  keepAlive: true,
+  keepAliveMsecs: 30000,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 90000
+});
+
 // Helper: shallow-domain match
 function normalizeDomain(u) {
   try {
@@ -207,76 +223,101 @@ router.post('/rank', protect, async (req, res, next) => {
           // For city-specific searches, we'll use location_name with a valid location_code
         }
 
-        // Create a live request payload
-        const payload = [
-          {
-            keyword: keyword,
-            language_code: 'en',
-            location_code: locationCode,
-            device: 'desktop',
-            os: 'windows',
-            depth: 100, // Check top 100 results
-            calculate_rectangles: false // Don't need visual data
-          }
-        ];
-
-        console.log('🔍 Calling DataForSEO LIVE API for keyword:', keyword, 'domain:', domain);
+        // Progressive depth search to save API credits
+        // Start with depth 10, then 20, 50, and finally 100 if not found
+        const searchDepths = [10, 20, 50, 100];
+        let finalResult = null;
+        let totalCost = 0;
+        
+        console.log('🔍 Starting progressive rank check for keyword:', keyword, 'domain:', domain);
         console.log('📍 Location:', location, '| Location Code:', locationCode);
-        console.log('🌐 Server environment:', process.env.NODE_ENV);
-        console.log('📤 Payload:', JSON.stringify(payload, null, 2));
         
-        const liveRes = await axios.post(liveUrl, payload, {
-          headers: {
-            Authorization: `Basic ${auth}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 60000 // 60s timeout for live results (increased from 30s)
-        });
-
-        console.log('✅ DataForSEO Response Status:', liveRes.data?.status_code, liveRes.data?.status_message);
-        console.log('📊 Response cost:', liveRes.data?.cost || 'N/A');
-        
-        // Check for API errors
-        if (liveRes.data?.status_code >= 40000) {
-          const errorMsg = liveRes.data?.status_message || 'Unknown DataForSEO error';
-          console.error('❌ DataForSEO API Error:', errorMsg);
-          throw new Error(`DataForSEO: ${errorMsg}`);
-        }
-
-        // Check for task-level errors
-        const taskData = liveRes.data?.tasks?.[0];
-        if (taskData?.status_code >= 40000) {
-          const taskError = taskData.status_message || 'Task error';
-          console.error('❌ DataForSEO Task Error:', taskError);
-          throw new Error(`DataForSEO Task: ${taskError}`);
-        }
-
-        // Live endpoint returns results immediately
-        const items = taskData?.result?.[0]?.items;
-        
-        if (items && Array.isArray(items)) {
-          console.log(`📦 Found ${items.length} search results from DataForSEO`);
+        for (const depth of searchDepths) {
+          console.log(`\n🔎 Searching in top ${depth} results...`);
           
-          // Search through organic results for our domain
-          const normalizedTarget = normalizeDomain(domain);
-          console.log('🔍 Searching for domain:', domain, '(normalized:', normalizedTarget + ')');
+          // Create a live request payload
+          const payload = [
+            {
+              keyword: keyword,
+              language_code: 'en',
+              location_code: locationCode,
+              device: 'desktop',
+              os: 'windows',
+              depth: depth,
+              calculate_rectangles: false // Don't need visual data
+            }
+          ];
           
-          let finalResult = null;
-          let organicPosition = 0; // Track organic-only position
+          const liveRes = await axios.post(liveUrl, payload, {
+            headers: {
+              Authorization: `Basic ${auth}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 60000 // 60s timeout for live results
+          });
+
+          console.log(`✅ Response Status: ${liveRes.data?.status_code}, Cost: ${liveRes.data?.cost || 'N/A'}`);
+          totalCost += liveRes.data?.cost || 0;
           
-          for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.type === 'organic') {
-              organicPosition++; // Increment for each organic result
-              const itemDomain = normalizeDomain(item.url || item.domain || '');
-              console.log(`  [Organic #${organicPosition}, Absolute #${item.rank_absolute || i + 1}] ${item.url} -> ${itemDomain}`);
-              if (itemDomain && (itemDomain === normalizedTarget || itemDomain.includes(normalizedTarget))) {
-                finalResult = organicPosition; // Use organic position instead of rank_absolute
-                console.log('🎯 Position found: Organic #' + finalResult + ' (Absolute #' + (item.rank_absolute || i + 1) + ') URL:', item.url);
-                break;
+          // Check for API errors
+          if (liveRes.data?.status_code >= 40000) {
+            const errorMsg = liveRes.data?.status_message || 'Unknown DataForSEO error';
+            console.error('❌ DataForSEO API Error:', errorMsg);
+            throw new Error(`DataForSEO: ${errorMsg}`);
+          }
+
+          // Check for task-level errors
+          const taskData = liveRes.data?.tasks?.[0];
+          if (taskData?.status_code >= 40000) {
+            const taskError = taskData.status_message || 'Task error';
+            console.error('❌ DataForSEO Task Error:', taskError);
+            throw new Error(`DataForSEO Task: ${taskError}`);
+          }
+
+          // Live endpoint returns results immediately
+          const items = taskData?.result?.[0]?.items;
+          
+          if (items && Array.isArray(items)) {
+            console.log(`📦 Found ${items.length} search results from DataForSEO`);
+            
+            // Search through organic results for our domain
+            const normalizedTarget = normalizeDomain(domain);
+            
+            let organicPosition = 0; // Track organic-only position
+            let found = false;
+            
+            for (let i = 0; i < items.length; i++) {
+              const item = items[i];
+              if (item.type === 'organic') {
+                organicPosition++; // Increment for each organic result
+                const itemDomain = normalizeDomain(item.url || item.domain || '');
+                console.log(`  [Organic #${organicPosition}, Absolute #${item.rank_absolute || i + 1}] ${item.url} -> ${itemDomain}`);
+                if (itemDomain && (itemDomain === normalizedTarget || itemDomain.includes(normalizedTarget))) {
+                  finalResult = organicPosition; // Use organic position instead of rank_absolute
+                  console.log(`🎯 FOUND at Organic #${finalResult} (Absolute #${item.rank_absolute || i + 1}) URL: ${item.url}`);
+                  console.log(`💰 Total API cost for this search: ${totalCost} credits (checked up to depth ${depth})`);
+                  found = true;
+                  break;
+                }
               }
             }
+            
+            // If found, stop progressive search
+            if (found) {
+              break;
+            }
           }
+          
+          // If this was the last depth and still not found
+          if (depth === 100 && !finalResult) {
+            console.log(`❌ Domain not found in top ${depth} results`);
+            console.log(`💰 Total API cost: ${totalCost} credits`);
+          }
+        }
+        
+        // Continue with existing logic
+        if (true) {
+          const items = []; // Placeholder to maintain code structure
           
           if (finalResult) {
             // Find previous rank for comparison
@@ -320,6 +361,23 @@ router.post('/rank', protect, async (req, res, next) => {
             };
             
             try {
+              // Delete any older rank checks from today for this keyword
+              const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+              const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+              
+              const deleted = await RankHistory.deleteMany({
+                domain,
+                keyword,
+                checkedAt: {
+                  $gte: startOfDay,
+                  $lt: endOfDay
+                }
+              });
+              
+              if (deleted.deletedCount > 0) {
+                console.log(`🧹 Cleaned up ${deleted.deletedCount} older check(s) from today`);
+              }
+              
               await RankHistory.create(rankData);
               console.log('✅ Rank history saved to database');
             } catch (dbError) {
@@ -377,6 +435,23 @@ router.post('/rank', protect, async (req, res, next) => {
             };
             
             try {
+              // Delete any older rank checks from today for this keyword
+              const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+              const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+              
+              const deleted = await RankHistory.deleteMany({
+                domain,
+                keyword,
+                checkedAt: {
+                  $gte: startOfDay,
+                  $lt: endOfDay
+                }
+              });
+              
+              if (deleted.deletedCount > 0) {
+                console.log(`🧹 Cleaned up ${deleted.deletedCount} older check(s) from today`);
+              }
+              
               await RankHistory.create(rankData);
               console.log('✅ Rank history (not found) saved to database');
             } catch (dbError) {
@@ -476,11 +551,16 @@ router.post('/bulk-rank-check', protect, async (req, res) => {
       });
     }
 
-    if (keywords.length > 20) {
+    if (keywords.length > 50) {
       return res.status(400).json({
         status: 'error',
-        message: 'Maximum 20 keywords allowed per bulk check'
+        message: 'Maximum 50 keywords allowed per bulk check'
       });
+    }
+
+    // Recommend smaller batch sizes for reliability
+    if (keywords.length > 20) {
+      console.log(`⚠️ Warning: Bulk checking ${keywords.length} keywords. For better reliability, consider batches of 10-20 keywords.`);
     }
 
     const locationCode = getLocationCode(location);
@@ -497,132 +577,189 @@ router.post('/bulk-rank-check', protect, async (req, res) => {
       try {
         console.log(`\n🔍 [${i + 1}/${keywords.length}] Checking rank for: "${keyword}"`);
         
-        // Get keyword difficulty
+        // Skip keyword difficulty in bulk checks to reduce API calls and avoid auth issues
+        // Difficulty can be checked separately if needed
         let difficulty = null;
-        try {
-          const diffResp = await axios.post('https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live', [{
-            keywords: [keyword],
-            location_code: locationCode,
-            language_code: 'en'
-          }], {
-            auth: {
-              username: process.env.DATAFORSEO_EMAIL,
-              password: process.env.DATAFORSEO_PASSWORD
-            }
-          });
-          
-          const kwData = diffResp.data?.tasks?.[0]?.result?.[0]?.items?.[0];
-          difficulty = kwData?.keyword_info?.competition || null;
-        } catch (diffErr) {
-          console.warn('⚠️ Failed to fetch keyword difficulty:', diffErr.message);
-        }
 
-        // Check rank using live SERP API
-        const liveRes = await axios.post('https://api.dataforseo.com/v3/serp/google/organic/live/advanced', [{
-          keyword,
-          location_code: locationCode,
-          language_code: 'en',
-          depth: 100
-        }], {
-          auth: {
-            username: process.env.DATAFORSEO_EMAIL,
-            password: process.env.DATAFORSEO_PASSWORD
-          },
-          timeout: 60000 // 60s timeout
-        });
-
-        const taskData = liveRes.data?.tasks?.[0];
-        const items = taskData?.result?.[0]?.items;
+        // Page-by-page incremental checking to save API costs
+        // Check 10 results at a time, stop when keyword is found
+        let finalResult = null;
+        const pageSize = 10;
+        const maxDepth = 100;
+        let totalCost = 0;
         
-        if (items && Array.isArray(items)) {
-          const normalizedTarget = normalizeDomain(domain);
-          let finalResult = null;
-          let organicPosition = 0;
+        for (let currentDepth = pageSize; currentDepth <= maxDepth; currentDepth += pageSize) {
+          console.log(`  🔎 Checking results ${currentDepth - pageSize + 1}-${currentDepth}...`);
           
-          for (let j = 0; j < items.length; j++) {
-            const item = items[j];
-            if (item.type === 'organic') {
-              organicPosition++;
-              const itemDomain = normalizeDomain(item.url || item.domain || '');
-              if (itemDomain && (itemDomain === normalizedTarget || itemDomain.includes(normalizedTarget))) {
-                finalResult = organicPosition;
-                break;
+          // Retry logic for socket hang up errors
+          let retries = 0;
+          const maxRetries = 2;
+          let liveRes = null;
+          
+          while (retries <= maxRetries) {
+            try {
+              liveRes = await axios.post('https://api.dataforseo.com/v3/serp/google/organic/live/advanced', [{
+                keyword,
+                location_code: locationCode,
+                language_code: 'en',
+                depth: currentDepth // Incremental depth: 10, 20, 30, ... 100
+              }], {
+                auth: {
+                  username: process.env.DATAFORSEO_USER,
+                  password: process.env.DATAFORSEO_PASS
+                },
+                timeout: 90000, // 90s timeout
+                headers: {
+                  'Connection': 'keep-alive',
+                  'Accept-Encoding': 'gzip, deflate'
+                }
+              });
+              
+              break; // Success, exit retry loop
+            } catch (apiError) {
+              if ((apiError.code === 'ECONNRESET' || apiError.message?.includes('socket hang up')) && retries < maxRetries) {
+                retries++;
+                console.log(`  ⚠️ Connection lost, retrying (${retries}/${maxRetries})...`);
+                await new Promise(resolve => setTimeout(resolve, 2000 * retries)); // Progressive delay
+              } else {
+                throw apiError; // Re-throw if not retryable or max retries reached
               }
             }
           }
 
-          // Find previous rank for this keyword
-          let previousRank = null;
-          let rankChange = null;
+          totalCost += liveRes?.data?.cost || 0;
+          const taskData = liveRes?.data?.tasks?.[0];
+          const items = taskData?.result?.[0]?.items;
           
-          const previousRecord = await RankHistory.findOne({
-            domain,
-            keyword,
-            month: { $ne: month } // Different month
-          }).sort({ checkedAt: -1 });
-
-          if (previousRecord && previousRecord.rank) {
-            previousRank = previousRecord.rank;
-            if (finalResult) {
-              rankChange = previousRank - finalResult; // Positive = improved (moved up)
-            } else {
-              // Domain dropped out of top 100
-              rankChange = previousRank - 101;
+          if (items && Array.isArray(items)) {
+            const normalizedTarget = normalizeDomain(domain);
+            let organicPosition = 0;
+            let found = false;
+            
+            for (let j = 0; j < items.length; j++) {
+              const item = items[j];
+              if (item.type === 'organic') {
+                organicPosition++;
+                const itemDomain = normalizeDomain(item.url || item.domain || '');
+                if (itemDomain && (itemDomain === normalizedTarget || itemDomain.includes(normalizedTarget))) {
+                  finalResult = organicPosition;
+                  console.log(`  ✅ Found at #${finalResult} (total cost: ${totalCost.toFixed(4)} credits)`);
+                  found = true;
+                  break; // Stop searching once found
+                }
+              }
+            }
+            
+            // Stop page-by-page search if keyword is found
+            if (found) {
+              break;
             }
           }
-
-          const rankData = {
-            domain,
-            keyword,
-            rank: finalResult,
-            inTop100: !!finalResult,
-            difficulty,
-            location: location || `Location Code: ${locationCode}`,
-            locationCode,
-            month,
-            year,
-            previousRank,
-            rankChange,
-            checkedAt: now,
-            source: 'dataforseo',
-            client: clientId || null,
-            keywordId: keywordId || null,
-            message: finalResult ? undefined : `Not ranked in top 100 results${previousRank ? ` (previously #${previousRank})` : ''}`
-          };
-
-          await RankHistory.create(rankData);
-          results.push({
-            keyword,
-            rank: finalResult || null,
-            inTop100: !!finalResult,
-            difficulty,
-            previousRank,
-            rankChange,
-            message: rankData.message,
-            status: 'success'
-          });
           
-          console.log(`✅ [${i + 1}/${keywords.length}] Rank: ${finalResult || 'Not in top 100'}, Change: ${rankChange !== null ? (rankChange > 0 ? `+${rankChange}` : rankChange) : 'N/A'}`);
-        } else {
-          results.push({
-            keyword,
-            rank: null,
-            inTop100: false,
-            message: 'No results returned from API',
-            status: 'no_results'
-          });
+          // Small delay between page checks to avoid rate limiting
+          if (currentDepth < maxDepth) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 1s between pages
+          }
+        }
+        
+        if (!finalResult) {
+          console.log(`  ❌ Not found in top ${maxDepth} (total cost: ${totalCost.toFixed(4)} credits)`);
+        }
+        
+        // Find previous rank for this keyword
+        let previousRank = null;
+        let rankChange = null;
+        
+        const previousRecord = await RankHistory.findOne({
+          domain,
+          keyword,
+          month: { $ne: month } // Different month
+        }).sort({ checkedAt: -1 });
+
+        if (previousRecord && previousRecord.rank) {
+          previousRank = previousRecord.rank;
+          if (finalResult) {
+            rankChange = previousRank - finalResult; // Positive = improved (moved up)
+          } else {
+            // Domain dropped out of top 100
+            rankChange = previousRank - 101;
+          }
         }
 
-        // Add delay between requests to avoid rate limiting
+        const rankData = {
+          domain,
+          keyword,
+          rank: finalResult,
+          inTop100: !!finalResult,
+          difficulty,
+          location: location || `Location Code: ${locationCode}`,
+          locationCode,
+          month,
+          year,
+          previousRank,
+          rankChange,
+          checkedAt: now,
+          source: 'dataforseo',
+          client: clientId || null,
+          keywordId: keywordId || null,
+          message: finalResult ? undefined : `Not ranked in top 100 results${previousRank ? ` (previously #${previousRank})` : ''}`
+        };
+
+        // Delete any older rank checks from today for this keyword
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        
+        const deleted = await RankHistory.deleteMany({
+          domain,
+          keyword,
+          checkedAt: {
+            $gte: startOfDay,
+            $lt: endOfDay
+          }
+        });
+        
+        if (deleted.deletedCount > 0) {
+          console.log(`  🧹 Cleaned up ${deleted.deletedCount} older check(s) from today`);
+        }
+
+        await RankHistory.create(rankData);
+        results.push({
+          keyword,
+          rank: finalResult || null,
+          inTop100: !!finalResult,
+          difficulty,
+          previousRank,
+          rankChange,
+          message: rankData.message,
+          status: 'success'
+        });
+        
+        console.log(`✅ [${i + 1}/${keywords.length}] Rank: ${finalResult || 'Not in top 100'}, Change: ${rankChange !== null ? (rankChange > 0 ? `+${rankChange}` : rankChange) : 'N/A'}`);
+      
+
+        // Add delay between requests to avoid rate limiting and connection issues
+        // Longer delay for bulk operations to prevent socket issues
         if (i < keywords.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+          const delay = keywords.length > 20 ? 5000 : 4000; // 5s for large batches, 4s otherwise
+          console.log(`  ⏱️ Waiting ${delay/1000}s before next keyword...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
 
       } catch (keywordError) {
         console.error(`❌ Error checking rank for "${keyword}":`, keywordError.message);
         
+        // Check if it's a socket hang up error
+        if (keywordError.code === 'ECONNRESET' || keywordError.message?.includes('socket hang up')) {
+          results.push({
+            keyword,
+            status: 'error',
+            error: 'Connection lost - Please try again with fewer keywords or wait a moment',
+            rank: null,
+            inTop100: false
+          });
+        }
         // Check if it's a timeout error
-        if (keywordError.code === 'ECONNABORTED' || keywordError.message?.includes('timeout')) {
+        else if (keywordError.code === 'ECONNABORTED' || keywordError.message?.includes('timeout')) {
           results.push({
             keyword,
             status: 'error',
@@ -630,7 +767,18 @@ router.post('/bulk-rank-check', protect, async (req, res) => {
             rank: null,
             inTop100: false
           });
-        } else {
+        }
+        // Check if it's an auth error (401)
+        else if (keywordError.response?.status === 401 || keywordError.message?.includes('401')) {
+          results.push({
+            keyword,
+            status: 'error',
+            error: 'Authentication failed - Check DataForSEO credentials',
+            rank: null,
+            inTop100: false
+          });
+        }
+        else {
           results.push({
             keyword,
             status: 'error',
@@ -642,13 +790,21 @@ router.post('/bulk-rank-check', protect, async (req, res) => {
       }
     }
 
+    const successful = results.filter(r => r.status === 'success').length;
+    const failed = results.filter(r => r.status === 'error').length;
+
     res.json({
       status: 'success',
       data: {
         checked: keywords.length,
-        successful: results.filter(r => r.status === 'success').length,
+        successful,
+        failed,
         results
-      }
+      },
+      // Add recommendation if many failures
+      ...(failed > keywords.length * 0.3 && {
+        warning: 'High failure rate detected. Consider checking fewer keywords at once (recommended: 10-20) or waiting a few minutes between bulk checks.'
+      })
     });
 
   } catch (error) {
@@ -1005,8 +1161,8 @@ router.get('/debug-config', (req, res) => {
   const locationCode = getLocationCode(req.query.location || 'United States');
   res.json({
     environment: process.env.NODE_ENV || 'development',
-    dataForSeoEmail: process.env.DATAFORSEO_EMAIL ? '***configured***' : '❌ missing',
-    dataForSeoPassword: process.env.DATAFORSEO_PASSWORD ? '***configured***' : '❌ missing',
+    dataForSeoUser: process.env.DATAFORSEO_USER ? '***configured***' : '❌ missing',
+    dataForSeoPass: process.env.DATAFORSEO_PASS ? '***configured***' : '❌ missing',
     requestLocation: req.query.location || 'United States',
     mappedLocationCode: locationCode,
     serverTime: new Date().toISOString(),
