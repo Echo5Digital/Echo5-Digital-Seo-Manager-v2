@@ -8,20 +8,49 @@ import useAuthStore from '../store/auth';
 export default function RankChecker() {
   const clients = useClientStore(state => state.clients);
   const fetchClients = useClientStore(state => state.fetchClients);
-  const checkRank = useKeywordPlannerStore(state => state.checkRank);
+  const { checkRank, bulkCheckRank, getMonthlyComparison } = useKeywordPlannerStore();
   const keywords = useKeywordStore(state => state.keywords);
   const fetchKeywords = useKeywordStore(state => state.fetchKeywords);
   const token = useAuthStore(state => state.token);
   
+  // View mode: 'single' or 'bulk' or 'monthly'
+  const [viewMode, setViewMode] = useState('single');
+  
+  // Single check mode states
   const [rankClientId, setRankClientId] = useState('');
   const [rankDomain, setRankDomain] = useState('');
   const [rankKeyword, setRankKeyword] = useState('');
   const [rankLocation, setRankLocation] = useState('United States');
   const [checkingRank, setCheckingRank] = useState(false);
   const [rankResult, setRankResult] = useState(null);
+  const [rankError, setRankError] = useState(null);
+  
+  // Bulk check mode states
+  const [selectedKeywords, setSelectedKeywords] = useState([]);
+  const [bulkClientId, setBulkClientId] = useState('');
+  const [bulkDomain, setBulkDomain] = useState('');
+  const [bulkLocation, setBulkLocation] = useState('United States');
+  const [bulkChecking, setBulkChecking] = useState(false);
+  const [bulkResults, setBulkResults] = useState(null);
+  const [bulkError, setBulkError] = useState(null);
+  
+  // Monthly comparison states
+  const [monthlyClientId, setMonthlyClientId] = useState('');
+  const [monthlyDomain, setMonthlyDomain] = useState('');
+  const [monthlyData, setMonthlyData] = useState(null);
+  const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const [monthlyError, setMonthlyError] = useState(null);
+  const [monthlyView, setMonthlyView] = useState('summary'); // summary, timeline, performance, detailed
+  const [monthlyFilter, setMonthlyFilter] = useState('all'); // all, improved, declined, stable, new
+  const [monthlySortBy, setSortlySort] = useState('change'); // change, keyword, currentRank
+  const [expandedKeyword, setExpandedKeyword] = useState(null);
+  
+  // Rank history
   const [rankHistory, setRankHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [rankError, setRankError] = useState(null);
+  const [expandedClients, setExpandedClients] = useState({});
+  
+  // Keyword suggestions
   const [keywordSuggestions, setKeywordSuggestions] = useState([]);
   const [showKeywordDropdown, setShowKeywordDropdown] = useState(false);
   const keywordInputRef = useRef(null);
@@ -158,7 +187,14 @@ export default function RankChecker() {
         // Reload history from database to get the newly saved result
         await fetchRankHistory();
       } else if (resp && resp.status === 'error') {
-        setRankError(resp.message || 'Rank check failed');
+        // Check if it's a timeout error
+        if (resp.error === 'TIMEOUT') {
+          setRankError('⏱️ Request timeout - The API took too long to respond. Please try again in a moment.');
+        } else if (resp.error === 'IP_NOT_WHITELISTED') {
+          setRankError('🔒 ' + (resp.message || 'IP address not whitelisted in DataForSEO account'));
+        } else {
+          setRankError(resp.message || 'Rank check failed');
+        }
       } else {
         setRankError('Rank check failed');
       }
@@ -208,6 +244,133 @@ export default function RankChecker() {
     }
   };
 
+  // Bulk check handler
+  const handleBulkCheckRank = async () => {
+    if (!bulkDomain.trim() || selectedKeywords.length === 0) return;
+    
+    setBulkChecking(true);
+    setBulkResults(null);
+    setBulkError(null);
+    
+    try {
+      const keywordsList = selectedKeywords.map(kw => kw.keyword);
+      const keywordIds = selectedKeywords.map(kw => kw._id);
+      
+      const payload = {
+        domain: bulkDomain.trim(),
+        keywords: keywordsList,
+        keywordIds: keywordIds,
+        location: bulkLocation.trim(),
+        clientId: bulkClientId || null
+      };
+      
+      const resp = await bulkCheckRank(payload);
+      if (resp && resp.status === 'success') {
+        setBulkResults(resp.data);
+        await fetchRankHistory();
+      } else {
+        setBulkError(resp?.message || 'Bulk rank check failed');
+      }
+    } catch (err) {
+      console.error('Error in bulk rank check:', err);
+      setBulkError(err.message || 'An error occurred during bulk rank check');
+    } finally {
+      setBulkChecking(false);
+    }
+  };
+
+  // Monthly comparison handler
+  const handleFetchMonthlyComparison = async () => {
+    if (!monthlyDomain.trim() && !monthlyClientId) return;
+    
+    setMonthlyLoading(true);
+    setMonthlyError(null);
+    
+    try {
+      const params = {};
+      if (monthlyDomain.trim()) params.domain = monthlyDomain.trim();
+      if (monthlyClientId) params.clientId = monthlyClientId;
+      params.months = 6; // Last 6 months (changed from 3)
+      
+      const resp = await getMonthlyComparison(params);
+      if (resp && resp.status === 'success') {
+        setMonthlyData(resp.data);
+        console.log('📊 Monthly comparison data received:', {
+          totalKeywords: resp.data?.summary?.totalKeywords,
+          monthsAnalyzed: resp.data?.metadata?.monthsAnalyzed,
+          keywordTimelineCount: resp.data?.keywordTimeline?.length,
+          monthlyStatsCount: resp.data?.monthlyStats?.length
+        });
+      } else {
+        setMonthlyError(resp?.message || 'Failed to fetch monthly comparison');
+      }
+    } catch (err) {
+      console.error('Error fetching monthly comparison:', err);
+      setMonthlyError(err.message || 'An error occurred while fetching monthly comparison');
+    } finally {
+      setMonthlyLoading(false);
+    }
+  };
+
+  // Handle bulk client change
+  const handleBulkClientChange = (e) => {
+    const clientId = e.target.value;
+    setBulkClientId(clientId);
+    const client = clients.find(c => c._id === clientId);
+    if (client) {
+      if (client.website) {
+        try {
+          const url = client.website.startsWith('http') ? client.website : `https://${client.website}`;
+          const domain = new URL(url).hostname.replace('www.', '');
+          setBulkDomain(domain);
+        } catch {
+          setBulkDomain(client.website);
+        }
+      }
+      if (client.location) {
+        setBulkLocation(client.location);
+      }
+    }
+  };
+
+  // Handle monthly client change
+  const handleMonthlyClientChange = (e) => {
+    const clientId = e.target.value;
+    setMonthlyClientId(clientId);
+    const client = clients.find(c => c._id === clientId);
+    if (client && client.website) {
+      try {
+        const url = client.website.startsWith('http') ? client.website : `https://${client.website}`;
+        const domain = new URL(url).hostname.replace('www.', '');
+        setMonthlyDomain(domain);
+      } catch {
+        setMonthlyDomain(client.website);
+      }
+    }
+  };
+
+  // Toggle keyword selection
+  const toggleKeywordSelection = (keyword) => {
+    setSelectedKeywords(prev => {
+      const exists = prev.find(k => k._id === keyword._id);
+      if (exists) {
+        return prev.filter(k => k._id !== keyword._id);
+      } else {
+        return [...prev, keyword];
+      }
+    });
+  };
+
+  // Select all keywords for a client
+  const selectAllClientKeywords = () => {
+    if (!bulkClientId) return;
+    const clientKeywords = keywords.filter(kw => {
+      const kwClientId = kw.clientId?._id || kw.clientId;
+      return kwClientId === bulkClientId;
+    });
+    setSelectedKeywords(clientKeywords);
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString();
   };
@@ -223,85 +386,162 @@ export default function RankChecker() {
     const grouped = {};
     
     rankHistory.forEach(item => {
-      // Find client name from domain or use domain as key
-      const clientKey = item.domain;
+      // Try to find client name from the clients array by matching domain
+      let clientName = item.domain;
+      let clientId = null;
+      
+      // If item has a client reference, use it
+      if (item.client) {
+        const client = clients.find(c => c._id === item.client || c._id === item.client._id);
+        if (client) {
+          clientName = client.name;
+          clientId = client._id;
+        }
+      } else {
+        // Try to find client by matching domain
+        const client = clients.find(c => {
+          const clientDomain = c.website?.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+          const itemDomain = item.domain?.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+          return clientDomain === itemDomain;
+        });
+        
+        if (client) {
+          clientName = client.name;
+          clientId = client._id;
+        }
+      }
+      
+      const clientKey = clientId || item.domain;
       const dateKey = formatDateOnly(item.checkedAt);
       
       if (!grouped[clientKey]) {
-        grouped[clientKey] = {};
+        grouped[clientKey] = {
+          clientName,
+          domain: item.domain,
+          dates: {}
+        };
       }
       
-      if (!grouped[clientKey][dateKey]) {
-        grouped[clientKey][dateKey] = [];
+      if (!grouped[clientKey].dates[dateKey]) {
+        grouped[clientKey].dates[dateKey] = [];
       }
       
-      grouped[clientKey][dateKey].push(item);
+      grouped[clientKey].dates[dateKey].push(item);
     });
     
     return grouped;
   };
 
+  const toggleClientExpand = (clientKey) => {
+    setExpandedClients(prev => ({
+      ...prev,
+      [clientKey]: !prev[clientKey]
+    }));
+  };
+
   const renderGroupedHistory = () => {
     const grouped = groupedHistory();
-    const clientKeys = Object.keys(grouped).sort();
+    const clientKeys = Object.keys(grouped).sort((a, b) => {
+      // Sort by client name alphabetically
+      return grouped[a].clientName.localeCompare(grouped[b].clientName);
+    });
     
     if (clientKeys.length === 0) return null;
     
-    return clientKeys.map(clientKey => (
-      <div key={clientKey} className="mb-6 last:mb-0">
-        <div className="bg-indigo-50 px-4 py-2 border-b border-indigo-100">
-          <h3 className="text-sm font-semibold text-indigo-900">{clientKey}</h3>
-        </div>
-        {Object.keys(grouped[clientKey]).sort((a, b) => new Date(b) - new Date(a)).map(dateKey => (
-          <div key={dateKey} className="border-l-4 border-indigo-200">
-            <div className="bg-gray-50 px-4 py-2 border-b">
-              <span className="text-xs font-medium text-gray-700">
-                {dateKey} ({grouped[clientKey][dateKey].length} check{grouped[clientKey][dateKey].length > 1 ? 's' : ''})
-              </span>
+    return clientKeys.map(clientKey => {
+      const clientData = grouped[clientKey];
+      const isExpanded = expandedClients[clientKey] !== false; // Default to expanded
+      const totalChecks = Object.values(clientData.dates).reduce((sum, checks) => sum + checks.length, 0);
+      
+      return (
+        <div key={clientKey} className="mb-6 last:mb-0">
+          {/* Client Header - Clickable */}
+          <div 
+            onClick={() => toggleClientExpand(clientKey)}
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-3 border-b border-indigo-100 cursor-pointer hover:from-indigo-700 hover:to-purple-700 transition-all"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <svg 
+                  className={`w-5 h-5 text-white transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <div>
+                  <h3 className="text-base font-bold text-white">{clientData.clientName}</h3>
+                  <p className="text-xs text-indigo-100 mt-0.5">{clientData.domain}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="bg-white bg-opacity-20 rounded-full px-3 py-1">
+                  <span className="text-sm font-semibold text-white">{totalChecks} check{totalChecks > 1 ? 's' : ''}</span>
+                </div>
+                <div className="bg-white bg-opacity-20 rounded-full px-3 py-1">
+                  <span className="text-sm font-semibold text-white">{Object.keys(clientData.dates).length} date{Object.keys(clientData.dates).length > 1 ? 's' : ''}</span>
+                </div>
+              </div>
             </div>
-            <table className="w-full">
-              <tbody className="divide-y divide-gray-100">
-                {grouped[clientKey][dateKey].map((item, index) => (
-                  <tr key={item._id || `${item.keyword}-${item.checkedAt}-${index}`} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-700 w-1/3">{item.keyword}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 w-1/4">{item.location || 'Global'}</td>
-                    <td className="px-4 py-3 w-1/6">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        item.rank && item.rank <= 10 
-                          ? 'bg-green-100 text-green-800' 
-                          : item.rank && item.rank <= 30
-                          ? 'bg-blue-100 text-blue-800'
-                          : item.rank
-                          ? 'bg-orange-100 text-orange-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {item.rank ? `#${item.rank}` : 'Not ranked'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 w-1/6">{item.difficulty}/100</td>
-                    <td className="px-4 py-3 w-1/6">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                        item.source === 'dataforseo' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {item.source === 'dataforseo' && (
-                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                        )}
-                        {item.source === 'dataforseo' ? 'Live' : item.source}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{new Date(item.checkedAt).toLocaleTimeString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
-        ))}
-      </div>
-    ));
+          
+          {/* Client Data - Collapsible */}
+          {isExpanded && (
+            <>
+              {Object.keys(clientData.dates).sort((a, b) => new Date(b) - new Date(a)).map(dateKey => (
+                <div key={dateKey} className="border-l-4 border-indigo-200">
+                  <div className="bg-gray-50 px-4 py-2 border-b">
+                    <span className="text-xs font-medium text-gray-700">
+                      📅 {dateKey} ({clientData.dates[dateKey].length} check{clientData.dates[dateKey].length > 1 ? 's' : ''})
+                    </span>
+                  </div>
+                  <table className="w-full">
+                    <tbody className="divide-y divide-gray-100">
+                      {clientData.dates[dateKey].map((item, index) => (
+                        <tr key={item._id || `${item.keyword}-${item.checkedAt}-${index}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-700 w-1/3">{item.keyword}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600 w-1/4">{item.location || 'Global'}</td>
+                          <td className="px-4 py-3 w-1/6">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              item.rank && item.rank <= 10 
+                                ? 'bg-green-100 text-green-800' 
+                                : item.rank && item.rank <= 30
+                                ? 'bg-blue-100 text-blue-800'
+                                : item.rank
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {item.rank ? `#${item.rank}` : 'Not ranked'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700 w-1/6">{item.difficulty}/100</td>
+                          <td className="px-4 py-3 w-1/6">
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                              item.source === 'dataforseo' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {item.source === 'dataforseo' && (
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                              {item.source === 'dataforseo' ? 'Live' : item.source}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500">{new Date(item.checkedAt).toLocaleTimeString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      );
+    });
   };
 
   return (
@@ -315,6 +555,47 @@ export default function RankChecker() {
           </div>
         </div>
 
+        {/* Mode Tabs */}
+        <div className="bg-white border rounded-lg shadow-sm">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex">
+              <button
+                onClick={() => setViewMode('single')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  viewMode === 'single'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Single Check
+              </button>
+              <button
+                onClick={() => setViewMode('bulk')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  viewMode === 'bulk'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Bulk Check
+              </button>
+              <button
+                onClick={() => setViewMode('monthly')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  viewMode === 'monthly'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Monthly Comparison
+              </button>
+            </nav>
+          </div>
+        </div>
+
+        {/* Single Check Mode */}
+        {viewMode === 'single' && (
+          <>
         {/* Rank Checker Form */}
         <div className="bg-white border rounded-lg p-6 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -577,6 +858,633 @@ export default function RankChecker() {
             <p className="text-sm text-gray-600">Enter a domain and keyword above to check its Google ranking</p>
           </div>
         )}
+        </>
+        )}
+
+        {/* Bulk Check Mode */}
+        {viewMode === 'bulk' && (
+          <>
+            <div className="bg-white border rounded-lg p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Bulk Keyword Rank Check</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Select Client</label>
+                  <select
+                    value={bulkClientId}
+                    onChange={handleBulkClientChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">-- Select a client --</option>
+                    {clients.map(client => (
+                      <option key={client._id} value={client._id}>{client.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
+                  <input
+                    type="text"
+                    value={bulkDomain}
+                    onChange={(e) => setBulkDomain(e.target.value)}
+                    placeholder="example.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={bulkLocation}
+                    onChange={(e) => setBulkLocation(e.target.value)}
+                    placeholder="United States"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {bulkClientId && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Select Keywords ({selectedKeywords.length} selected)
+                    </label>
+                    <button
+                      onClick={selectAllClientKeywords}
+                      className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                    >
+                      Select All Client Keywords
+                    </button>
+                  </div>
+                  <div className="border border-gray-300 rounded-lg p-4 max-h-96 overflow-y-auto">
+                    {keywords.filter(kw => (kw.clientId?._id || kw.clientId) === bulkClientId).length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {keywords
+                          .filter(kw => (kw.clientId?._id || kw.clientId) === bulkClientId)
+                          .map(kw => (
+                            <label key={kw._id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedKeywords.some(k => k._id === kw._id)}
+                                onChange={() => toggleKeywordSelection(kw)}
+                                className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                              />
+                              <span className="text-sm text-gray-700">{kw.keyword}</span>
+                            </label>
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 text-center py-4">No keywords found for this client</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleBulkCheckRank}
+                  disabled={!bulkDomain.trim() || selectedKeywords.length === 0 || bulkChecking}
+                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {bulkChecking ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Checking {selectedKeywords.length} keywords...
+                    </span>
+                  ) : (
+                    `Check ${selectedKeywords.length} Keyword${selectedKeywords.length > 1 ? 's' : ''}`
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {bulkError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-700">{bulkError}</p>
+              </div>
+            )}
+
+            {bulkResults && (
+              <div className="bg-white border rounded-lg p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Bulk Check Results</h2>
+                <div className="mb-4 flex items-center gap-4 text-sm">
+                  <span className="text-gray-600">Checked: <strong>{bulkResults.checked}</strong></span>
+                  <span className="text-green-600">Successful: <strong>{bulkResults.successful}</strong></span>
+                  <span className="text-red-600">Failed: <strong>{bulkResults.checked - bulkResults.successful}</strong></span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keyword</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Previous</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Change</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Difficulty</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {bulkResults.results.map((result, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-900">{result.keyword}</td>
+                          <td className="px-4 py-3">
+                            {result.rank ? (
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                result.rank <= 10 ? 'bg-green-100 text-green-800' :
+                                result.rank <= 30 ? 'bg-blue-100 text-blue-800' :
+                                'bg-orange-100 text-orange-800'
+                              }`}>
+                                #{result.rank}
+                              </span>
+                            ) : (
+                              <div className="flex flex-col">
+                                <span className="text-gray-400 text-sm">Not in top 100</span>
+                                {result.message && (
+                                  <span className="text-xs text-gray-500 mt-0.5">{result.message}</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {result.previousRank ? `#${result.previousRank}` : '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            {result.rankChange !== null && result.rankChange !== undefined ? (
+                              <span className={`flex items-center gap-1 text-sm font-medium ${
+                                result.rankChange > 0 ? 'text-green-600' :
+                                result.rankChange < 0 ? 'text-red-600' :
+                                'text-gray-600'
+                              }`}>
+                                {result.rankChange > 0 && (
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L6.707 7.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                                {result.rankChange < 0 && (
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M14.707 12.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 14.586V3a1 1 0 012 0v11.586l2.293-2.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                                {result.rankChange > 0 ? `+${result.rankChange}` : result.rankChange}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-sm">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {result.difficulty !== null ? `${result.difficulty}/100` : '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              result.status === 'success' ? 'bg-green-100 text-green-800' :
+                              result.status === 'error' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {result.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Monthly Comparison Mode */}
+        {viewMode === 'monthly' && (
+          <>
+            <div className="bg-white border rounded-lg p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Monthly Rank Comparison & Analytics</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Select Client</label>
+                  <select
+                    value={monthlyClientId}
+                    onChange={handleMonthlyClientChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">-- Select a client --</option>
+                    {clients.map(client => (
+                      <option key={client._id} value={client._id}>{client.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
+                  <input
+                    type="text"
+                    value={monthlyDomain}
+                    onChange={(e) => setMonthlyDomain(e.target.value)}
+                    placeholder="example.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={handleFetchMonthlyComparison}
+                disabled={(!monthlyDomain.trim() && !monthlyClientId) || monthlyLoading}
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {monthlyLoading ? 'Loading Analysis...' : 'Load 6-Month Analysis'}
+              </button>
+            </div>
+
+            {monthlyError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-700">{monthlyError}</p>
+              </div>
+            )}
+
+            {monthlyData && (
+              <>
+                {/* Metadata */}
+                {monthlyData.metadata && (
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-4">
+                        <span className="text-gray-700"><strong>Domain:</strong> {monthlyData.metadata.domain}</span>
+                        <span className="text-gray-700"><strong>Period:</strong> {monthlyData.metadata.dateRange}</span>
+                        <span className="text-gray-700"><strong>Total Keywords:</strong> {monthlyData.summary.totalKeywords}</span>
+                      </div>
+                      <button className="px-4 py-2 bg-white border border-indigo-300 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50">
+                        📄 Export Report
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Stats Summary */}
+                <div className="bg-white border rounded-lg p-6 shadow-sm">
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4">Performance Summary</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
+                      <div className="text-sm text-green-700 font-medium mb-1">✅ Improved</div>
+                      <div className="text-3xl font-bold text-green-900">{monthlyData.summary.improved}</div>
+                      <div className="text-xs text-green-600 mt-1">Rankings moved up</div>
+                    </div>
+                    <div className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-lg p-4">
+                      <div className="text-sm text-red-700 font-medium mb-1">⚠️ Declined</div>
+                      <div className="text-3xl font-bold text-red-900">{monthlyData.summary.declined}</div>
+                      <div className="text-xs text-red-600 mt-1">Rankings dropped</div>
+                    </div>
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-lg p-4">
+                      <div className="text-sm text-gray-700 font-medium mb-1">➖ Stable</div>
+                      <div className="text-3xl font-bold text-gray-900">{monthlyData.summary.unchanged}</div>
+                      <div className="text-xs text-gray-600 mt-1">No change</div>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
+                      <div className="text-sm text-blue-700 font-medium mb-1">🆕 New</div>
+                      <div className="text-3xl font-bold text-blue-900">{monthlyData.summary.new}</div>
+                      <div className="text-xs text-blue-600 mt-1">New rankings</div>
+                    </div>
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-4">
+                      <div className="text-sm text-orange-700 font-medium mb-1">📉 Lost</div>
+                      <div className="text-3xl font-bold text-orange-900">{monthlyData.summary.lost}</div>
+                      <div className="text-xs text-orange-600 mt-1">Lost rankings</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Performance Categories */}
+                {monthlyData.performanceCategories && (
+                  <div className="bg-white border rounded-lg p-6 shadow-sm">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Keyword Performance Categories</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">🏆 Top Performers</span>
+                          <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-1 rounded-full">
+                            {monthlyData.performanceCategories.topPerformers}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">Improved & ranking in top 30</p>
+                      </div>
+                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">⚡ Need Attention</span>
+                          <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full">
+                            {monthlyData.performanceCategories.needAttention}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">Declining or ranking below 50</p>
+                      </div>
+                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">👻 Lost Visibility</span>
+                          <span className="bg-orange-100 text-orange-800 text-xs font-bold px-2 py-1 rounded-full">
+                            {monthlyData.performanceCategories.lostVisibility}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">Previously ranked, now not in top 100</p>
+                      </div>
+                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">✔️ Stable</span>
+                          <span className="bg-gray-100 text-gray-800 text-xs font-bold px-2 py-1 rounded-full">
+                            {monthlyData.performanceCategories.stable}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">Consistent rankings</p>
+                      </div>
+                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">🌟 New Entries</span>
+                          <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">
+                            {monthlyData.performanceCategories.new}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">Recently started tracking</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Monthly Stats Trend */}
+                {monthlyData.monthlyStats && monthlyData.monthlyStats.length > 0 && (
+                  <div className="bg-white border rounded-lg p-6 shadow-sm">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Monthly Statistics Trend</h2>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Month</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keywords Tracked</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg Position</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Top 10</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Top 30</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Top 100</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Not Ranking</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {monthlyData.monthlyStats.map((stat, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">{stat.monthName}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{stat.totalKeywords}</td>
+                              <td className="px-4 py-3">
+                                {stat.averageRank ? (
+                                  <span className="text-sm font-semibold text-indigo-600">#{stat.averageRank}</span>
+                                ) : (
+                                  <span className="text-sm text-gray-400">-</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  {stat.top10Count}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  {stat.top30Count}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                  {stat.top100Count}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                  {stat.notRankingCount}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Keyword Timeline (Historical Data) */}
+                {monthlyData.keywordTimeline && monthlyData.keywordTimeline.length > 0 && (
+                  <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+                    <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
+                      <h2 className="text-lg font-semibold text-gray-900">Keyword Historical Timeline</h2>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={monthlyFilter}
+                          onChange={(e) => setMonthlyFilter(e.target.value)}
+                          className="px-3 py-1 border border-gray-300 rounded text-sm"
+                        >
+                          <option value="all">All Keywords</option>
+                          <option value="improved">Improved</option>
+                          <option value="declined">Declined</option>
+                          <option value="stable">Stable</option>
+                          <option value="new">New</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 z-10">Keyword</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trend</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Best</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Worst</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Change</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">History</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {monthlyData.keywordTimeline
+                            .filter(kw => monthlyFilter === 'all' || kw.trend === monthlyFilter)
+                            .map((kw, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10">
+                                {kw.keyword}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  kw.trend === 'improved' ? 'bg-green-100 text-green-800' :
+                                  kw.trend === 'declined' ? 'bg-red-100 text-red-800' :
+                                  kw.trend === 'stable' ? 'bg-gray-100 text-gray-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {kw.trend === 'improved' && '↗️ '}
+                                  {kw.trend === 'declined' && '↘️ '}
+                                  {kw.trend === 'stable' && '→ '}
+                                  {kw.trend === 'new' && '✨ '}
+                                  {kw.trend}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {kw.currentRank ? (
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                    kw.currentRank <= 10 ? 'bg-green-100 text-green-800' :
+                                    kw.currentRank <= 30 ? 'bg-blue-100 text-blue-800' :
+                                    'bg-orange-100 text-orange-800'
+                                  }`}>
+                                    #{kw.currentRank}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">-</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-green-600 font-semibold">
+                                {kw.bestRank ? `#${kw.bestRank}` : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-red-600">
+                                {kw.worstRank ? `#${kw.worstRank}` : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600">
+                                {kw.averageRank ? `#${kw.averageRank}` : '-'}
+                              </td>
+                              <td className="px-4 py-3">
+                                {kw.totalChange !== null ? (
+                                  <span className={`flex items-center gap-1 text-sm font-medium ${
+                                    kw.totalChange > 0 ? 'text-green-600' :
+                                    kw.totalChange < 0 ? 'text-red-600' :
+                                    'text-gray-600'
+                                  }`}>
+                                    {kw.totalChange > 0 && '↑ '}
+                                    {kw.totalChange < 0 && '↓ '}
+                                    {kw.totalChange > 0 ? `+${kw.totalChange}` : kw.totalChange}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">-</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-1">
+                                  {kw.history.map((h, hidx) => (
+                                    <div
+                                      key={hidx}
+                                      className={`w-8 h-8 rounded flex items-center justify-center text-xs font-medium ${
+                                        h.rank && h.rank <= 10 ? 'bg-green-500 text-white' :
+                                        h.rank && h.rank <= 30 ? 'bg-blue-500 text-white' :
+                                        h.rank && h.rank <= 100 ? 'bg-orange-500 text-white' :
+                                        'bg-gray-200 text-gray-500'
+                                      }`}
+                                      title={`${h.monthName}: ${h.rank ? `#${h.rank}` : 'Not ranked'}`}
+                                    >
+                                      {h.rank || '-'}
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Month Comparison (Keep existing table) */}
+                {monthlyData.comparisons && monthlyData.comparisons.length > 0 && (
+                  <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+                    <div className="p-4 border-b bg-gray-50">
+                      <h2 className="text-lg font-semibold text-gray-900">Recent Month-over-Month Comparison</h2>
+                      <p className="text-sm text-gray-600 mt-1">Comparing current month vs previous month</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keyword</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Rank</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Previous Rank</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Change</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">% Change</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {monthlyData.comparisons.map((comp, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">{comp.keyword}</td>
+                              <td className="px-4 py-3">
+                                {comp.currentRank ? (
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                    comp.currentRank <= 10 ? 'bg-green-100 text-green-800' :
+                                    comp.currentRank <= 30 ? 'bg-blue-100 text-blue-800' :
+                                    'bg-orange-100 text-orange-800'
+                                  }`}>
+                                    #{comp.currentRank}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">-</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600">
+                                {comp.previousRank ? `#${comp.previousRank}` : '-'}
+                              </td>
+                              <td className="px-4 py-3">
+                                {comp.change !== null ? (
+                                  <span className={`flex items-center gap-1 text-sm font-medium ${
+                                    comp.change > 0 ? 'text-green-600' :
+                                    comp.change < 0 ? 'text-red-600' :
+                                    'text-gray-600'
+                                  }`}>
+                                    {comp.change > 0 && (
+                                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L6.707 7.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                      </svg>
+                                    )}
+                                    {comp.change < 0 && (
+                                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M14.707 12.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 14.586V3a1 1 0 012 0v11.586l2.293-2.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                      </svg>
+                                    )}
+                                    {comp.change > 0 ? `+${comp.change}` : comp.change}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">-</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                {comp.percentChange !== null ? (
+                                  <span className={`text-sm font-medium ${
+                                    parseFloat(comp.percentChange) > 0 ? 'text-green-600' :
+                                    parseFloat(comp.percentChange) < 0 ? 'text-red-600' :
+                                    'text-gray-600'
+                                  }`}>
+                                    {parseFloat(comp.percentChange) > 0 ? '+' : ''}{comp.percentChange}%
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">-</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  comp.status === 'improved' ? 'bg-green-100 text-green-800' :
+                                  comp.status === 'declined' ? 'bg-red-100 text-red-800' :
+                                  comp.status === 'unchanged' ? 'bg-gray-100 text-gray-800' :
+                                  comp.status === 'new' || comp.status === 'now_ranking' ? 'bg-blue-100 text-blue-800' :
+                                  comp.status === 'lost_ranking' ? 'bg-orange-100 text-orange-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {comp.status === 'now_ranking' ? 'New Ranking' : comp.status.replace('_', ' ')}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
       </div>
     </Layout>
   );

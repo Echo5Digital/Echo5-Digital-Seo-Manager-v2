@@ -17,6 +17,52 @@ function normalizeDomain(u) {
   }
 }
 
+// Helper: convert location name to DataForSEO location code
+function getLocationCode(location) {
+  if (!location) return 2840; // Default to United States
+  
+  const locationMap = {
+    // North America
+    'canada': 2124,
+    'united states': 2840,
+    'usa': 2840,
+    'us': 2840,
+    
+    // Europe
+    'france': 2250,
+    'germany': 2276,
+    'united kingdom': 2826,
+    'uk': 2826,
+    'spain': 2724,
+    'italy': 2380,
+    'netherlands': 2528,
+    
+    // Asia-Pacific
+    'australia': 2036,
+    'india': 2356,
+    'singapore': 2702,
+    'japan': 2392,
+    'china': 2156,
+    
+    // Middle East
+    'dubai': 2784,
+    'uae': 2784,
+    'united arab emirates': 2784
+  };
+  
+  const normalizedLocation = location.toLowerCase().trim();
+  
+  // Check if location matches any of our mapped countries
+  for (const [key, code] of Object.entries(locationMap)) {
+    if (normalizedLocation.includes(key)) {
+      return code;
+    }
+  }
+  
+  // Default to United States if no match
+  return 2840;
+}
+
 // Helper: try to find position for a domain inside a DataForSEO-like result structure
 function findPositionInResults(results, targetDomain) {
   targetDomain = normalizeDomain(targetDomain);
@@ -175,16 +221,16 @@ router.post('/rank', protect, async (req, res, next) => {
         ];
 
         console.log('🔍 Calling DataForSEO LIVE API for keyword:', keyword, 'domain:', domain);
-        console.log('� Location:', location, '| Location Code:', locationCode);
+        console.log('📍 Location:', location, '| Location Code:', locationCode);
         console.log('🌐 Server environment:', process.env.NODE_ENV);
-        console.log('�📤 Payload:', JSON.stringify(payload, null, 2));
+        console.log('📤 Payload:', JSON.stringify(payload, null, 2));
         
         const liveRes = await axios.post(liveUrl, payload, {
           headers: {
             Authorization: `Basic ${auth}`,
             'Content-Type': 'application/json'
           },
-          timeout: 30000 // 30s timeout for live results
+          timeout: 60000 // 60s timeout for live results (increased from 30s)
         });
 
         console.log('✅ DataForSEO Response Status:', liveRes.data?.status_code, liveRes.data?.status_message);
@@ -233,6 +279,29 @@ router.post('/rank', protect, async (req, res, next) => {
           }
           
           if (finalResult) {
+            // Find previous rank for comparison
+            const now = new Date();
+            const month = now.getMonth() + 1;
+            const year = now.getFullYear();
+            
+            let previousRank = null;
+            let rankChange = null;
+            
+            try {
+              const previousRecord = await RankHistory.findOne({
+                domain,
+                keyword,
+                month: { $ne: month } // Different month
+              }).sort({ checkedAt: -1 });
+
+              if (previousRecord && previousRecord.rank) {
+                previousRank = previousRecord.rank;
+                rankChange = previousRank - finalResult; // Positive = improved
+              }
+            } catch (err) {
+              console.warn('⚠️ Could not fetch previous rank:', err.message);
+            }
+            
             // Save to database
             const rankData = {
               domain, 
@@ -242,7 +311,11 @@ router.post('/rank', protect, async (req, res, next) => {
               difficulty, 
               location: location || `Location Code: ${locationCode}`, 
               locationCode: locationCode,
-              checkedAt: new Date(), 
+              month,
+              year,
+              previousRank,
+              rankChange,
+              checkedAt: now, 
               source: 'dataforseo'
             };
             
@@ -262,6 +335,30 @@ router.post('/rank', protect, async (req, res, next) => {
             // Domain not found in top 100
             console.warn('⚠️ Domain not found in top 100 results');
             
+            const now = new Date();
+            const month = now.getMonth() + 1;
+            const year = now.getFullYear();
+            
+            // Find previous rank for comparison
+            let previousRank = null;
+            let rankChange = null;
+            
+            try {
+              const previousRecord = await RankHistory.findOne({
+                domain,
+                keyword,
+                month: { $ne: month } // Different month
+              }).sort({ checkedAt: -1 });
+
+              if (previousRecord && previousRecord.rank) {
+                previousRank = previousRecord.rank;
+                // Domain dropped out of top 100 - negative change
+                rankChange = previousRank - 101; // Indicates it dropped below 100
+              }
+            } catch (err) {
+              console.warn('⚠️ Could not fetch previous rank:', err.message);
+            }
+            
             const rankData = {
               domain,
               keyword,
@@ -270,9 +367,13 @@ router.post('/rank', protect, async (req, res, next) => {
               difficulty,
               location: location || `Location Code: ${locationCode}`,
               locationCode: locationCode,
-              checkedAt: new Date(),
+              month,
+              year,
+              previousRank,
+              rankChange,
+              checkedAt: now,
               source: 'dataforseo',
-              message: 'Not found in top 100 results'
+              message: `Not ranked in top 100 results${previousRank ? ` (previously ranked #${previousRank})` : ''}`
             };
             
             try {
@@ -296,9 +397,25 @@ router.post('/rank', protect, async (req, res, next) => {
         console.error('❌ DataForSEO lookup failed:', err.message || err);
         console.error('Full error:', err.response?.data || err);
         
+        // Check if it's a timeout error
+        if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+          return res.status(504).json({
+            status: 'error',
+            message: 'Request timeout - DataForSEO API took too long to respond. Please try again.',
+            error: 'TIMEOUT',
+            suggestion: 'The API request exceeded 60 seconds. This may be due to network issues or high API load.'
+          });
+        }
+        
         // Check if it's an IP whitelist error
         if (err.message?.includes('IP') || err.response?.data?.status_message?.includes('IP')) {
           console.error('⚠️ Possible IP whitelist issue - add your IP to DataForSEO whitelist');
+          return res.status(403).json({
+            status: 'error',
+            message: 'IP address not whitelisted in DataForSEO account',
+            error: 'IP_NOT_WHITELISTED',
+            suggestion: 'Add your server IP to the DataForSEO whitelist in your account settings.'
+          });
         }
         
         // Return error instead of demo data
@@ -343,6 +460,542 @@ router.get('/rank-history', protect, async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch rank history'
+    });
+  }
+});
+
+// Bulk rank check for multiple keywords
+router.post('/bulk-rank-check', protect, async (req, res) => {
+  try {
+    const { domain, keywords, location = 'United States', clientId, keywordIds } = req.body;
+    
+    if (!domain || !keywords || !Array.isArray(keywords) || keywords.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Domain and keywords array are required'
+      });
+    }
+
+    if (keywords.length > 20) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Maximum 20 keywords allowed per bulk check'
+      });
+    }
+
+    const locationCode = getLocationCode(location);
+    const results = [];
+    const now = new Date();
+    const month = now.getMonth() + 1; // 1-12
+    const year = now.getFullYear();
+
+    // Process each keyword
+    for (let i = 0; i < keywords.length; i++) {
+      const keyword = keywords[i];
+      const keywordId = keywordIds && keywordIds[i] ? keywordIds[i] : null;
+      
+      try {
+        console.log(`\n🔍 [${i + 1}/${keywords.length}] Checking rank for: "${keyword}"`);
+        
+        // Get keyword difficulty
+        let difficulty = null;
+        try {
+          const diffResp = await axios.post('https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live', [{
+            keywords: [keyword],
+            location_code: locationCode,
+            language_code: 'en'
+          }], {
+            auth: {
+              username: process.env.DATAFORSEO_EMAIL,
+              password: process.env.DATAFORSEO_PASSWORD
+            }
+          });
+          
+          const kwData = diffResp.data?.tasks?.[0]?.result?.[0]?.items?.[0];
+          difficulty = kwData?.keyword_info?.competition || null;
+        } catch (diffErr) {
+          console.warn('⚠️ Failed to fetch keyword difficulty:', diffErr.message);
+        }
+
+        // Check rank using live SERP API
+        const liveRes = await axios.post('https://api.dataforseo.com/v3/serp/google/organic/live/advanced', [{
+          keyword,
+          location_code: locationCode,
+          language_code: 'en',
+          depth: 100
+        }], {
+          auth: {
+            username: process.env.DATAFORSEO_EMAIL,
+            password: process.env.DATAFORSEO_PASSWORD
+          },
+          timeout: 60000 // 60s timeout
+        });
+
+        const taskData = liveRes.data?.tasks?.[0];
+        const items = taskData?.result?.[0]?.items;
+        
+        if (items && Array.isArray(items)) {
+          const normalizedTarget = normalizeDomain(domain);
+          let finalResult = null;
+          let organicPosition = 0;
+          
+          for (let j = 0; j < items.length; j++) {
+            const item = items[j];
+            if (item.type === 'organic') {
+              organicPosition++;
+              const itemDomain = normalizeDomain(item.url || item.domain || '');
+              if (itemDomain && (itemDomain === normalizedTarget || itemDomain.includes(normalizedTarget))) {
+                finalResult = organicPosition;
+                break;
+              }
+            }
+          }
+
+          // Find previous rank for this keyword
+          let previousRank = null;
+          let rankChange = null;
+          
+          const previousRecord = await RankHistory.findOne({
+            domain,
+            keyword,
+            month: { $ne: month } // Different month
+          }).sort({ checkedAt: -1 });
+
+          if (previousRecord && previousRecord.rank) {
+            previousRank = previousRecord.rank;
+            if (finalResult) {
+              rankChange = previousRank - finalResult; // Positive = improved (moved up)
+            } else {
+              // Domain dropped out of top 100
+              rankChange = previousRank - 101;
+            }
+          }
+
+          const rankData = {
+            domain,
+            keyword,
+            rank: finalResult,
+            inTop100: !!finalResult,
+            difficulty,
+            location: location || `Location Code: ${locationCode}`,
+            locationCode,
+            month,
+            year,
+            previousRank,
+            rankChange,
+            checkedAt: now,
+            source: 'dataforseo',
+            client: clientId || null,
+            keywordId: keywordId || null,
+            message: finalResult ? undefined : `Not ranked in top 100 results${previousRank ? ` (previously #${previousRank})` : ''}`
+          };
+
+          await RankHistory.create(rankData);
+          results.push({
+            keyword,
+            rank: finalResult || null,
+            inTop100: !!finalResult,
+            difficulty,
+            previousRank,
+            rankChange,
+            message: rankData.message,
+            status: 'success'
+          });
+          
+          console.log(`✅ [${i + 1}/${keywords.length}] Rank: ${finalResult || 'Not in top 100'}, Change: ${rankChange !== null ? (rankChange > 0 ? `+${rankChange}` : rankChange) : 'N/A'}`);
+        } else {
+          results.push({
+            keyword,
+            rank: null,
+            inTop100: false,
+            message: 'No results returned from API',
+            status: 'no_results'
+          });
+        }
+
+        // Add delay between requests to avoid rate limiting
+        if (i < keywords.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        }
+
+      } catch (keywordError) {
+        console.error(`❌ Error checking rank for "${keyword}":`, keywordError.message);
+        
+        // Check if it's a timeout error
+        if (keywordError.code === 'ECONNABORTED' || keywordError.message?.includes('timeout')) {
+          results.push({
+            keyword,
+            status: 'error',
+            error: 'Request timeout - API took too long to respond',
+            rank: null,
+            inTop100: false
+          });
+        } else {
+          results.push({
+            keyword,
+            status: 'error',
+            error: keywordError.message,
+            rank: null,
+            inTop100: false
+          });
+        }
+      }
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        checked: keywords.length,
+        successful: results.filter(r => r.status === 'success').length,
+        results
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Bulk rank check error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message || 'Bulk rank check failed'
+    });
+  }
+});
+
+// Get monthly comparison data - ENHANCED VERSION
+router.get('/monthly-comparison', protect, async (req, res) => {
+  try {
+    const { domain, clientId, months = 6 } = req.query;
+    
+    if (!domain && !clientId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Either domain or clientId is required'
+      });
+    }
+
+    const query = {};
+    if (domain) query.domain = { $regex: domain, $options: 'i' };
+    if (clientId) query.client = clientId;
+
+    // Get data for the last N months
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    
+    // Calculate date range
+    const monthsToFetch = parseInt(months) || 6;
+    const monthYearPairs = [];
+    
+    for (let i = 0; i < monthsToFetch; i++) {
+      const date = new Date(currentYear, currentMonth - 1 - i, 1);
+      monthYearPairs.push({
+        month: date.getMonth() + 1,
+        year: date.getFullYear(),
+        monthKey: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+        monthName: date.toLocaleString('default', { month: 'short', year: 'numeric' })
+      });
+    }
+
+    // Fetch ALL records for the time period
+    const allRecords = await RankHistory.find({
+      ...query,
+      $or: monthYearPairs.map(({ month, year }) => ({ month, year }))
+    }).sort({ keyword: 1, year: -1, month: -1, checkedAt: -1 });
+
+    console.log(`📊 Monthly Comparison Query:`, {
+      domain,
+      clientId,
+      monthsRequested: monthsToFetch,
+      monthYearPairs: monthYearPairs.map(m => `${m.year}-${m.month}`),
+      recordsFound: allRecords.length,
+      query: query
+    });
+
+    console.log(`📝 Sample of found records:`, allRecords.slice(0, 3).map(r => ({
+      keyword: r.keyword,
+      domain: r.domain,
+      rank: r.rank,
+      month: r.month,
+      year: r.year
+    })));
+
+    if (allRecords.length === 0) {
+      return res.json({
+        status: 'success',
+        data: {
+          monthlyData: {},
+          keywordTimeline: [],
+          comparisons: [],
+          performanceCategories: {
+            topPerformers: 0,
+            needAttention: 0,
+            lostVisibility: 0,
+            stable: 0,
+            new: 0,
+            details: {
+              topPerformers: [],
+              needAttention: [],
+              lostVisibility: [],
+              stable: [],
+              new: []
+            }
+          },
+          monthlyStats: [],
+          summary: {
+            improved: 0,
+            declined: 0,
+            unchanged: 0,
+            new: 0,
+            lost: 0,
+            totalKeywords: 0
+          },
+          metadata: {
+            domain: domain || 'N/A',
+            monthsAnalyzed: monthsToFetch,
+            dateRange: `${monthYearPairs[monthYearPairs.length - 1].monthName} - ${monthYearPairs[0].monthName}`,
+            generatedAt: new Date().toISOString(),
+            message: 'No rank history data found for the specified criteria'
+          }
+        }
+      });
+    }
+
+    // Build comprehensive monthly data structure
+    const monthlyData = {};
+    const keywordHistoryMap = {}; // keyword -> [month data]
+    
+    // Initialize monthly data structure
+    monthYearPairs.forEach(({ monthKey, month, year, monthName }) => {
+      monthlyData[monthKey] = {
+        month,
+        year,
+        monthName,
+        keywords: {},
+        stats: {
+          totalKeywords: 0,
+          averageRank: 0,
+          top10Count: 0,
+          top30Count: 0,
+          top100Count: 0,
+          notRankingCount: 0
+        }
+      };
+    });
+
+    // Process all records and group by keyword and month
+    allRecords.forEach(record => {
+      const monthKey = `${record.year}-${String(record.month).padStart(2, '0')}`;
+      const keyword = record.keyword;
+      
+      // Initialize keyword history if not exists
+      if (!keywordHistoryMap[keyword]) {
+        keywordHistoryMap[keyword] = {};
+      }
+      
+      // Store the most recent check for this keyword in this month
+      if (!monthlyData[monthKey].keywords[keyword] || 
+          new Date(record.checkedAt) > new Date(monthlyData[monthKey].keywords[keyword].checkedAt)) {
+        monthlyData[monthKey].keywords[keyword] = {
+          keyword: record.keyword,
+          rank: record.rank,
+          inTop100: record.inTop100,
+          difficulty: record.difficulty,
+          checkedAt: record.checkedAt,
+          location: record.location
+        };
+        
+        keywordHistoryMap[keyword][monthKey] = record.rank;
+      }
+    });
+
+    // Calculate stats for each month
+    Object.keys(monthlyData).forEach(monthKey => {
+      const keywords = Object.values(monthlyData[monthKey].keywords);
+      const rankedKeywords = keywords.filter(k => k.rank);
+      
+      monthlyData[monthKey].stats.totalKeywords = keywords.length;
+      monthlyData[monthKey].stats.averageRank = rankedKeywords.length > 0
+        ? (rankedKeywords.reduce((sum, k) => sum + k.rank, 0) / rankedKeywords.length).toFixed(1)
+        : null;
+      monthlyData[monthKey].stats.top10Count = keywords.filter(k => k.rank && k.rank <= 10).length;
+      monthlyData[monthKey].stats.top30Count = keywords.filter(k => k.rank && k.rank <= 30).length;
+      monthlyData[monthKey].stats.top100Count = keywords.filter(k => k.rank && k.rank <= 100).length;
+      monthlyData[monthKey].stats.notRankingCount = keywords.filter(k => !k.rank).length;
+    });
+
+    // Build comprehensive keyword timeline data
+    const keywordTimeline = [];
+    Object.keys(keywordHistoryMap).forEach(keyword => {
+      const timeline = {
+        keyword,
+        history: [],
+        currentRank: null,
+        bestRank: null,
+        worstRank: null,
+        averageRank: null,
+        trend: 'stable', // improved, declined, stable, new
+        totalChange: null
+      };
+
+      // Build history array in chronological order
+      const sortedMonths = monthYearPairs.map(m => m.monthKey).reverse();
+      sortedMonths.forEach(monthKey => {
+        const rank = keywordHistoryMap[keyword][monthKey] || null;
+        const monthData = monthYearPairs.find(m => m.monthKey === monthKey);
+        timeline.history.push({
+          monthKey,
+          monthName: monthData.monthName,
+          rank
+        });
+      });
+
+      // Calculate statistics
+      const ranks = timeline.history.filter(h => h.rank).map(h => h.rank);
+      if (ranks.length > 0) {
+        timeline.currentRank = timeline.history[timeline.history.length - 1].rank;
+        timeline.bestRank = Math.min(...ranks);
+        timeline.worstRank = Math.max(...ranks);
+        timeline.averageRank = (ranks.reduce((a, b) => a + b, 0) / ranks.length).toFixed(1);
+        
+        // Calculate trend
+        if (ranks.length >= 2) {
+          const firstRank = timeline.history.find(h => h.rank)?.rank;
+          const lastRank = timeline.currentRank;
+          if (firstRank && lastRank) {
+            timeline.totalChange = firstRank - lastRank; // Positive = improved
+            if (timeline.totalChange > 5) timeline.trend = 'improved';
+            else if (timeline.totalChange < -5) timeline.trend = 'declined';
+            else timeline.trend = 'stable';
+          }
+        } else {
+          timeline.trend = 'new';
+        }
+      }
+
+      keywordTimeline.push(timeline);
+    });
+
+    // Calculate overall comparisons (current vs previous month)
+    const comparisons = [];
+    const sortedMonths = Object.keys(monthlyData).sort().reverse();
+    
+    if (sortedMonths.length >= 2) {
+      const currentMonthKey = sortedMonths[0];
+      const previousMonthKey = sortedMonths[1];
+      
+      const currentKeywords = monthlyData[currentMonthKey].keywords;
+      const previousKeywords = monthlyData[previousMonthKey].keywords;
+      
+      // Get all unique keywords
+      const allKeywords = new Set([
+        ...Object.keys(currentKeywords),
+        ...Object.keys(previousKeywords)
+      ]);
+
+      allKeywords.forEach(keyword => {
+        const current = currentKeywords[keyword];
+        const previous = previousKeywords[keyword];
+        
+        const comparison = {
+          keyword,
+          currentRank: current?.rank || null,
+          previousRank: previous?.rank || null,
+          change: null,
+          percentChange: null,
+          status: 'new',
+          difficulty: current?.difficulty || previous?.difficulty || null
+        };
+
+        if (previous?.rank && current?.rank) {
+          comparison.change = previous.rank - current.rank; // Positive = improved
+          comparison.percentChange = ((previous.rank - current.rank) / previous.rank * 100).toFixed(1);
+          
+          if (comparison.change > 0) comparison.status = 'improved';
+          else if (comparison.change < 0) comparison.status = 'declined';
+          else comparison.status = 'unchanged';
+        } else if (previous && !previous.rank && current?.rank) {
+          comparison.status = 'now_ranking';
+        } else if (previous?.rank && (!current || !current.rank)) {
+          comparison.status = 'lost_ranking';
+        } else if (!previous && current) {
+          comparison.status = 'new';
+        } else if (previous && !current) {
+          comparison.status = 'not_checked';
+        }
+
+        comparisons.push(comparison);
+      });
+    }
+
+    // Performance categories
+    const performanceCategories = {
+      topPerformers: keywordTimeline.filter(k => k.trend === 'improved' && k.currentRank && k.currentRank <= 30),
+      needAttention: keywordTimeline.filter(k => k.trend === 'declined' || (k.currentRank && k.currentRank > 50)),
+      lostVisibility: keywordTimeline.filter(k => !k.currentRank && k.history.some(h => h.rank)),
+      stable: keywordTimeline.filter(k => k.trend === 'stable' && k.currentRank),
+      new: keywordTimeline.filter(k => k.trend === 'new')
+    };
+
+    // Calculate month-over-month stats comparison
+    const monthlyStats = sortedMonths.map(monthKey => ({
+      monthKey,
+      monthName: monthlyData[monthKey].monthName,
+      ...monthlyData[monthKey].stats
+    }));
+
+    console.log(`📈 Monthly Stats Generated:`, monthlyStats.map(m => ({
+      month: m.monthName,
+      total: m.totalKeywords,
+      avg: m.averageRank,
+      top10: m.top10Count
+    })));
+
+    console.log(`📊 Summary Stats:`, {
+      improved: comparisons.filter(c => c.status === 'improved').length,
+      declined: comparisons.filter(c => c.status === 'declined').length,
+      unchanged: comparisons.filter(c => c.status === 'unchanged').length,
+      new: comparisons.filter(c => c.status === 'new' || c.status === 'now_ranking').length,
+      lost: comparisons.filter(c => c.status === 'lost_ranking').length,
+      totalKeywords: comparisons.length,
+      totalComparisons: comparisons.length
+    });
+
+    res.json({
+      status: 'success',
+      data: {
+        monthlyData,
+        keywordTimeline,
+        comparisons,
+        performanceCategories: {
+          topPerformers: performanceCategories.topPerformers.length,
+          needAttention: performanceCategories.needAttention.length,
+          lostVisibility: performanceCategories.lostVisibility.length,
+          stable: performanceCategories.stable.length,
+          new: performanceCategories.new.length,
+          details: performanceCategories
+        },
+        monthlyStats,
+        summary: {
+          improved: comparisons.filter(c => c.status === 'improved').length,
+          declined: comparisons.filter(c => c.status === 'declined').length,
+          unchanged: comparisons.filter(c => c.status === 'unchanged').length,
+          new: comparisons.filter(c => c.status === 'new' || c.status === 'now_ranking').length,
+          lost: comparisons.filter(c => c.status === 'lost_ranking').length,
+          totalKeywords: Object.keys(keywordHistoryMap).length // Total unique keywords across all months
+        },
+        metadata: {
+          domain: domain || 'N/A',
+          monthsAnalyzed: monthsToFetch,
+          dateRange: `${monthYearPairs[monthYearPairs.length - 1].monthName} - ${monthYearPairs[0].monthName}`,
+          generatedAt: new Date().toISOString()
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Monthly comparison error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message || 'Failed to fetch monthly comparison'
     });
   }
 });
