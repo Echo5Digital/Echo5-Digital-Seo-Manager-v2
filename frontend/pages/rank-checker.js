@@ -290,7 +290,7 @@ export default function RankChecker() {
       const params = {};
       if (monthlyDomain.trim()) params.domain = monthlyDomain.trim();
       if (monthlyClientId) params.clientId = monthlyClientId;
-      params.months = 6; // Last 6 months (changed from 3)
+      params.months = 12; // Last 12 months to show all available data
       
       const resp = await getMonthlyComparison(params);
       if (resp && resp.status === 'success') {
@@ -1214,12 +1214,20 @@ export default function RankChecker() {
                 {/* Monthly Stats Trend */}
                 {monthlyData.monthlyStats && monthlyData.monthlyStats.length > 0 && (
                   <div className="bg-white border rounded-lg p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Monthly Statistics Trend</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                      Monthly Statistics Trend
+                      {monthlyData.metadata?.weeklyTrackingEnabled && (
+                        <span className="ml-2 text-xs text-indigo-600 font-normal">
+                          📅 Weekly tracking enabled
+                        </span>
+                      )}
+                    </h2>
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead className="bg-gray-50">
                           <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Month</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Weekly Checks</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keywords Tracked</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg Position</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Top 10</th>
@@ -1232,6 +1240,11 @@ export default function RankChecker() {
                           {monthlyData.monthlyStats.map((stat, idx) => (
                             <tr key={idx} className="hover:bg-gray-50">
                               <td className="px-4 py-3 text-sm font-medium text-gray-900">{stat.monthName}</td>
+                              <td className="px-4 py-3">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                  {stat.stats?.totalChecks || stat.totalKeywords} checks
+                                </span>
+                              </td>
                               <td className="px-4 py-3 text-sm text-gray-600">{stat.totalKeywords}</td>
                               <td className="px-4 py-3">
                                 {stat.averageRank ? (
@@ -1361,21 +1374,57 @@ export default function RankChecker() {
                                 )}
                               </td>
                               <td className="px-4 py-3">
-                                <div className="flex items-center gap-1">
-                                  {kw.history.map((h, hidx) => (
-                                    <div
-                                      key={hidx}
-                                      className={`w-8 h-8 rounded flex items-center justify-center text-xs font-medium ${
-                                        h.rank && h.rank <= 10 ? 'bg-green-500 text-white' :
-                                        h.rank && h.rank <= 30 ? 'bg-blue-500 text-white' :
-                                        h.rank && h.rank <= 100 ? 'bg-orange-500 text-white' :
-                                        'bg-gray-200 text-gray-500'
-                                      }`}
-                                      title={`${h.monthName}: ${h.rank ? `#${h.rank}` : 'Not ranked'}`}
-                                    >
-                                      {h.rank || '-'}
-                                    </div>
-                                  ))}
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {kw.history.map((h, hidx) => {
+                                    // Check if this month has weekly checks
+                                    const hasWeeklyChecks = h.weeklyChecks && h.weeklyChecks.length > 0;
+                                    
+                                    if (hasWeeklyChecks) {
+                                      // Show all weekly checks for this month
+                                      return (
+                                        <div key={hidx} className="flex flex-col gap-0.5">
+                                          <div className="text-xs text-gray-500 font-medium mb-0.5">{h.monthName}</div>
+                                          <div className="flex gap-0.5">
+                                            {h.weeklyChecks.map((check, checkIdx) => (
+                                              <div
+                                                key={checkIdx}
+                                                className={`w-7 h-7 rounded flex items-center justify-center text-xs font-medium ${
+                                                  check.rank && check.rank <= 10 ? 'bg-green-500 text-white' :
+                                                  check.rank && check.rank <= 30 ? 'bg-blue-500 text-white' :
+                                                  check.rank && check.rank <= 100 ? 'bg-orange-500 text-white' :
+                                                  'bg-gray-200 text-gray-500'
+                                                }`}
+                                                title={`${check.checkedDateFull || check.checkedDate}: ${check.rank ? `#${check.rank}` : 'Not ranked'}`}
+                                              >
+                                                {check.rank || '-'}
+                                              </div>
+                                            ))}
+                                          </div>
+                                          {h.rankRange && (
+                                            <div className="text-xs text-gray-500 mt-0.5">
+                                              {h.rankRange.min}-{h.rankRange.max} (avg: {h.rankRange.average})
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    } else {
+                                      // Fallback: Show single month rank
+                                      return (
+                                        <div
+                                          key={hidx}
+                                          className={`w-8 h-8 rounded flex items-center justify-center text-xs font-medium ${
+                                            h.rank && h.rank <= 10 ? 'bg-green-500 text-white' :
+                                            h.rank && h.rank <= 30 ? 'bg-blue-500 text-white' :
+                                            h.rank && h.rank <= 100 ? 'bg-orange-500 text-white' :
+                                            'bg-gray-200 text-gray-500'
+                                          }`}
+                                          title={`${h.monthName}: ${h.rank ? `#${h.rank}` : 'Not ranked'}`}
+                                        >
+                                          {h.rank || '-'}
+                                        </div>
+                                      );
+                                    }
+                                  })}
                                 </div>
                               </td>
                             </tr>

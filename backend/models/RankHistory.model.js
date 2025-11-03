@@ -29,11 +29,12 @@ const rankHistorySchema = new mongoose.Schema({
   },
   locationCode: {
     type: Number,
-    required: true
+    required: false, // Optional - Oxylabs uses location names instead of codes
+    default: null
   },
   source: {
     type: String,
-    enum: ['dataforseo', 'manual'],
+    enum: ['dataforseo', 'oxylabs', 'manual'],
     default: 'dataforseo'
   },
   checkedAt: {
