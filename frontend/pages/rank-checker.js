@@ -4,6 +4,11 @@ import useClientStore from '../store/clients';
 import useKeywordPlannerStore from '../store/keywordPlanner';
 import useKeywordStore from '../store/keywords';
 import useAuthStore from '../store/auth';
+import SummaryCards from '../components/comparison/SummaryCards';
+import TrendChart from '../components/comparison/TrendChart';
+import KeywordTable from '../components/comparison/KeywordTable';
+import InsightsPanel from '../components/comparison/InsightsPanel';
+import WeeklyView from '../components/comparison/WeeklyView';
 
 export default function RankChecker() {
   const clients = useClientStore(state => state.clients);
@@ -294,7 +299,7 @@ export default function RankChecker() {
       
       const resp = await getMonthlyComparison(params);
       if (resp && resp.status === 'success') {
-        setMonthlyData(resp.data);
+        setMonthlyData(resp); // Set the entire response object
         console.log('📊 Monthly comparison data received:', {
           totalKeywords: resp.data?.summary?.totalKeywords,
           monthsAnalyzed: resp.data?.metadata?.monthsAnalyzed,
@@ -1061,17 +1066,18 @@ export default function RankChecker() {
 
         {/* Monthly Comparison Mode */}
         {viewMode === 'monthly' && (
-          <>
-            <div className="bg-white border rounded-lg p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Monthly Rank Comparison & Analytics</h2>
+          <div className="space-y-6">
+            {/* Client Selection */}
+            <div className="bg-white border rounded-xl p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 Monthly Rank Comparison & Analytics</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Select Client</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Client</label>
                   <select
                     value={monthlyClientId}
                     onChange={handleMonthlyClientChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   >
                     <option value="">-- Select a client --</option>
                     {clients.map(client => (
@@ -1081,13 +1087,13 @@ export default function RankChecker() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Domain</label>
                   <input
                     type="text"
                     value={monthlyDomain}
                     onChange={(e) => setMonthlyDomain(e.target.value)}
                     placeholder="example.com"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
                 </div>
               </div>
@@ -1095,443 +1101,124 @@ export default function RankChecker() {
               <button
                 onClick={handleFetchMonthlyComparison}
                 disabled={(!monthlyDomain.trim() && !monthlyClientId) || monthlyLoading}
-                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm hover:shadow transition-all"
               >
-                {monthlyLoading ? 'Loading Analysis...' : 'Load 6-Month Analysis'}
+                {monthlyLoading ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading Analysis...
+                  </span>
+                ) : (
+                  '📈 Load 12-Month Analysis'
+                )}
               </button>
             </div>
 
+            {/* Error Message */}
             {monthlyError && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-700">{monthlyError}</p>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-sm text-red-700 font-medium">{monthlyError}</p>
+                </div>
               </div>
             )}
 
+            {/* Debug Info - Remove after testing */}
             {monthlyData && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-700">
+                  <strong>Debug:</strong> Data loaded successfully! 
+                  {monthlyData.data ? ` Found ${monthlyData.data.summary?.totalKeywords || 0} keywords` : ' (no data property)'}
+                </p>
+              </div>
+            )}
+
+            {/* Loaded Data - New Components */}
+            {monthlyData && monthlyData.data && (
               <>
-                {/* Metadata */}
-                {monthlyData.metadata && (
-                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-4">
-                        <span className="text-gray-700"><strong>Domain:</strong> {monthlyData.metadata.domain}</span>
-                        <span className="text-gray-700"><strong>Period:</strong> {monthlyData.metadata.dateRange}</span>
-                        <span className="text-gray-700"><strong>Total Keywords:</strong> {monthlyData.summary.totalKeywords}</span>
+                {console.log('🎨 Rendering monthly data components:', {
+                  hasData: !!monthlyData.data,
+                  hasSummary: !!monthlyData.data?.summary,
+                  hasMetadata: !!monthlyData.data?.metadata,
+                  hasKeywordTimeline: !!monthlyData.data?.keywordTimeline,
+                  keywordCount: monthlyData.data?.keywordTimeline?.length
+                })}
+                
+                {/* Test rendering - Remove after debugging */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-sm text-green-700">
+                    ✅ Components are rendering! Keywords: {monthlyData.data?.summary?.totalKeywords || 0}
+                  </p>
+                </div>
+                
+                {/* Metadata Banner */}
+                {monthlyData.data.metadata && (
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      <div className="flex items-center gap-6 text-sm">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                          </svg>
+                          <span className="font-medium text-gray-700">Domain:</span>
+                          <span className="text-gray-900 font-semibold">{monthlyData.data.metadata.domain}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span className="font-medium text-gray-700">Period:</span>
+                          <span className="text-gray-900">{monthlyData.data.metadata.dateRange}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                          </svg>
+                          <span className="font-medium text-gray-700">Keywords:</span>
+                          <span className="text-gray-900 font-semibold">{monthlyData.data.summary.totalKeywords}</span>
+                        </div>
+                        {monthlyData.data.metadata?.weeklyTrackingEnabled && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-200">
+                            📅 Weekly tracking enabled
+                          </span>
+                        )}
                       </div>
-                      <button className="px-4 py-2 bg-white border border-indigo-300 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50">
-                        📄 Export Report
+                      <button className="px-4 py-2 bg-white border border-indigo-300 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50 shadow-sm transition-all flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Export Report
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* Quick Stats Summary */}
-                <div className="bg-white border rounded-lg p-6 shadow-sm">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4">Performance Summary</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
-                      <div className="text-sm text-green-700 font-medium mb-1">✅ Improved</div>
-                      <div className="text-3xl font-bold text-green-900">{monthlyData.summary.improved}</div>
-                      <div className="text-xs text-green-600 mt-1">Rankings moved up</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-lg p-4">
-                      <div className="text-sm text-red-700 font-medium mb-1">⚠️ Declined</div>
-                      <div className="text-3xl font-bold text-red-900">{monthlyData.summary.declined}</div>
-                      <div className="text-xs text-red-600 mt-1">Rankings dropped</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-lg p-4">
-                      <div className="text-sm text-gray-700 font-medium mb-1">➖ Stable</div>
-                      <div className="text-3xl font-bold text-gray-900">{monthlyData.summary.unchanged}</div>
-                      <div className="text-xs text-gray-600 mt-1">No change</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
-                      <div className="text-sm text-blue-700 font-medium mb-1">🆕 New</div>
-                      <div className="text-3xl font-bold text-blue-900">{monthlyData.summary.new}</div>
-                      <div className="text-xs text-blue-600 mt-1">New rankings</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-4">
-                      <div className="text-sm text-orange-700 font-medium mb-1">📉 Lost</div>
-                      <div className="text-3xl font-bold text-orange-900">{monthlyData.summary.lost}</div>
-                      <div className="text-xs text-orange-600 mt-1">Lost rankings</div>
-                    </div>
-                  </div>
-                </div>
+                {/* Summary Cards */}
+                <SummaryCards data={monthlyData.data} />
 
-                {/* Performance Categories */}
-                {monthlyData.performanceCategories && (
-                  <div className="bg-white border rounded-lg p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Keyword Performance Categories</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700">🏆 Top Performers</span>
-                          <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-1 rounded-full">
-                            {monthlyData.performanceCategories.topPerformers}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500">Improved & ranking in top 30</p>
-                      </div>
-                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700">⚡ Need Attention</span>
-                          <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full">
-                            {monthlyData.performanceCategories.needAttention}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500">Declining or ranking below 50</p>
-                      </div>
-                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700">👻 Lost Visibility</span>
-                          <span className="bg-orange-100 text-orange-800 text-xs font-bold px-2 py-1 rounded-full">
-                            {monthlyData.performanceCategories.lostVisibility}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500">Previously ranked, now not in top 100</p>
-                      </div>
-                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700">✔️ Stable</span>
-                          <span className="bg-gray-100 text-gray-800 text-xs font-bold px-2 py-1 rounded-full">
-                            {monthlyData.performanceCategories.stable}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500">Consistent rankings</p>
-                      </div>
-                      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700">🌟 New Entries</span>
-                          <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">
-                            {monthlyData.performanceCategories.new}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500">Recently started tracking</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {/* AI Insights Panel */}
+                <InsightsPanel data={monthlyData.data} />
 
-                {/* Monthly Stats Trend */}
-                {monthlyData.monthlyStats && monthlyData.monthlyStats.length > 0 && (
-                  <div className="bg-white border rounded-lg p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                      Monthly Statistics Trend
-                      {monthlyData.metadata?.weeklyTrackingEnabled && (
-                        <span className="ml-2 text-xs text-indigo-600 font-normal">
-                          📅 Weekly tracking enabled
-                        </span>
-                      )}
-                    </h2>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Month</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Weekly Checks</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keywords Tracked</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg Position</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Top 10</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Top 30</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Top 100</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Not Ranking</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {monthlyData.monthlyStats.map((stat, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm font-medium text-gray-900">{stat.monthName}</td>
-                              <td className="px-4 py-3">
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                                  {stat.stats?.totalChecks || stat.totalKeywords} checks
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">{stat.totalKeywords}</td>
-                              <td className="px-4 py-3">
-                                {stat.averageRank ? (
-                                  <span className="text-sm font-semibold text-indigo-600">#{stat.averageRank}</span>
-                                ) : (
-                                  <span className="text-sm text-gray-400">-</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                  {stat.top10Count}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                  {stat.top30Count}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                                  {stat.top100Count}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                  {stat.notRankingCount}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+                {/* Interactive Trend Chart */}
+                <TrendChart data={monthlyData.data} />
 
-                {/* Keyword Timeline (Historical Data) */}
-                {monthlyData.keywordTimeline && monthlyData.keywordTimeline.length > 0 && (
-                  <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-                    <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-                      <h2 className="text-lg font-semibold text-gray-900">Keyword Historical Timeline</h2>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={monthlyFilter}
-                          onChange={(e) => setMonthlyFilter(e.target.value)}
-                          className="px-3 py-1 border border-gray-300 rounded text-sm"
-                        >
-                          <option value="all">All Keywords</option>
-                          <option value="improved">Improved</option>
-                          <option value="declined">Declined</option>
-                          <option value="stable">Stable</option>
-                          <option value="new">New</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 z-10">Keyword</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trend</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Best</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Worst</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Change</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">History</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {monthlyData.keywordTimeline
-                            .filter(kw => monthlyFilter === 'all' || kw.trend === monthlyFilter)
-                            .map((kw, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10">
-                                {kw.keyword}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                  kw.trend === 'improved' ? 'bg-green-100 text-green-800' :
-                                  kw.trend === 'declined' ? 'bg-red-100 text-red-800' :
-                                  kw.trend === 'stable' ? 'bg-gray-100 text-gray-800' :
-                                  'bg-blue-100 text-blue-800'
-                                }`}>
-                                  {kw.trend === 'improved' && '↗️ '}
-                                  {kw.trend === 'declined' && '↘️ '}
-                                  {kw.trend === 'stable' && '→ '}
-                                  {kw.trend === 'new' && '✨ '}
-                                  {kw.trend}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3">
-                                {kw.currentRank ? (
-                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                    kw.currentRank <= 10 ? 'bg-green-100 text-green-800' :
-                                    kw.currentRank <= 30 ? 'bg-blue-100 text-blue-800' :
-                                    'bg-orange-100 text-orange-800'
-                                  }`}>
-                                    #{kw.currentRank}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-sm">-</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-green-600 font-semibold">
-                                {kw.bestRank ? `#${kw.bestRank}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-red-600">
-                                {kw.worstRank ? `#${kw.worstRank}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {kw.averageRank ? `#${kw.averageRank}` : '-'}
-                              </td>
-                              <td className="px-4 py-3">
-                                {kw.totalChange !== null ? (
-                                  <span className={`flex items-center gap-1 text-sm font-medium ${
-                                    kw.totalChange > 0 ? 'text-green-600' :
-                                    kw.totalChange < 0 ? 'text-red-600' :
-                                    'text-gray-600'
-                                  }`}>
-                                    {kw.totalChange > 0 && '↑ '}
-                                    {kw.totalChange < 0 && '↓ '}
-                                    {kw.totalChange > 0 ? `+${kw.totalChange}` : kw.totalChange}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-sm">-</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-1 flex-wrap">
-                                  {kw.history.map((h, hidx) => {
-                                    // Check if this month has weekly checks
-                                    const hasWeeklyChecks = h.weeklyChecks && h.weeklyChecks.length > 0;
-                                    
-                                    if (hasWeeklyChecks) {
-                                      // Show all weekly checks for this month
-                                      return (
-                                        <div key={hidx} className="flex flex-col gap-0.5">
-                                          <div className="text-xs text-gray-500 font-medium mb-0.5">{h.monthName}</div>
-                                          <div className="flex gap-0.5">
-                                            {h.weeklyChecks.map((check, checkIdx) => (
-                                              <div
-                                                key={checkIdx}
-                                                className={`w-7 h-7 rounded flex items-center justify-center text-xs font-medium ${
-                                                  check.rank && check.rank <= 10 ? 'bg-green-500 text-white' :
-                                                  check.rank && check.rank <= 30 ? 'bg-blue-500 text-white' :
-                                                  check.rank && check.rank <= 100 ? 'bg-orange-500 text-white' :
-                                                  'bg-gray-200 text-gray-500'
-                                                }`}
-                                                title={`${check.checkedDateFull || check.checkedDate}: ${check.rank ? `#${check.rank}` : 'Not ranked'}`}
-                                              >
-                                                {check.rank || '-'}
-                                              </div>
-                                            ))}
-                                          </div>
-                                          {h.rankRange && (
-                                            <div className="text-xs text-gray-500 mt-0.5">
-                                              {h.rankRange.min}-{h.rankRange.max} (avg: {h.rankRange.average})
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    } else {
-                                      // Fallback: Show single month rank
-                                      return (
-                                        <div
-                                          key={hidx}
-                                          className={`w-8 h-8 rounded flex items-center justify-center text-xs font-medium ${
-                                            h.rank && h.rank <= 10 ? 'bg-green-500 text-white' :
-                                            h.rank && h.rank <= 30 ? 'bg-blue-500 text-white' :
-                                            h.rank && h.rank <= 100 ? 'bg-orange-500 text-white' :
-                                            'bg-gray-200 text-gray-500'
-                                          }`}
-                                          title={`${h.monthName}: ${h.rank ? `#${h.rank}` : 'Not ranked'}`}
-                                        >
-                                          {h.rank || '-'}
-                                        </div>
-                                      );
-                                    }
-                                  })}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+                {/* Weekly View */}
+                <WeeklyView data={monthlyData.data} />
 
-                {/* Recent Month Comparison (Keep existing table) */}
-                {monthlyData.comparisons && monthlyData.comparisons.length > 0 && (
-                  <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-                    <div className="p-4 border-b bg-gray-50">
-                      <h2 className="text-lg font-semibold text-gray-900">Recent Month-over-Month Comparison</h2>
-                      <p className="text-sm text-gray-600 mt-1">Comparing current month vs previous month</p>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keyword</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Rank</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Previous Rank</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Change</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">% Change</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {monthlyData.comparisons.map((comp, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm font-medium text-gray-900">{comp.keyword}</td>
-                              <td className="px-4 py-3">
-                                {comp.currentRank ? (
-                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                    comp.currentRank <= 10 ? 'bg-green-100 text-green-800' :
-                                    comp.currentRank <= 30 ? 'bg-blue-100 text-blue-800' :
-                                    'bg-orange-100 text-orange-800'
-                                  }`}>
-                                    #{comp.currentRank}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-sm">-</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {comp.previousRank ? `#${comp.previousRank}` : '-'}
-                              </td>
-                              <td className="px-4 py-3">
-                                {comp.change !== null ? (
-                                  <span className={`flex items-center gap-1 text-sm font-medium ${
-                                    comp.change > 0 ? 'text-green-600' :
-                                    comp.change < 0 ? 'text-red-600' :
-                                    'text-gray-600'
-                                  }`}>
-                                    {comp.change > 0 && (
-                                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L6.707 7.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                                      </svg>
-                                    )}
-                                    {comp.change < 0 && (
-                                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M14.707 12.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 14.586V3a1 1 0 012 0v11.586l2.293-2.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                      </svg>
-                                    )}
-                                    {comp.change > 0 ? `+${comp.change}` : comp.change}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-sm">-</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                {comp.percentChange !== null ? (
-                                  <span className={`text-sm font-medium ${
-                                    parseFloat(comp.percentChange) > 0 ? 'text-green-600' :
-                                    parseFloat(comp.percentChange) < 0 ? 'text-red-600' :
-                                    'text-gray-600'
-                                  }`}>
-                                    {parseFloat(comp.percentChange) > 0 ? '+' : ''}{comp.percentChange}%
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-sm">-</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                  comp.status === 'improved' ? 'bg-green-100 text-green-800' :
-                                  comp.status === 'declined' ? 'bg-red-100 text-red-800' :
-                                  comp.status === 'unchanged' ? 'bg-gray-100 text-gray-800' :
-                                  comp.status === 'new' || comp.status === 'now_ranking' ? 'bg-blue-100 text-blue-800' :
-                                  comp.status === 'lost_ranking' ? 'bg-orange-100 text-orange-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {comp.status === 'now_ranking' ? 'New Ranking' : comp.status.replace('_', ' ')}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+                {/* Enhanced Keyword Table */}
+                <KeywordTable 
+                  data={monthlyData.data}
+                  onRefresh={(keyword) => console.log('Refresh:', keyword)}
+                />
               </>
             )}
-          </>
+          </div>
         )}
 
       </div>

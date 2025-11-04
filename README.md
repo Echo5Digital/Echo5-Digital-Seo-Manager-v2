@@ -233,6 +233,128 @@ For issues or questions, contact the development team.
 
 ## Changelog
 
+**04-11-2025**
+
+### ✨ Major UI/UX Redesign: Monthly Comparison Page
+- **Complete Redesign**: Transformed the monthly comparison page from data-heavy tables to an intuitive, visual analytics dashboard
+  
+#### 🎨 New Components Created
+1. **Summary Cards** (`components/comparison/SummaryCards.js`)
+   - Visual dashboard with 4 key metric cards (Avg Ranking, Top Performers, Need Attention, Weekly Activity)
+   - Mini sparkline charts showing trends at a glance
+   - Additional 5-stat breakdown for improved/declined/stable/new/lost keywords
+   
+2. **Interactive Trend Chart** (`components/comparison/TrendChart.js`)
+   - Chart.js powered line graph showing 12-month ranking trends
+   - Multi-keyword comparison (up to 8 keywords simultaneously)
+   - Filter views: All, Top 10, Improved, Declined
+   - Click-to-select keywords with color-coded legends
+   - Responsive hover tooltips with detailed rank information
+
+3. **Enhanced Keyword Table** (`components/comparison/KeywordTable.js`)
+   - Advanced search and filtering capabilities
+   - Sortable columns (keyword, rank, change, trend, best rank)
+   - Compact and Detailed view modes
+   - Pagination (20 keywords per page)
+   - Mini trend charts inline for each keyword
+   - Quick actions: View details, Refresh rank
+
+4. **AI Insights Panel** (`components/comparison/InsightsPanel.js`)
+   - Automated insights generation based on ranking data
+   - Smart recommendations for keywords needing attention
+   - Performance trend analysis with actionable suggestions
+   - Color-coded insight cards (success, warning, danger, info)
+
+5. **Weekly View** (`components/comparison/WeeklyView.js`)
+   - **NEW!** Calendar-based weekly rank tracking view
+   - Month-by-month navigation of weekly checks
+   - Keyword selector to view individual keyword history
+   - Weekly timeline showing all rank checks with timestamps
+   - Monthly stats: Best rank, worst rank, average rank, total checks
+   - All-time stats for selected keywords
+   - Visual change indicators between consecutive weeks
+   - Perfect for tracking weekly SEO progress
+
+6. **Utility Components**
+   - `RankBadge.js`: Color-coded ranking badges (green for top 10, blue for top 30, etc.)
+   - `MiniLineChart.js`: Canvas-based sparkline charts for trends
+   - `TrendIndicator.js`: Directional arrows showing rank changes
+   - `MiniSparkline.js`: Gradient area charts for summary cards
+
+#### 📊 Visual Improvements
+- **From**: Dense tables with raw data
+- **To**: Beautiful gradient cards, interactive charts, and scannable layouts
+- Better color coding: Green (improving), Red (declining), Blue (new), Gray (stable)
+- Responsive design with mobile-first approach
+- Smooth transitions and hover effects
+
+#### 🚀 Performance Features
+- Pagination to handle large keyword sets efficiently
+- Lazy-loaded chart rendering
+- Optimized re-renders with React hooks
+
+#### 📦 Dependencies Added
+- `chart.js`: ^4.4.0 - Core charting library
+- `react-chartjs-2`: ^5.2.0 - React wrapper for Chart.js
+- `date-fns`: ^2.30.0 - Date formatting utilities
+
+#### 🎯 User Experience Enhancements
+- **Before**: Users had to mentally parse rows and columns to find insights
+- **After**: Key insights presented visually at-a-glance with AI-generated recommendations
+- **Search & Filter**: Find specific keywords instantly
+- **Sort**: Click any column header to re-order data
+- **View Modes**: Toggle between compact and detailed views
+- **Export Ready**: Button placeholder for PDF/Excel export
+
+#### 🔧 Technical Highlights
+- Modular component architecture for easy maintenance
+- Props-driven design for reusability
+- Memoized computations for better performance
+- Proper TypeScript-ready JSDoc comments
+
+**03-11-2025**
+
+### ✨ New Features
+- **Weekly Rank Tracking Display**: Enhanced monthly comparison to show all weekly rank checks
+  - Added "Weekly Checks" column in Monthly Statistics table showing total checks per month
+  - Enhanced keyword timeline to display individual weekly checks with dates
+  - Shows rank ranges (min/max/avg) for months with multiple checks
+  - Visual weekly breakdown with color-coded rank badges (green for top 10, blue for top 30, orange for top 100)
+  - Hover tooltips show exact check dates and ranks
+  - "📅 Weekly tracking enabled" badge when data supports weekly checks
+
+- **Extended Month Range**: Increased rank comparison from 6 months to 12 months
+  - Monthly comparison now requests up to 12 months of historical data
+  - Displays all available months with ranking data
+  - Better visibility of long-term ranking trends
+
+### 🔧 Backend Improvements
+- **Weekly Data Import Script**: Created `import-vipgts-weekly-data.js` to preserve all weekly checks
+  - Imports ALL weekly ranking records (not just latest per month)
+  - Preserves complete historical timeline with exact check dates
+  - Successfully imported 1,443 weekly ranking records for VIPGTS client
+  - Covers March-November 2025 with ~4-5 checks per keyword per month
+  - Stores `checkedAt` timestamp for precise date tracking
+
+- **Monthly Comparison API Enhancement**: Updated backend route to support weekly tracking
+  - Added `weeklyBreakdown` structure to response
+  - Enhanced `keywordTimeline` with `weeklyChecks` array for each month
+  - Added `rankRange` calculations (min/max/average) per month
+  - Added `totalChecks` count to monthly stats
+  - Metadata includes `weeklyTrackingEnabled: true` flag
+
+### 📊 Data Management
+- **Historical Data Restored**: Re-imported complete VIPGTS ranking data
+  - 342 total records covering 9 months (March-November 2025)
+  - 38 keywords tracked consistently
+  - Database verification scripts created for data integrity checks
+  - All records properly linked to VIPGTS client
+
+### 📝 Documentation
+- Created `MONTHLY_COMPARISON_REDESIGN.md` documenting weekly tracking feature
+- Added comprehensive response structure examples
+- Included UI recommendations for weekly data visualization
+
 **31-10-2025**
 
 ### ✨ New Features
