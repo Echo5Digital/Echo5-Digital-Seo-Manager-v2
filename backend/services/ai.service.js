@@ -1001,9 +1001,28 @@ Return ONLY a valid JSON array of fix objects, no additional text.`;
    * @returns {Promise<Array>} Array of 10 title suggestions
    */
   async generateBlogTitles(options) {
-    const { keyword, industry, clientName, tone = 'professional' } = options;
+    const { keyword, industry, clientName, clientId, tone = 'professional' } = options;
     
     try {
+      // Fetch existing titles for this client and keyword to avoid duplicates
+      const Blog = require('../models/Blog.model');
+      const existingBlogs = await Blog.find({
+        clientId: clientId,
+        $or: [
+          { focusKeyword: new RegExp(keyword, 'i') },
+          { secondaryKeywords: { $in: [new RegExp(keyword, 'i')] } }
+        ]
+      })
+      .select('title')
+      .sort({ createdAt: -1 })
+      .limit(50); // Get last 50 blogs with similar keywords
+      
+      const existingTitles = existingBlogs.map(b => b.title);
+      
+      const existingTitlesText = existingTitles.length > 0 
+        ? `\n\nEXISTING TITLES TO AVOID (DO NOT generate similar titles):\n${existingTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n`
+        : '';
+      
       const prompt = `Generate 10 compelling, SEO-optimized blog post titles for the keyword "${keyword}".
 
 Context:
@@ -1011,7 +1030,7 @@ Context:
 - Business: ${clientName || ''}
 - Tone: ${tone}
 - Target: Mobile-first, conversational yet professional
-
+${existingTitlesText}
 CRITICAL REQUIREMENTS:
 - Include the focus keyword naturally
 - MAXIMUM 60 characters per title (STRICT LIMIT - anything over 60 will be rejected)
@@ -1020,6 +1039,8 @@ CRITICAL REQUIREMENTS:
 - Varied formats (How-to, List, Guide, Questions, etc.)
 - SEO-friendly and engaging
 - No clickbait, authentic value proposition
+- MUST be completely unique and different from the existing titles listed above
+- Use fresh angles, different formats, and unique value propositions
 
 IMPORTANT: Count characters carefully. Each title MUST be 60 characters or less.
 
@@ -1031,7 +1052,7 @@ Example: {"titles": ["Title 1 here", "Title 2 here", ...]}`
         messages: [
           {
             role: 'system',
-            content: 'You are an expert content strategist and SEO copywriter who creates high-performing, click-worthy titles that rank well and convert. You ALWAYS count characters and ensure titles are under 60 characters.',
+            content: 'You are an expert content strategist and SEO copywriter who creates high-performing, click-worthy titles that rank well and convert. You ALWAYS count characters and ensure titles are under 60 characters. You NEVER repeat or closely mimic existing titles.',
           },
           {
             role: 'user',

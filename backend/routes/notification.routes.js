@@ -46,6 +46,46 @@ router.put('/:id/read', protect, async (req, res, next) => {
   }
 });
 
+// DELETE /api/notifications/:id - Delete a notification
+router.delete('/:id', protect, async (req, res, next) => {
+  try {
+    const notification = await Notification.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user._id,
+    });
+
+    if (!notification) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Notification not found',
+      });
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Notification deleted',
+      data: { notification },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/notifications/clear/all - Clear all notifications
+router.delete('/clear/all', protect, async (req, res, next) => {
+  try {
+    const result = await Notification.deleteMany({ userId: req.user._id });
+
+    res.json({
+      status: 'success',
+      message: `${result.deletedCount} notification(s) cleared`,
+      data: { deletedCount: result.deletedCount },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/notifications/test-email - Test email functionality (admin only)
 router.post('/test-email', protect, authorize('Boss', 'Manager'), async (req, res, next) => {
   try {

@@ -3,8 +3,10 @@ const router = express.Router();
 const { body } = require('express-validator');
 const Blog = require('../models/Blog.model');
 const Client = require('../models/Client.model');
+const Notification = require('../models/Notification.model');
 const { protect } = require('../middleware/auth');
 const { validate } = require('../middleware/validator');
+const { normalizeTitle } = require('../utils/titleNormalizer');
 const { 
   generateBlogTitles, 
   generateBlogContent, 
@@ -31,6 +33,7 @@ router.get('/', protect, async (req, res, next) => {
     const blogs = await Blog.find(filter)
       .populate('clientId', 'name website domain')
       .populate('createdBy', 'name email')
+      .populate('assignedTo', 'name email role')
       .sort({ createdAt: -1 });
     
     res.json({
@@ -53,6 +56,7 @@ router.get('/:id', protect, async (req, res, next) => {
     const blog = await Blog.findById(req.params.id)
       .populate('clientId', 'name website domain logo')
       .populate('createdBy', 'name email')
+      .populate('assignedTo', 'name email role')
       .populate('lastModifiedBy', 'name email');
     
     if (!blog) {
@@ -70,6 +74,63 @@ router.get('/:id', protect, async (req, res, next) => {
     next(error);
   }
 });
+
+/**
+ * @route   POST /api/blogs/check-title
+ * @desc    Check if a title is available (not duplicate) for a client
+ * @access  Private
+ */
+router.post(
+  '/check-title',
+  protect,
+  [
+    body('title').trim().notEmpty().withMessage('Title is required'),
+    body('clientId').notEmpty().withMessage('Client ID is required')
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { title, clientId, excludeBlogId } = req.body;
+      
+      const normalizedNewTitle = normalizeTitle(title);
+      const query = {
+        clientId,
+        normalizedTitle: normalizedNewTitle
+      };
+      
+      // Exclude specific blog ID if updating
+      if (excludeBlogId) {
+        query._id = { $ne: excludeBlogId };
+      }
+      
+      const existingBlog = await Blog.findOne(query).select('title createdAt');
+      
+      if (existingBlog) {
+        return res.json({
+          status: 'success',
+          data: {
+            available: false,
+            duplicate: true,
+            existingTitle: existingBlog.title,
+            createdAt: existingBlog.createdAt,
+            message: 'A blog with a similar title already exists for this client'
+          }
+        });
+      }
+      
+      res.json({
+        status: 'success',
+        data: {
+          available: true,
+          duplicate: false,
+          message: 'Title is available'
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /**
  * @route   POST /api/blogs/generate-titles
@@ -99,6 +160,7 @@ router.post(
       
       const titles = await generateBlogTitles({
         keyword,
+        clientId,
         industry: industry || client.industry,
         clientName: client.name,
         tone: tone || 'professional'
@@ -259,6 +321,22 @@ router.post(
         });
       }
       
+      // Check for duplicate title for this client
+      const normalizedNewTitle = normalizeTitle(req.body.title);
+      const existingBlog = await Blog.findOne({
+        clientId: req.body.clientId,
+        normalizedTitle: normalizedNewTitle,
+        _id: { $ne: req.body._id } // Exclude current blog if updating
+      });
+      
+      if (existingBlog) {
+        return res.status(409).json({
+          status: 'error',
+          message: 'A blog with a similar title already exists for this client. Please choose a different title.',
+          existingTitle: existingBlog.title
+        });
+      }
+      
       const blog = await Blog.create(blogData);
       
       // Populate client data for schema generation
@@ -307,6 +385,26 @@ router.put('/:id', protect, async (req, res, next) => {
       });
     }
     
+    const oldStatus = blog.status;
+    
+    // Check for duplicate title if title is being changed
+    if (req.body.title && req.body.title !== blog.title) {
+      const normalizedNewTitle = normalizeTitle(req.body.title);
+      const existingBlog = await Blog.findOne({
+        clientId: blog.clientId,
+        normalizedTitle: normalizedNewTitle,
+        _id: { $ne: blog._id }
+      });
+      
+      if (existingBlog) {
+        return res.status(409).json({
+          status: 'error',
+          message: 'A blog with a similar title already exists for this client. Please choose a different title.',
+          existingTitle: existingBlog.title
+        });
+      }
+    }
+    
     // Update fields
     Object.assign(blog, req.body);
     blog.lastModifiedBy = req.user._id;
@@ -324,7 +422,40 @@ router.put('/:id', protect, async (req, res, next) => {
     await blog.save();
     
     await blog.populate('createdBy', 'name email');
+    await blog.populate('assignedTo', 'name email role');
     await blog.populate('lastModifiedBy', 'name email');
+
+    // Create notification if status changed and blog is assigned
+    if (req.body.status && req.body.status !== oldStatus) {
+      // Notify creator when status changes to review or published
+      if ((req.body.status === 'review' || req.body.status === 'published') && 
+          blog.createdBy && blog.createdBy._id.toString() !== req.user._id.toString()) {
+        await Notification.create({
+          userId: blog.createdBy._id,
+          type: 'Task Update',
+          title: 'Blog Brief Updated',
+          message: `Blog brief "${blog.title}" status changed to ${req.body.status}`,
+          priority: req.body.status === 'published' ? 'High' : 'Medium',
+          relatedModel: 'Blog',
+          relatedId: blog._id,
+          actionUrl: '/briefs',
+        });
+      }
+      
+      // Notify assigned writer when status changes
+      if (blog.assignedTo && blog.assignedTo._id.toString() !== req.user._id.toString()) {
+        await Notification.create({
+          userId: blog.assignedTo._id,
+          type: 'Task Update',
+          title: 'Blog Brief Status Changed',
+          message: `Blog brief "${blog.title}" status changed to ${req.body.status}`,
+          priority: 'Medium',
+          relatedModel: 'Blog',
+          relatedId: blog._id,
+          actionUrl: '/briefs',
+        });
+      }
+    }
     
     res.json({
       status: 'success',
@@ -367,7 +498,9 @@ router.delete('/:id', protect, async (req, res, next) => {
  */
 router.put('/:id/publish', protect, async (req, res, next) => {
   try {
-    const blog = await Blog.findById(req.params.id);
+    const blog = await Blog.findById(req.params.id)
+      .populate('createdBy', 'name email')
+      .populate('assignedTo', 'name email role');
     
     if (!blog) {
       return res.status(404).json({
@@ -381,9 +514,141 @@ router.put('/:id/publish', protect, async (req, res, next) => {
     blog.lastModifiedBy = req.user._id;
     
     await blog.save();
+
+    // Notify creator when blog is published
+    if (blog.createdBy && blog.createdBy._id.toString() !== req.user._id.toString()) {
+      await Notification.create({
+        userId: blog.createdBy._id,
+        type: 'Task Update',
+        title: 'Blog Brief Published',
+        message: `Blog brief "${blog.title}" has been published`,
+        priority: 'High',
+        relatedModel: 'Blog',
+        relatedId: blog._id,
+        actionUrl: '/briefs',
+      });
+    }
+
+    // Notify assigned writer when blog is published
+    if (blog.assignedTo && blog.assignedTo._id.toString() !== req.user._id.toString()) {
+      await Notification.create({
+        userId: blog.assignedTo._id,
+        type: 'Task Update',
+        title: 'Blog Brief Published',
+        message: `Blog brief "${blog.title}" has been published`,
+        priority: 'High',
+        relatedModel: 'Blog',
+        relatedId: blog._id,
+        actionUrl: '/briefs',
+      });
+    }
     
     res.json({
       status: 'success',
+      data: { blog }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   PUT /api/blogs/:id/assign
+ * @desc    Assign a blog to a staff member
+ * @access  Private (Boss/Manager/Admin only)
+ */
+router.put('/:id/assign', protect, async (req, res, next) => {
+  try {
+    // Check if user has permission to assign
+    if (!['Boss', 'Manager', 'Admin'].includes(req.user.role)) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'You do not have permission to assign blogs'
+      });
+    }
+
+    const { assignedTo } = req.body;
+
+    if (!assignedTo) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a user ID to assign to'
+      });
+    }
+
+    const blog = await Blog.findById(req.params.id);
+    
+    if (!blog) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Blog not found'
+      });
+    }
+
+    blog.assignedTo = assignedTo;
+    blog.lastModifiedBy = req.user._id;
+    
+    await blog.save();
+    await blog.populate('assignedTo', 'name email role');
+    await blog.populate('clientId', 'name website');
+
+    // Create notification for assigned user
+    if (assignedTo && assignedTo.toString() !== req.user._id.toString()) {
+      await Notification.create({
+        userId: assignedTo,
+        type: 'Task Assigned',
+        title: 'Blog Brief Assigned',
+        message: `You have been assigned a blog brief: "${blog.title}"`,
+        priority: 'Medium',
+        relatedModel: 'Blog',
+        relatedId: blog._id,
+        actionUrl: '/briefs',
+      });
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Blog assigned successfully',
+      data: { blog }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   PUT /api/blogs/:id/unassign
+ * @desc    Unassign a blog from a staff member
+ * @access  Private (Boss/Manager/Admin only)
+ */
+router.put('/:id/unassign', protect, async (req, res, next) => {
+  try {
+    // Check if user has permission to unassign
+    if (!['Boss', 'Manager', 'Admin'].includes(req.user.role)) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'You do not have permission to unassign blogs'
+      });
+    }
+
+    const blog = await Blog.findById(req.params.id);
+    
+    if (!blog) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Blog not found'
+      });
+    }
+
+    blog.assignedTo = null;
+    blog.lastModifiedBy = req.user._id;
+    
+    await blog.save();
+    await blog.populate('clientId', 'name website');
+
+    res.json({
+      status: 'success',
+      message: 'Blog unassigned successfully',
       data: { blog }
     });
   } catch (error) {

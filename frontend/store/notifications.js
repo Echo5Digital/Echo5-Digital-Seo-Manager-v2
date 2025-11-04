@@ -93,6 +93,67 @@ const useNotificationsStore = create((set, get) => ({
       throw error
     }
   },
+
+  // Delete a notification
+  deleteNotification: async (token, notificationId) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/notifications/${notificationId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const data = await response.json()
+
+      if (data.status === 'success') {
+        set((state) => {
+          const deletedNotif = state.notifications.find(n => n._id === notificationId)
+          return {
+            notifications: state.notifications.filter((n) => n._id !== notificationId),
+            unreadCount: deletedNotif && !deletedNotif.read 
+              ? Math.max(0, state.unreadCount - 1) 
+              : state.unreadCount,
+          }
+        })
+        return data.data.notification
+      } else {
+        throw new Error(data.message || 'Failed to delete notification')
+      }
+    } catch (error) {
+      throw error
+    }
+  },
+
+  // Clear all notifications
+  clearAllNotifications: async (token) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/notifications/clear/all`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const data = await response.json()
+
+      if (data.status === 'success') {
+        set({ 
+          notifications: [],
+          unreadCount: 0,
+        })
+        return data.data
+      } else {
+        throw new Error(data.message || 'Failed to clear notifications')
+      }
+    } catch (error) {
+      throw error
+    }
+  },
 }))
 
 export default useNotificationsStore

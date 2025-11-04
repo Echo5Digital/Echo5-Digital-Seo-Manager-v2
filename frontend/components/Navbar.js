@@ -12,7 +12,11 @@ import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   ExclamationTriangleIcon,
-  BellAlertIcon
+  BellAlertIcon,
+  XMarkIcon,
+  TrashIcon,
+  DocumentTextIcon,
+  RocketLaunchIcon
 } from '@heroicons/react/24/outline'
 
 export default function Navbar() {
@@ -20,7 +24,7 @@ export default function Navbar() {
   const user = useAuthStore(state => state.user)
   const token = useAuthStore(state => state.token)
   const logout = useAuthStore(state => state.logout)
-  const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotificationsStore()
+  const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead, deleteNotification, clearAllNotifications } = useNotificationsStore()
   const [showNotifications, setShowNotifications] = useState(false)
   const [hasNewNotification, setHasNewNotification] = useState(false)
   const notificationRef = useRef(null)
@@ -82,6 +86,23 @@ export default function Navbar() {
     }
   }
 
+  const handleDeleteNotification = async (e, notificationId) => {
+    e.stopPropagation() // Prevent triggering the notification click
+    try {
+      await deleteNotification(token, notificationId)
+    } catch (error) {
+      console.error('Failed to delete notification:', error)
+    }
+  }
+
+  const handleClearAll = async () => {
+    try {
+      await clearAllNotifications(token)
+    } catch (error) {
+      console.error('Failed to clear notifications:', error)
+    }
+  }
+
   const getNotificationIcon = (type) => {
     const iconClass = "h-6 w-6"
     switch(type) {
@@ -95,6 +116,10 @@ export default function Navbar() {
         return <ArrowTrendingUpIcon className={`${iconClass} text-emerald-600`} />
       case 'Rank Drop':
         return <ArrowTrendingDownIcon className={`${iconClass} text-red-600`} />
+      case 'Blog Assigned':
+        return <DocumentTextIcon className={`${iconClass} text-purple-600`} />
+      case 'Blog Published':
+        return <RocketLaunchIcon className={`${iconClass} text-green-600`} />
       case 'Alert':
         return <ExclamationTriangleIcon className={`${iconClass} text-yellow-600`} />
       default:
@@ -165,7 +190,7 @@ export default function Navbar() {
                         {notifications.map((notification) => (
                           <div
                             key={notification._id}
-                            className={`p-4 cursor-pointer transition-colors ${
+                            className={`p-4 cursor-pointer transition-colors relative group ${
                               notification.read 
                                 ? 'bg-white hover:bg-gray-50' 
                                 : 'bg-indigo-50 hover:bg-indigo-100'
@@ -174,7 +199,7 @@ export default function Navbar() {
                           >
                             <div className="flex gap-3">
                               <div className="flex-shrink-0 mt-0.5">{getNotificationIcon(notification.type)}</div>
-                              <div className="flex-1 min-w-0">
+                              <div className="flex-1 min-w-0 pr-6">
                                 <p className="text-sm font-semibold text-gray-900">
                                   {notification.title}
                                 </p>
@@ -190,12 +215,32 @@ export default function Navbar() {
                                   )}
                                 </div>
                               </div>
+                              {/* Delete button */}
+                              <button
+                                onClick={(e) => handleDeleteNotification(e, notification._id)}
+                                className="absolute top-2 right-2 p-1.5 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                                title="Delete notification"
+                              >
+                                <XMarkIcon className="h-4 w-4" />
+                              </button>
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
+                  {/* Clear All button */}
+                  {notifications.length > 0 && (
+                    <div className="p-3 border-t border-gray-200 bg-gray-50">
+                      <button
+                        onClick={handleClearAll}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                        Clear All Notifications
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

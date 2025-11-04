@@ -37,6 +37,8 @@ const taskSchema = new mongoose.Schema({
     enum: [
       'Site Audit Fix',
       'Content Optimization',
+      'Content Writing',
+      'Blog Writing',
       'Keyword Research',
       'Backlink Outreach',
       'Technical SEO',

@@ -29,6 +29,8 @@ const notificationSchema = new mongoose.Schema({
       'Approval Required',
       'Backlink Live',
       'Backlink Broken',
+      'Blog Assigned',
+      'Blog Published',
       'Alert',
       'System',
     ],
@@ -53,7 +55,7 @@ const notificationSchema = new mongoose.Schema({
   },
   relatedModel: {
     type: String,
-    enum: ['Client', 'Task', 'Keyword', 'Audit', 'Backlink'],
+    enum: ['Client', 'Task', 'Keyword', 'Audit', 'Backlink', 'Blog'],
   },
   relatedId: {
     type: mongoose.Schema.Types.ObjectId,

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeTitle } = require('../utils/titleNormalizer');
 
 const BlogSchema = new mongoose.Schema({
   // Client & User Info
@@ -12,6 +13,10 @@ const BlogSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
   
   // SEO Meta Data
   title: {
@@ -19,6 +24,12 @@ const BlogSchema = new mongoose.Schema({
     required: [true, 'Blog title is required'],
     trim: true,
     maxlength: [200, 'Title cannot exceed 200 characters']
+  },
+  normalizedTitle: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    index: true
   },
   slug: {
     type: String,
@@ -149,8 +160,14 @@ BlogSchema.index({ clientId: 1, status: 1 });
 BlogSchema.index({ slug: 1 }, { unique: true });
 BlogSchema.index({ focusKeyword: 1 });
 BlogSchema.index({ createdAt: -1 });
+BlogSchema.index({ clientId: 1, normalizedTitle: 1 });
+BlogSchema.index({ normalizedTitle: 1 });
+BlogSchema.index({ assignedTo: 1, status: 1 });
 
-// Generate slug from title
+// Normalize title for duplicate detection
+// (moved to utils/titleNormalizer.js)
+
+// Generate slug and normalized title from title
 BlogSchema.pre('validate', function(next) {
   if (this.title && !this.slug) {
     this.slug = this.title
@@ -158,6 +175,12 @@ BlogSchema.pre('validate', function(next) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   }
+  
+  // Always update normalized title when title changes
+  if (this.title) {
+    this.normalizedTitle = normalizeTitle(this.title);
+  }
+  
   next();
 });
 

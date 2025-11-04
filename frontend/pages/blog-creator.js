@@ -58,14 +58,17 @@ export default function BlogCreator() {
   const [generatedBlog, setGeneratedBlog] = useState(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [savedBlogId, setSavedBlogId] = useState(null)
   
   // Task assignment modal
   const [showTaskModal, setShowTaskModal] = useState(false)
+  const [showBlogAssignModal, setShowBlogAssignModal] = useState(false)
   const [teamMembers, setTeamMembers] = useState([])
   const [selectedStaff, setSelectedStaff] = useState('')
   const [taskDueDate, setTaskDueDate] = useState('')
   const [taskPriority, setTaskPriority] = useState('Medium')
   const [assigningTask, setAssigningTask] = useState(false)
+  const [assigningBlog, setAssigningBlog] = useState(false)
 
   useEffect(() => {
     if (token) {
@@ -178,10 +181,54 @@ export default function BlogCreator() {
     if (content) {
       setGeneratedBlog(content)
       setCurrentStep(5)
+      
+      // Automatically save the brief
+      await autoSaveBrief(content)
     }
   }
 
-  // Save blog
+  // Auto-save blog brief when content is generated
+  const autoSaveBrief = async (content) => {
+    setSaving(true)
+    setMessage('Auto-saving brief...')
+
+    try {
+      const blogData = {
+        clientId: selectedClient,
+        title: customTitle,
+        slug: content.slug,
+        metaTitle: content.metaTitle,
+        metaDescription: content.metaDescription,
+        focusKeyword,
+        secondaryKeywords: secondaryKeywords.filter(k => k.trim()),
+        semanticKeywords: content.semanticKeywords,
+        content: content.content,
+        headings: content.headings,
+        faqs: content.faqs,
+        internalLinks: content.internalLinks || [],
+        images: content.imageAlts?.map((alt, idx) => ({
+          url: '',
+          alt: alt.alt1,
+          altAlternative: alt.alt2,
+          title: customTitle
+        })) || [],
+        status: 'draft'
+      }
+
+      const blog = await createBlog(token, blogData)
+      if (blog) {
+        setSavedBlogId(blog._id)
+        setMessage('✅ Brief auto-saved! You can assign it or export as PDF.')
+      }
+    } catch (error) {
+      setMessage('⚠️ Brief generated but auto-save failed. You can manually save it.')
+      console.error('Auto-save error:', error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Save blog (manual save or update)
   const handleSaveBlog = async (status = 'draft') => {
     setSaving(true)
     setMessage('')
@@ -209,18 +256,68 @@ export default function BlogCreator() {
         status
       }
 
-      const blog = await createBlog(token, blogData)
-      if (blog) {
-        setMessage('Brief saved successfully! View it in the Briefs tab.')
-        setTimeout(() => {
-          // Reset form
-          resetForm()
-        }, 2000)
+      if (savedBlogId) {
+        // Update existing blog
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/blogs/${savedBlogId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(blogData)
+        })
+
+        if (response.ok) {
+          setMessage('Brief updated successfully!')
+        } else {
+          throw new Error('Failed to update brief')
+        }
+      } else {
+        // Create new blog
+        const blog = await createBlog(token, blogData)
+        if (blog) {
+          setSavedBlogId(blog._id)
+          setMessage('Brief saved successfully! You can now assign it to a team member.')
+        }
       }
     } catch (error) {
       setMessage('Failed to save brief: ' + error.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Assign saved blog to staff member
+  const handleAssignBlog = async () => {
+    if (!selectedStaff || !savedBlogId) return
+
+    setAssigningBlog(true)
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/blogs/${savedBlogId}/assign`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ assignedTo: selectedStaff })
+      })
+
+      if (response.ok) {
+        setMessage('Blog assigned successfully!')
+        setShowBlogAssignModal(false)
+        setSelectedStaff('')
+        setTimeout(() => {
+          resetForm()
+        }, 2000)
+      } else {
+        const error = await response.json()
+        setMessage('Failed to assign blog: ' + error.message)
+      }
+    } catch (error) {
+      setMessage('Error assigning blog: ' + error.message)
+    } finally {
+      setAssigningBlog(false)
     }
   }
   
@@ -643,6 +740,8 @@ export default function BlogCreator() {
     setWordCount(1000)
     setFaqCount(5)
     setGeneratedBlog(null)
+    setSavedBlogId(null)
+    setMessage('')
     resetTitles()
   }
 
@@ -1021,11 +1120,26 @@ export default function BlogCreator() {
         )}
 
         {/* Step 4: Generating... */}
-        {currentStep === 4 && generatingContent && (
+        {currentStep === 4 && (generatingContent || saving) && (
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-12 text-center">
             <div className="animate-spin h-16 w-16 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Generating Your Blog Post...</h2>
-            <p className="text-gray-600">This may take 30-60 seconds. We're creating SEO-optimized content, FAQs, meta data, and schemas.</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              {generatingContent ? 'Generating Your Blog Post...' : 'Auto-Saving Brief...'}
+            </h2>
+            <p className="text-gray-600">
+              {generatingContent 
+                ? "This may take 30-60 seconds. We're creating SEO-optimized content, FAQs, meta data, and schemas."
+                : "Saving your blog brief to the database for easy access and assignment."}
+            </p>
+            {saving && (
+              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-purple-600">
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Saving brief automatically...</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1191,15 +1305,32 @@ export default function BlogCreator() {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">SEO Schemas</h3>
                   <p className="text-sm text-gray-700 mb-3">
-                    Article Schema, FAQ Schema, and Breadcrumb Schema will be automatically generated when you save this brief. 
+                    Article Schema, FAQ Schema, and Breadcrumb Schema have been automatically generated and saved with this brief. 
                     These structured data schemas help search engines understand your content better and enable rich search results.
                   </p>
                   <p className="text-xs text-gray-600">
-                    💡 Tip: After saving, you'll be able to copy the schemas from the brief detail page and add them to your website's HTML.
+                    💡 Tip: You can copy the schemas from the brief detail page and add them to your website's HTML.
                   </p>
                 </div>
               </div>
             </div>
+
+            {/* Auto-save Status */}
+            {savedBlogId && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg shadow-sm p-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircleIcon className="w-6 h-6 text-green-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-900">
+                      Brief Auto-Saved Successfully!
+                    </p>
+                    <p className="text-xs text-green-700">
+                      You can now assign this brief to a team member, export it as PDF, or create another blog.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
@@ -1214,6 +1345,16 @@ export default function BlogCreator() {
                     Export as PDF
                   </button>
                   
+                  {canAssignTasks() && savedBlogId && (
+                    <button
+                      onClick={() => setShowBlogAssignModal(true)}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg font-semibold hover:from-green-700 hover:to-teal-700 transition-all shadow-md hover:shadow-lg"
+                    >
+                      <UserPlusIcon className="w-5 h-5" />
+                      Assign to Writer
+                    </button>
+                  )}
+                  
                   {canAssignTasks() && (
                     <button
                       onClick={() => setShowTaskModal(true)}
@@ -1225,22 +1366,26 @@ export default function BlogCreator() {
                   )}
                 </div>
 
-                {/* Bottom row: Regenerate and Save/Publish buttons */}
+                {/* Bottom row: Regenerate and Create Another */}
                 <div className="flex justify-between items-center border-t pt-4">
                   <button
-                    onClick={() => setCurrentStep(3)}
+                    onClick={() => {
+                      setCurrentStep(3)
+                      setSavedBlogId(null) // Clear saved blog when regenerating
+                    }}
                     className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-all"
                   >
-                    Regenerate
+                    Regenerate Content
                   </button>
                   <div className="flex gap-3">
-                    <button
-                      onClick={() => handleSaveBlog('draft')}
-                      disabled={saving}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50"
-                    >
-                      {saving ? 'Saving...' : 'Save Brief'}
-                    </button>
+                    {savedBlogId && (
+                      <button
+                        onClick={resetForm}
+                        className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg"
+                      >
+                        Create Another Blog
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1321,6 +1466,57 @@ export default function BlogCreator() {
                 className="flex-1 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-red-600 transition-all disabled:opacity-50"
               >
                 {assigningTask ? 'Assigning...' : 'Assign Task'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blog Assignment Modal */}
+      {showBlogAssignModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Assign Blog to Writer</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Assign this saved blog brief to a team member to complete the writing.
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Assign to Writer *
+                </label>
+                <select
+                  value={selectedStaff}
+                  onChange={(e) => setSelectedStaff(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  <option value="">Select team member...</option>
+                  {teamMembers.map(member => (
+                    <option key={member._id} value={member._id}>
+                      {member.name} - {member.role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowBlogAssignModal(false)
+                  setSelectedStaff('')
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              >
+                Skip for Now
+              </button>
+              <button
+                onClick={handleAssignBlog}
+                disabled={!selectedStaff || assigningBlog}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-teal-700 transition-all disabled:opacity-50"
+              >
+                {assigningBlog ? 'Assigning...' : 'Assign Blog'}
               </button>
             </div>
           </div>
