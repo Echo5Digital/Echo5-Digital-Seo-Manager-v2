@@ -14,7 +14,8 @@ import {
   UsersIcon,
   LightBulbIcon,
   ChartBarSquareIcon,
-  RectangleStackIcon
+  RectangleStackIcon,
+  ChartPieIcon
 } from '@heroicons/react/24/outline'
 
 export default function Sidebar() {
@@ -34,7 +35,7 @@ export default function Sidebar() {
     { name: 'Briefs', href: '/briefs', icon: RectangleStackIcon, isNew: true },
     { name: 'Tasks', href: '/tasks', icon: ClipboardDocumentListIcon, isNew: true },
     { name: 'Reports', href: '/reports', icon: ChartBarIcon },
-    { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
+    { name: 'Analytics', href: '/analytics', icon: ChartPieIcon, isNew: true },
   ]
 
   if (user?.role === 'Boss') {

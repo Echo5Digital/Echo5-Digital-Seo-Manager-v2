@@ -168,6 +168,21 @@ const clientSchema = new mongoose.Schema({
       type: Boolean,
       default: false,
     },
+    // GA4 Integration
+    ga4PropertyId: {
+      type: String,
+      trim: true,
+    },
+    // Google Search Console Integration
+    gscSiteUrl: {
+      type: String,
+      trim: true,
+    },
+    // Google Business Profile Integration
+    gbpLocationIds: [{
+      type: String,
+      trim: true,
+    }],
   },
   seoHealth: {
     score: {

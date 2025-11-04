@@ -8,6 +8,11 @@ yarn.lock
 .env.local
 .env.production
 
+# Google Service Account (NEVER COMMIT THIS!)
+config/google-service-account.json
+google-service-account.json
+**/google-service-account.json
+
 # Logs
 logs/
 *.log

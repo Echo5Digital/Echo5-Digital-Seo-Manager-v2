@@ -4,7 +4,7 @@ import Layout from '../components/Layout'
 import ClientOnboardingForm from '../src/components/client/ClientOnboardingForm'
 import useClientStore from '../store/clients'
 import UserAvatar from '../components/UserAvatar'
-import { PlusIcon, TrashIcon, PencilIcon, EyeIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon, PencilIcon, EyeIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
 
 export default function Clients() {
   const router = useRouter()
@@ -218,6 +218,13 @@ export default function Clients() {
                     )}
                   </div>
                   <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={() => router.push(`/clients/${client._id}/integrations`)}
+                      className="text-purple-600 hover:text-purple-900 p-1"
+                      title="Integration Settings"
+                    >
+                      <Cog6ToothIcon className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => handleView(client)}
                       className="text-gray-600 hover:text-gray-900 p-1"

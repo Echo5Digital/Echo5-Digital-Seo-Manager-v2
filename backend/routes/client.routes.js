@@ -279,15 +279,15 @@ router.post(
 /**
  * @route   PUT /api/clients/:id
  * @desc    Update client
- * @access  Private (Boss only)
+ * @access  Private (Boss/Manager/Admin can update integrations, Boss only for other fields)
  */
 router.put(
   '/:id',
   protect,
-  authorize('Boss'),
+  authorize('Boss', 'Manager', 'Admin'),
   async (req, res, next) => {
     try {
-      const { assignedStaff, website, ...updateFields } = req.body;
+      const { assignedStaff, website, integrations, ...updateFields } = req.body;
 
       const client = await Client.findById(req.params.id);
       if (!client) {
@@ -297,8 +297,24 @@ router.put(
         });
       }
 
-      // Clean domain if website is provided
-      if (website) {
+      // Check if only integrations are being updated
+      const isIntegrationsOnly = integrations && Object.keys(req.body).length === 1;
+      
+      // If not Boss and trying to update non-integration fields, deny
+      if (req.user.role !== 'Boss' && !isIntegrationsOnly) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Only Boss can update client details. Managers can update integrations only.',
+        });
+      }
+
+      // Update integrations if provided
+      if (integrations) {
+        client.integrations = { ...client.integrations, ...integrations };
+      }
+
+      // Clean domain if website is provided (Boss only)
+      if (website && req.user.role === 'Boss') {
         updateFields.website = website;
         updateFields.domain = website
           .toLowerCase()
@@ -308,14 +324,16 @@ router.put(
           .split('/')[0];              // Take only the domain part
       }
 
-      // Update client
-      Object.assign(client, updateFields);
+      // Update client (Boss only for non-integration fields)
+      if (req.user.role === 'Boss') {
+        Object.assign(client, updateFields);
+      }
       
       //Save the client first with the basic updates
       let updatedClient;
       
-      // Handle staff assignment changes
-      if (assignedStaff !== undefined) {
+      // Handle staff assignment changes (Boss only)
+      if (assignedStaff !== undefined && req.user.role === 'Boss') {
         console.log('🔄 Updating assignedStaff:', {
           clientId: client._id,
           clientName: client.name,
