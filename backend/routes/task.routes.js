@@ -189,4 +189,28 @@ router.put('/:id', protect, async (req, res, next) => {
   }
 });
 
+// DELETE /api/tasks/:id - Delete task (Boss/Manager/Admin only)
+router.delete('/:id', protect, authorize('Boss', 'Manager', 'Admin'), async (req, res, next) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Task not found',
+      });
+    }
+
+    await Task.findByIdAndDelete(req.params.id);
+
+    res.json({
+      status: 'success',
+      message: 'Task deleted successfully',
+      data: { taskId: req.params.id },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

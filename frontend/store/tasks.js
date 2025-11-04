@@ -102,6 +102,36 @@ const useTasksStore = create((set, get) => ({
       throw error
     }
   },
+
+  // Delete task
+  deleteTask: async (token, taskId) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/tasks/${taskId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const data = await response.json()
+
+      if (data.status === 'success') {
+        set((state) => ({
+          tasks: state.tasks.filter((task) => task._id !== taskId),
+          loading: false,
+        }))
+        return data
+      } else {
+        throw new Error(data.message || 'Failed to delete task')
+      }
+    } catch (error) {
+      set({ error: error.message, loading: false })
+      throw error
+    }
+  },
 }))
 
 export default useTasksStore
