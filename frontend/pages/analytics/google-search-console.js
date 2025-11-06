@@ -55,21 +55,63 @@ export default function GoogleSearchConsole() {
       const formattedStart = startDate.toISOString().split('T')[0]
       const formattedEnd = endDate.toISOString().split('T')[0]
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/clients/${clientId}/gsc/queries?startDate=${formattedStart}&endDate=${formattedEnd}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      // Fetch both queries and pages data
+      const [queriesResponse, pagesResponse] = await Promise.all([
+        fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/clients/${clientId}/gsc/queries?startDate=${formattedStart}&endDate=${formattedEnd}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        ),
+        fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/clients/${clientId}/gsc/pages?startDate=${formattedStart}&endDate=${formattedEnd}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        )
+      ])
+      
+      const queriesResult = await queriesResponse.json()
+      const pagesResult = await pagesResponse.json()
+      
+      if (queriesResult.status === 'success') {
+        const queries = queriesResult.data.queries || []
+        const pages = pagesResult.data?.pages || []
+        
+        // Calculate aggregate metrics from the queries data
+        let totalClicks = 0
+        let totalImpressions = 0
+        let totalCtr = 0
+        let totalPosition = 0
+        
+        queries.forEach(row => {
+          totalClicks += row.clicks || 0
+          totalImpressions += row.impressions || 0
+          totalCtr += row.ctr || 0
+          totalPosition += row.position || 0
+        })
+        
+        const aggregateData = {
+          totalClicks,
+          totalImpressions,
+          averageCTR: queries.length > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+          averagePosition: queries.length > 0 ? totalPosition / queries.length : 0,
+          queries,
+          pages,
+          // These would need comparison data from a previous period
+          clicksChange: 0,
+          impressionsChange: 0,
+          ctrChange: 0,
+          positionChange: 0
         }
-      )
-      
-      const result = await response.json()
-      
-      if (result.status === 'success') {
-        setData(result.data)
+        
+        setData(aggregateData)
       } else {
-        toast.error(result.message || 'Failed to fetch Search Console data')
+        toast.error(queriesResult.message || 'Failed to fetch Search Console data')
         setData(null)
       }
     } catch (err) {
@@ -260,11 +302,11 @@ export default function GoogleSearchConsole() {
                     <tbody>
                       {data.queries.slice(0, 20).map((query, idx) => (
                         <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="py-3 px-4 text-sm text-gray-900">{query.query || query.keys?.[0]}</td>
-                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatNumber(query.clicks)}</td>
-                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatNumber(query.impressions)}</td>
-                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatPercentage(query.ctr * 100)}</td>
-                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{query.position?.toFixed(1)}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900">{query.keys?.[0] || query.query || 'N/A'}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatNumber(query.clicks || 0)}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatNumber(query.impressions || 0)}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatPercentage((query.ctr || 0) * 100)}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{(query.position || 0).toFixed(1)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -291,11 +333,11 @@ export default function GoogleSearchConsole() {
                     <tbody>
                       {data.pages.slice(0, 20).map((page, idx) => (
                         <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="py-3 px-4 text-sm text-gray-900 truncate max-w-md">{page.page || page.keys?.[0]}</td>
-                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatNumber(page.clicks)}</td>
-                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatNumber(page.impressions)}</td>
-                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatPercentage(page.ctr * 100)}</td>
-                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{page.position?.toFixed(1)}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 truncate max-w-md">{page.keys?.[0] || page.page || 'N/A'}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatNumber(page.clicks || 0)}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatNumber(page.impressions || 0)}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{formatPercentage((page.ctr || 0) * 100)}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900 text-right">{(page.position || 0).toFixed(1)}</td>
                         </tr>
                       ))}
                     </tbody>
