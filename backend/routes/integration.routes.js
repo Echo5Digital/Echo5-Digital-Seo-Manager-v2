@@ -3,8 +3,8 @@ const router = express.Router();
 const Client = require('../models/Client.model');
 const IntegrationToken = require('../models/IntegrationToken.model');
 const { protect, authorize } = require('../middleware/auth');
-const { getOverview, getLandingPages, getTrafficSources } = require('../services/google/ga4.service');
-const { getTopQueries, getTopPages, getQueryPagePerformance } = require('../services/google/gsc.service');
+const ga4Service = require('../services/google/ga4.service');
+const gscService = require('../services/google/gsc.service');
 const { 
   getAuthUrl, 
   getTokensFromCode, 
@@ -15,6 +15,42 @@ const {
 } = require('../services/google/gbp.service');
 
 // ==================== GA4 ROUTES ====================
+
+/**
+ * @route   GET /api/integrations/ga4/properties
+ * @desc    List all GA4 properties accessible by service account
+ * @access  Private
+ */
+router.get('/ga4/properties', protect, async (req, res, next) => {
+  try {
+    const properties = await ga4Service.listProperties();
+    
+    res.json({
+      status: 'success',
+      data: properties,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/integrations/gsc/sites
+ * @desc    List all GSC sites accessible by service account
+ * @access  Private
+ */
+router.get('/gsc/sites', protect, async (req, res, next) => {
+  try {
+    const sites = await gscService.listSites();
+    
+    res.json({
+      status: 'success',
+      data: sites,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * @route   GET /api/integrations/clients/:id/ga4/overview
@@ -40,7 +76,7 @@ router.get('/clients/:id/ga4/overview', protect, async (req, res, next) => {
     }
 
     const { startDate = '30daysAgo', endDate = 'today' } = req.query;
-    const data = await getOverview(client.integrations.ga4PropertyId, startDate, endDate);
+    const data = await ga4Service.getOverview(client.integrations.ga4PropertyId, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -96,7 +132,7 @@ router.get('/clients/:id/ga4/traffic-sources', protect, async (req, res, next) =
     }
 
     const { startDate = '30daysAgo', endDate = 'today' } = req.query;
-    const data = await getTrafficSources(client.integrations.ga4PropertyId, startDate, endDate);
+    const data = await ga4Service.getLandingPages(client.integrations.ga4PropertyId, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -123,8 +159,7 @@ router.get('/clients/:id/ga4/realtime', protect, async (req, res, next) => {
       });
     }
 
-    const { getRealtimeData } = require('../services/google/ga4.service');
-    const data = await getRealtimeData(client.integrations.ga4PropertyId);
+    const data = await ga4Service.getRealtimeData(client.integrations.ga4PropertyId);
 
     res.json({
       status: 'success',
@@ -152,8 +187,7 @@ router.get('/clients/:id/ga4/demographics', protect, async (req, res, next) => {
     }
 
     const { startDate = '30daysAgo', endDate = 'today' } = req.query;
-    const { getUserDemographics } = require('../services/google/ga4.service');
-    const data = await getUserDemographics(client.integrations.ga4PropertyId, startDate, endDate);
+    const data = await ga4Service.getUserDemographics(client.integrations.ga4PropertyId, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -181,8 +215,7 @@ router.get('/clients/:id/ga4/acquisition', protect, async (req, res, next) => {
     }
 
     const { startDate = '30daysAgo', endDate = 'today' } = req.query;
-    const { getAcquisitionChannels } = require('../services/google/ga4.service');
-    const data = await getAcquisitionChannels(client.integrations.ga4PropertyId, startDate, endDate);
+    const data = await ga4Service.getAcquisitionChannels(client.integrations.ga4PropertyId, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -210,8 +243,7 @@ router.get('/clients/:id/ga4/conversions', protect, async (req, res, next) => {
     }
 
     const { startDate = '30daysAgo', endDate = 'today' } = req.query;
-    const { getConversionEvents } = require('../services/google/ga4.service');
-    const data = await getConversionEvents(client.integrations.ga4PropertyId, startDate, endDate);
+    const data = await ga4Service.getConversionEvents(client.integrations.ga4PropertyId, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -239,8 +271,7 @@ router.get('/clients/:id/ga4/timeseries', protect, async (req, res, next) => {
     }
 
     const { startDate = '30daysAgo', endDate = 'today', granularity = 'date' } = req.query;
-    const { getTimeSeriesData } = require('../services/google/ga4.service');
-    const data = await getTimeSeriesData(client.integrations.ga4PropertyId, startDate, endDate, granularity);
+    const data = await ga4Service.getTimeSeriesData(client.integrations.ga4PropertyId, startDate, endDate, granularity);
 
     res.json({
       status: 'success',
@@ -268,8 +299,7 @@ router.get('/clients/:id/ga4/ecommerce', protect, async (req, res, next) => {
     }
 
     const { startDate = '30daysAgo', endDate = 'today' } = req.query;
-    const { getEcommerceData } = require('../services/google/ga4.service');
-    const data = await getEcommerceData(client.integrations.ga4PropertyId, startDate, endDate);
+    const data = await ga4Service.getEcommerceData(client.integrations.ga4PropertyId, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -296,8 +326,7 @@ router.post('/clients/:id/ga4/custom', protect, async (req, res, next) => {
       });
     }
 
-    const { getCustomReport } = require('../services/google/ga4.service');
-    const data = await getCustomReport(client.integrations.ga4PropertyId, req.body);
+    const data = await ga4Service.getCustomReport(client.integrations.ga4PropertyId, req.body);
 
     res.json({
       status: 'success',
@@ -325,8 +354,7 @@ router.get('/clients/:id/ga4/batch', protect, async (req, res, next) => {
     }
 
     const { startDate = '30daysAgo', endDate = 'today' } = req.query;
-    const { getBatchReports } = require('../services/google/ga4.service');
-    const data = await getBatchReports(client.integrations.ga4PropertyId, startDate, endDate);
+    const data = await ga4Service.getBatchReports(client.integrations.ga4PropertyId, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -362,7 +390,7 @@ router.get('/clients/:id/gsc/queries', protect, async (req, res, next) => {
     const startDate = req.query.startDate || start.toISOString().slice(0, 10);
     const endDate = req.query.endDate || end.toISOString().slice(0, 10);
 
-    const data = await getTopQueries(client.integrations.gscSiteUrl, startDate, endDate);
+    const data = await gscService.getTopQueries(client.integrations.gscSiteUrl, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -396,7 +424,7 @@ router.get('/clients/:id/gsc/pages', protect, async (req, res, next) => {
     const startDate = req.query.startDate || start.toISOString().slice(0, 10);
     const endDate = req.query.endDate || end.toISOString().slice(0, 10);
 
-    const data = await getTopPages(client.integrations.gscSiteUrl, startDate, endDate);
+    const data = await gscService.getTopPages(client.integrations.gscSiteUrl, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -430,7 +458,7 @@ router.get('/clients/:id/gsc/query-pages', protect, async (req, res, next) => {
     const startDate = req.query.startDate || start.toISOString().slice(0, 10);
     const endDate = req.query.endDate || end.toISOString().slice(0, 10);
 
-    const data = await getQueryPagePerformance(client.integrations.gscSiteUrl, startDate, endDate);
+    const data = await gscService.getQueryPagePerformance(client.integrations.gscSiteUrl, startDate, endDate);
 
     res.json({
       status: 'success',
@@ -446,9 +474,9 @@ router.get('/clients/:id/gsc/query-pages', protect, async (req, res, next) => {
 /**
  * @route   GET /api/integrations/gbp/auth-url
  * @desc    Get GBP OAuth authorization URL
- * @access  Private (Boss/Manager/Admin)
+ * @access  Private (Boss/Manager/Admin/Staff)
  */
-router.get('/gbp/auth-url', protect, authorize('Boss', 'Manager', 'Admin'), async (req, res, next) => {
+router.get('/gbp/auth-url', protect, authorize('Boss', 'Manager', 'Admin', 'Staff'), async (req, res, next) => {
   try {
     const state = JSON.stringify({ userId: req.user._id.toString() });
     const authUrl = getAuthUrl(state);
@@ -534,6 +562,14 @@ router.get('/gbp/accounts', protect, async (req, res, next) => {
       data,
     });
   } catch (error) {
+    // Handle quota exceeded error
+    if (error.message && error.message.includes('Quota exceeded')) {
+      return res.status(429).json({
+        status: 'error',
+        message: 'Google Business Profile API quota exceeded. Please try again in a few minutes.',
+        retryAfter: 60, // seconds
+      });
+    }
     next(error);
   }
 });

@@ -2,7 +2,14 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '../../../components/Layout'
 import useAuthStore from '../../../store/auth'
-import { CheckCircleIcon, XCircleIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { 
+  CheckCircleIcon, 
+  XCircleIcon, 
+  ArrowPathIcon,
+  MagnifyingGlassIcon,
+  DocumentDuplicateIcon,
+  ExclamationTriangleIcon
+} from '@heroicons/react/24/outline'
 
 export default function ClientIntegrations() {
   const router = useRouter()
@@ -13,16 +20,28 @@ export default function ClientIntegrations() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
+  const [gbpConnected, setGbpConnected] = useState(false)
   
-  const [formData, setFormData] = useState({
-    ga4PropertyId: '',
-    gscSiteUrl: '',
-    gbpLocationIds: []
-  })
-
+  // GA4 state
+  const [ga4PropertyId, setGa4PropertyId] = useState('')
+  const [ga4Properties, setGa4Properties] = useState([])
+  const [loadingGA4, setLoadingGA4] = useState(false)
+  const [ga4Discovered, setGa4Discovered] = useState(false)
+  
+  // GSC state
+  const [gscSiteUrl, setGscSiteUrl] = useState('')
+  const [gscSites, setGscSites] = useState([])
+  const [loadingGSC, setLoadingGSC] = useState(false)
+  const [gscDiscovered, setGscDiscovered] = useState(false)
+  
+  // GBP state
+  const [gbpLocationIds, setGbpLocationIds] = useState([])
   const [gbpAccounts, setGbpAccounts] = useState([])
   const [gbpLocations, setGbpLocations] = useState([])
   const [loadingGBP, setLoadingGBP] = useState(false)
+  const [selectedGbpAccount, setSelectedGbpAccount] = useState('')
+
+  const SERVICE_ACCOUNT_EMAIL = 'echo5-analytics-service@capable-epigram-473210-v8.iam.gserviceaccount.com'
 
   useEffect(() => {
     if (token && id) {
@@ -31,17 +50,18 @@ export default function ClientIntegrations() {
     
     // Listen for messages from OAuth popup
     const handleMessage = (event) => {
-      if (event.origin !== window.location.origin) return;
+      if (event.origin !== window.location.origin) return
       
       if (event.data.type === 'GBP_AUTH_SUCCESS') {
-        setMessage({ type: 'success', text: 'Google Business Profile connected successfully!' });
-        // Refresh client data to get updated integration status
-        fetchClient();
+        setMessage({ type: 'success', text: 'Google Business Profile connected successfully!' })
+        setGbpConnected(true)
+        // Don't refetch client - it won't have any new data and will reset form fields
+        // fetchClient()
       }
-    };
+    }
     
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
   }, [token, id])
 
   const fetchClient = async () => {
@@ -56,12 +76,11 @@ export default function ClientIntegrations() {
       )
       const result = await response.json()
       if (result.status === 'success') {
-        setClient(result.data)
-        setFormData({
-          ga4PropertyId: result.data.integrations?.ga4PropertyId || '',
-          gscSiteUrl: result.data.integrations?.gscSiteUrl || '',
-          gbpLocationIds: result.data.integrations?.gbpLocationIds || []
-        })
+        const fetchedClient = result.data.client
+        setClient(fetchedClient)
+        setGa4PropertyId(fetchedClient?.integrations?.ga4PropertyId || '')
+        setGscSiteUrl(fetchedClient?.integrations?.gscSiteUrl || '')
+        setGbpLocationIds(fetchedClient?.integrations?.gbpLocationIds || [])
       }
     } catch (error) {
       console.error('Failed to fetch client:', error)
@@ -70,12 +89,217 @@ export default function ClientIntegrations() {
     }
   }
 
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }))
+  // Auto-discover GA4 properties
+  const discoverGA4Properties = async () => {
+    setLoadingGA4(true)
+    setMessage(null)
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/ga4/properties`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const result = await response.json()
+      
+      if (result.status === 'success') {
+        setGa4Properties(result.data)
+        setGa4Discovered(true)
+        setMessage({ 
+          type: 'success', 
+          text: `Found ${result.data.length} GA4 properties` 
+        })
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: result.message || 'Failed to discover GA4 properties' 
+        })
+      }
+    } catch (error) {
+      console.error('Failed to discover GA4 properties:', error)
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to discover GA4 properties. Make sure the service account has access.' 
+        })
+    } finally {
+      setLoadingGA4(false)
+    }
+  }
+
+  // Auto-discover GSC sites
+  const discoverGSCSites = async () => {
+    setLoadingGSC(true)
+    setMessage(null)
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/gsc/sites`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const result = await response.json()
+      
+      if (result.status === 'success') {
+        setGscSites(result.data)
+        setGscDiscovered(true)
+        setMessage({ 
+          type: 'success', 
+          text: `Found ${result.data.length} Search Console sites` 
+        })
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: result.message || 'Failed to discover GSC sites' 
+        })
+      }
+    } catch (error) {
+      console.error('Failed to discover GSC sites:', error)
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to discover Search Console sites. Make sure the service account has access.' 
+      })
+    } finally {
+      setLoadingGSC(false)
+    }
+  }
+
+  // Connect GBP
+  const connectGBP = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/gbp/auth-url`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const result = await response.json()
+      
+      if (result.status === 'success') {
+        const popup = window.open(
+          result.data.authUrl,
+          'GBP Authentication',
+          'width=600,height=700'
+        )
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: result.message || 'Failed to get GBP auth URL' 
+        })
+      }
+    } catch (error) {
+      console.error('Failed to connect GBP:', error)
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to connect Google Business Profile' 
+      })
+    }
+  }
+
+  // Load GBP accounts
+  const loadGBPAccounts = async () => {
+    setLoadingGBP(true)
+    setMessage(null)
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/gbp/accounts`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const result = await response.json()
+      
+      if (result.status === 'success') {
+        setGbpAccounts(result.data)
+        setGbpConnected(true)
+        setMessage({ 
+          type: 'success', 
+          text: `Found ${result.data.length} business accounts` 
+        })
+      } else {
+        // Check for quota error
+        if (result.message && result.message.includes('Quota exceeded')) {
+          const retryAfter = result.retryAfter || 'later'
+          setMessage({ 
+            type: 'error', 
+            text: `Google Business Profile API quota exceeded. Please try again ${retryAfter}.` 
+          })
+        } else {
+          setMessage({ 
+            type: 'error', 
+            text: result.message || 'Failed to load GBP accounts. Please reconnect.' 
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load GBP accounts:', error)
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to load business accounts' 
+      })
+    } finally {
+      setLoadingGBP(false)
+    }
+  }
+
+  // Load GBP locations
+  const loadGBPLocations = async (accountName) => {
+    if (!accountName) return
+    
+    setLoadingGBP(true)
+    setMessage(null)
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/gbp/locations?accountName=${encodeURIComponent(accountName)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const result = await response.json()
+      
+      if (result.status === 'success') {
+        setGbpLocations(result.data)
+        setMessage({ 
+          type: 'success', 
+          text: `Found ${result.data.length} locations` 
+        })
+      } else {
+        // Check for quota error
+        if (result.message && result.message.includes('Quota exceeded')) {
+          const retryAfter = result.retryAfter || 'later'
+          setMessage({ 
+            type: 'error', 
+            text: `Google Business Profile API quota exceeded. Please try again ${retryAfter}.` 
+          })
+        } else {
+          setMessage({ 
+            type: 'error', 
+            text: result.message || 'Failed to load locations' 
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load GBP locations:', error)
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to load locations' 
+      })
+    } finally {
+      setLoadingGBP(false)
+    }
   }
 
   const handleSave = async () => {
@@ -93,128 +317,53 @@ export default function ClientIntegrations() {
           },
           body: JSON.stringify({
             integrations: {
-              ...client.integrations,
-              ga4PropertyId: formData.ga4PropertyId,
-              gscSiteUrl: formData.gscSiteUrl,
-              gbpLocationIds: formData.gbpLocationIds
+              ...(client?.integrations || {}),
+              ga4PropertyId,
+              gscSiteUrl,
+              gbpLocationIds
             }
-          }),
+          })
         }
       )
       
       const result = await response.json()
+      
       if (result.status === 'success') {
-        setMessage({ type: 'success', text: 'Integration settings saved successfully!' })
-        fetchClient()
+        setClient(result.data.client)
+        setMessage({ 
+          type: 'success', 
+          text: 'Integration settings saved successfully!' 
+        })
       } else {
-        setMessage({ type: 'error', text: result.message || 'Failed to save settings' })
+        setMessage({ 
+          type: 'error', 
+          text: result.message || 'Failed to save settings' 
+        })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: error.message })
+      console.error('Failed to save:', error)
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to save integration settings' 
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  const connectGBP = async () => {
-    try {
-      console.log('Fetching GBP auth URL...');
-      
-      // Open popup immediately to avoid popup blockers
-      const width = 600;
-      const height = 700;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
-      
-      const popup = window.open(
-        'about:blank',
-        'Google Business Profile Authorization',
-        `width=${width},height=${height},left=${left},top=${top},toolbar=no,location=no,directories=no,status=no,menubar=no,scrollbars=yes,resizable=yes,copyhistory=no`
-      );
-      
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/gbp/auth-url`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      )
-      const result = await response.json()
-      console.log('GBP auth response:', JSON.stringify(result, null, 2));
-      console.log('result.data:', result.data);
-      console.log('result.data.authUrl:', result.data?.authUrl);
-      
-      if (result.status === 'success' && result.data && result.data.authUrl) {
-        console.log('Opening OAuth URL in popup:', result.data.authUrl);
-        // Set the popup location to the OAuth URL
-        popup.location.href = result.data.authUrl;
-        setMessage({ type: 'success', text: 'Opening Google authorization window...' });
-      } else {
-        if (popup) popup.close();
-        console.error('Invalid response:', result);
-        setMessage({ type: 'error', text: result.message || 'Failed to get auth URL - invalid response' });
-      }
-    } catch (error) {
-      console.error('GBP connection error:', error);
-      setMessage({ type: 'error', text: 'Failed to initiate GBP connection: ' + error.message })
-    }
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+    setMessage({ type: 'success', text: 'Copied to clipboard!' })
   }
 
-  const loadGBPLocations = async () => {
-    setLoadingGBP(true)
-    try {
-      // First, get accounts
-      const accountsResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/gbp/accounts`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      )
-      const accountsResult = await accountsResponse.json()
-      
-      if (accountsResult.status === 'success' && accountsResult.data.accounts.length > 0) {
-        setGbpAccounts(accountsResult.data.accounts)
-        
-        // Get locations for the first account
-        const accountName = accountsResult.data.accounts[0].name
-        const locationsResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/gbp/locations?accountName=${encodeURIComponent(accountName)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        )
-        const locationsResult = await locationsResponse.json()
-        
-        if (locationsResult.status === 'success') {
-          setGbpLocations(locationsResult.data.locations)
-        }
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to load GBP locations' })
-    } finally {
-      setLoadingGBP(false)
-    }
-  }
-
-  const toggleLocation = (locationId) => {
-    setFormData(prev => ({
-      ...prev,
-      gbpLocationIds: prev.gbpLocationIds.includes(locationId)
-        ? prev.gbpLocationIds.filter(id => id !== locationId)
-        : [...prev.gbpLocationIds, locationId]
-    }))
-  }
+  // Check if user can edit
+  const canEdit = user && ['Boss', 'Manager', 'Admin', 'Staff'].includes(user.role)
 
   if (loading) {
     return (
       <Layout>
-        <div className="flex justify-center items-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="flex justify-center items-center h-64">
+          <ArrowPathIcon className="h-8 w-8 animate-spin text-blue-500" />
         </div>
       </Layout>
     )
@@ -224,221 +373,373 @@ export default function ClientIntegrations() {
     return (
       <Layout>
         <div className="text-center py-12">
-          <p className="text-gray-500">Client not found</p>
+          <p className="text-gray-600">Client not found</p>
         </div>
       </Layout>
     )
   }
 
-  // Check if user has permission
-  const canEdit = ['Boss', 'Manager', 'Admin'].includes(user?.role)
-
   return (
     <Layout>
-      <div className="space-y-6">
-        <div>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Integration Settings</h1>
-          <p className="text-gray-600 mt-2">Configure Google Analytics, Search Console, and Business Profile for {client.name}</p>
+          <p className="mt-2 text-sm text-gray-600">
+            Connect Google services for {client.name}
+          </p>
         </div>
 
         {message && (
-          <div
-            className={`${
-              message.type === 'success'
-                ? 'bg-green-50 border-green-200 text-green-800'
-                : 'bg-red-50 border-red-200 text-red-800'
-            } border rounded-lg p-4 flex items-start gap-2`}
-          >
-            {message.type === 'success' ? (
-              <CheckCircleIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            ) : (
-              <XCircleIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            )}
-            <p>{message.text}</p>
+          <div className={`mb-6 p-4 rounded-lg ${ message.type === 'success' 
+              ? 'bg-green-50 border border-green-200 text-green-800' 
+              : 'bg-red-50 border border-red-200 text-red-800'
+          }`}>
+            <div className="flex">
+              {message.type === 'success' ? (
+                <CheckCircleIcon className="h-5 w-5 mr-2" />
+              ) : (
+                <ExclamationTriangleIcon className="h-5 w-5 mr-2" />
+              )}
+              <span>{message.text}</span>
+            </div>
           </div>
         )}
 
-        {!canEdit && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-yellow-800">You don't have permission to edit integration settings.</p>
-          </div>
-        )}
+        <div className="space-y-8">
+          {/* GA4 Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                  Google Analytics 4
+                  {ga4PropertyId && (
+                    <CheckCircleIcon className="h-5 w-5 text-green-500 ml-2" />
+                  )}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Track website traffic and user behavior
+                </p>
+              </div>
+            </div>
 
-        {/* Google Analytics 4 */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Google Analytics 4</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Enter your GA4 Property ID (e.g., 123456789)
+            {/* Service Account Info */}
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-900 font-medium mb-2">
+                📋 Service Account Email:
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-white px-2 py-1 rounded border border-blue-300 flex-1">
+                  {SERVICE_ACCOUNT_EMAIL}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(SERVICE_ACCOUNT_EMAIL)}
+                  className="p-2 text-blue-600 hover:bg-blue-100 rounded"
+                  title="Copy to clipboard"
+                >
+                  <DocumentDuplicateIcon className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-xs text-blue-700 mt-2">
+                Add this email with "Viewer" access to your GA4 property
               </p>
             </div>
-            {formData.ga4PropertyId && (
-              <CheckCircleIcon className="w-6 h-6 text-green-500" />
-            )}
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              GA4 Property ID
-            </label>
-            <input
-              type="text"
-              name="ga4PropertyId"
-              value={formData.ga4PropertyId}
-              onChange={handleChange}
-              disabled={!canEdit}
-              placeholder="123456789"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
-            />
-            <p className="text-xs text-gray-500 mt-2">
-              Find this in GA4: Admin → Property Settings → Property ID
-            </p>
-          </div>
-        </div>
 
-        {/* Google Search Console */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between mb-4">
+            {/* Auto-Discover Button */}
+            <div className="mb-4">
+              <button
+                onClick={discoverGA4Properties}
+                disabled={loadingGA4 || !canEdit}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                {loadingGA4 ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Discovering...
+                  </>
+                ) : (
+                  <>
+                    <MagnifyingGlassIcon className="h-5 w-5" />
+                    Auto-Discover Properties
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Property Dropdown */}
+            {ga4Discovered && ga4Properties.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Property
+                </label>
+                <select
+                  value={ga4PropertyId}
+                  onChange={(e) => setGa4PropertyId(e.target.value)}
+                  disabled={!canEdit}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                >
+                  <option value="">-- Select a property --</option>
+                  {ga4Properties.map((prop) => (
+                    <option key={prop.propertyId} value={prop.propertyId}>
+                      {prop.displayName} ({prop.propertyId}) - {prop.websiteUrl || 'No URL'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Manual Input */}
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Google Search Console</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Enter the full site URL (e.g., https://example.com)
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Or Enter Property ID Manually
+              </label>
+              <input
+                type="text"
+                value={ga4PropertyId}
+                onChange={(e) => setGa4PropertyId(e.target.value)}
+                disabled={!canEdit}
+                placeholder="e.g., 123456789"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Find in GA4: Admin → Property Settings → Property ID
               </p>
             </div>
-            {formData.gscSiteUrl && (
-              <CheckCircleIcon className="w-6 h-6 text-green-500" />
-            )}
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Site URL
-            </label>
-            <input
-              type="url"
-              name="gscSiteUrl"
-              value={formData.gscSiteUrl}
-              onChange={handleChange}
-              disabled={!canEdit}
-              placeholder="https://example.com"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
-            />
-            <p className="text-xs text-gray-500 mt-2">
-              Must match exactly as shown in Search Console (include https://)
-            </p>
-          </div>
-        </div>
 
-        {/* Google Business Profile */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Google Business Profile</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Connect your Google Business Profile to view insights
+          {/* GSC Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                  Google Search Console
+                  {gscSiteUrl && (
+                    <CheckCircleIcon className="h-5 w-5 text-green-500 ml-2" />
+                  )}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Monitor search performance and SEO metrics
+                </p>
+              </div>
+            </div>
+
+            {/* Service Account Info */}
+            <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <p className="text-sm text-purple-900 font-medium mb-2">
+                📋 Service Account Email:
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-white px-2 py-1 rounded border border-purple-300 flex-1">
+                  {SERVICE_ACCOUNT_EMAIL}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(SERVICE_ACCOUNT_EMAIL)}
+                  className="p-2 text-purple-600 hover:bg-purple-100 rounded"
+                  title="Copy to clipboard"
+                >
+                  <DocumentDuplicateIcon className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-xs text-purple-700 mt-2">
+                Add this email with "Owner" or "Full" access to your Search Console property
               </p>
             </div>
-            {formData.gbpLocationIds.length > 0 && (
-              <CheckCircleIcon className="w-6 h-6 text-green-500" />
+
+            {/* Auto-Discover Button */}
+            <div className="mb-4">
+              <button
+                onClick={discoverGSCSites}
+                disabled={loadingGSC || !canEdit}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                {loadingGSC ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Discovering...
+                  </>
+                ) : (
+                  <>
+                    <MagnifyingGlassIcon className="h-5 w-5" />
+                    Auto-Discover Sites
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Site Dropdown */}
+            {gscDiscovered && gscSites.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Site
+                </label>
+                <select
+                  value={gscSiteUrl}
+                  onChange={(e) => setGscSiteUrl(e.target.value)}
+                  disabled={!canEdit}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100"
+                >
+                  <option value="">-- Select a site --</option>
+                  {gscSites.map((site) => (
+                    <option key={site.siteUrl} value={site.siteUrl}>
+                      {site.siteUrl} ({site.permissionLevel})
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
+
+            {/* Manual Input */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Or Enter Site URL Manually
+              </label>
+              <input
+                type="text"
+                value={gscSiteUrl}
+                onChange={(e) => setGscSiteUrl(e.target.value)}
+                disabled={!canEdit}
+                placeholder="e.g., https://example.com/ or sc-domain:example.com"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                URL prefix: https://example.com/ | Domain property: sc-domain:example.com
+              </p>
+            </div>
           </div>
 
-          {canEdit && (
-            <div className="space-y-4">
+          {/* GBP Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                  Google Business Profile
+                  {gbpLocationIds.length > 0 && (
+                    <CheckCircleIcon className="h-5 w-5 text-green-500 ml-2" />
+                  )}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Manage business listings and local SEO
+                </p>
+              </div>
+            </div>
+
+            {/* Connect Button */}
+            <div className="mb-4">
               <button
                 onClick={connectGBP}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={!canEdit}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
-                Connect Google Business Profile
+                {gbpConnected ? 'Reconnect' : 'Connect'} Google Business Profile
               </button>
+            </div>
 
-              <button
-                onClick={loadGBPLocations}
-                disabled={loadingGBP}
-                className="ml-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:bg-gray-400 flex items-center gap-2"
-              >
-                {loadingGBP && <ArrowPathIcon className="w-4 h-4 animate-spin" />}
-                Load Locations
-              </button>
+            {gbpConnected && (
+              <>
+                <div className="mb-4">
+                  <button
+                    onClick={loadGBPAccounts}
+                    disabled={loadingGBP || !canEdit}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loadingGBP ? (
+                      <>
+                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load Business Accounts'
+                    )}
+                  </button>
+                </div>
 
-              {gbpLocations.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Select Locations:</p>
-                  <div className="space-y-2">
-                    {gbpLocations.map((location) => (
-                      <label key={location.name} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.gbpLocationIds.includes(location.name)}
-                          onChange={() => toggleLocation(location.name)}
-                          className="rounded text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span className="text-sm text-gray-700">
-                          {location.title || location.name}
-                        </span>
-                      </label>
-                    ))}
+                {gbpAccounts.length > 0 && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Business Account
+                    </label>
+                    <select
+                      value={selectedGbpAccount}
+                      onChange={(e) => {
+                        setSelectedGbpAccount(e.target.value)
+                        loadGBPLocations(e.target.value)
+                      }}
+                      disabled={!canEdit}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
+                    >
+                      <option value="">-- Select an account --</option>
+                      {gbpAccounts.map((account) => (
+                        <option key={account.name} value={account.name}>
+                          {account.accountName || account.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                </div>
-              )}
+                )}
 
-              {formData.gbpLocationIds.length > 0 && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm font-medium text-gray-700 mb-2">
-                    Selected Locations: {formData.gbpLocationIds.length}
-                  </p>
-                </div>
-              )}
+                {gbpLocations.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Locations
+                    </label>
+                    <div className="border border-gray-300 rounded-lg max-h-60 overflow-y-auto">
+                      {gbpLocations.map((location) => (
+                        <label
+                          key={location.name}
+                          className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={gbpLocationIds.includes(location.name)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setGbpLocationIds([...gbpLocationIds, location.name])
+                              } else {
+                                setGbpLocationIds(gbpLocationIds.filter(id => id !== location.name))
+                              }
+                            }}
+                            disabled={!canEdit}
+                            className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">
+                            {location.title} - {location.address || 'No address'}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500">
+                      Selected: {gbpLocationIds.length} location(s)
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Save Button */}
+          {canEdit && (
+            <div className="flex justify-end">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+              >
+                {saving ? (
+                  <span className="flex items-center gap-2">
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Saving...
+                  </span>
+                ) : (
+                  'Save Integration Settings'
+                )}
+              </button>
             </div>
           )}
-        </div>
 
-        {/* Save Button */}
-        {canEdit && (
-          <div className="flex justify-end">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-indigo-400 flex items-center gap-2"
-            >
-              {saving && <ArrowPathIcon className="w-5 h-5 animate-spin" />}
-              {saving ? 'Saving...' : 'Save Integration Settings'}
-            </button>
-          </div>
-        )}
-
-        {/* Setup Instructions */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Setup Instructions</h3>
-          <div className="space-y-4 text-sm text-gray-700">
-            <div>
-              <p className="font-medium">Google Analytics 4:</p>
-              <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
-                <li>Go to GA4 Admin → Property Settings</li>
-                <li>Copy the Property ID (numeric only)</li>
-                <li>The service account email must have Viewer access to this property</li>
-              </ul>
+          {!canEdit && (
+            <div className="text-center text-sm text-gray-600 italic">
+              You don't have permission to edit integration settings
             </div>
-            <div>
-              <p className="font-medium">Google Search Console:</p>
-              <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
-                <li>Add the service account email as a user in Search Console</li>
-                <li>Grant Full or Owner permissions</li>
-                <li>Enter the exact site URL as shown in GSC</li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-medium">Google Business Profile:</p>
-              <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
-                <li>Click "Connect Google Business Profile"</li>
-                <li>Sign in with your Google account that manages the business</li>
-                <li>Grant the requested permissions</li>
-                <li>After connecting, click "Load Locations" to see available locations</li>
-                <li>Select the locations you want to track</li>
-              </ul>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </Layout>

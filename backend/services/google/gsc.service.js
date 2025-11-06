@@ -11,27 +11,22 @@ const SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly'];
 
 /**
  * Get JWT client for service account authentication
- * @returns {JWT} Google JWT client
+ * @returns {Promise} Google auth client
  */
-function getJwtClient() {
+async function getJwtClient() {
   const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS ||
-    './config/google-service-account.json';
-  
-  const absolutePath = path.resolve(process.cwd(), keyFile);
+    path.join(__dirname, '../../config/google-service-account.json');
   
   try {
-    const keyContent = fs.readFileSync(absolutePath, 'utf8');
-    const key = JSON.parse(keyContent);
+    const auth = new google.auth.GoogleAuth({
+      keyFile,
+      scopes: SCOPES,
+    });
     
-    return new google.auth.JWT(
-      key.client_email,
-      null,
-      key.private_key,
-      SCOPES
-    );
+    return await auth.getClient();
   } catch (error) {
     console.error('GSC JWT initialization error:', error.message);
-    console.error('Looking for file at:', absolutePath);
+    console.error('Looking for file at:', keyFile);
     return null;
   }
 }
@@ -46,7 +41,7 @@ function getJwtClient() {
  * @returns {Promise<Object>} Search analytics data
  */
 async function querySearchAnalytics(siteUrl, startDate, endDate, dimensions = ['query'], rowLimit = 25000) {
-  const auth = getJwtClient();
+  const auth = await getJwtClient();
   if (!auth) {
     throw new Error('GSC client not initialized. Check service account credentials.');
   }
@@ -84,7 +79,7 @@ async function querySearchAnalytics(siteUrl, startDate, endDate, dimensions = ['
  * @returns {Promise<Object>} Top queries data
  */
 async function getTopQueries(siteUrl, startDate, endDate, limit = 100) {
-  const auth = getJwtClient();
+  const auth = await getJwtClient();
   if (!auth) {
     throw new Error('GSC client not initialized.');
   }
@@ -121,7 +116,7 @@ async function getTopQueries(siteUrl, startDate, endDate, limit = 100) {
  * @returns {Promise<Object>} Top pages data
  */
 async function getTopPages(siteUrl, startDate, endDate, limit = 100) {
-  const auth = getJwtClient();
+  const auth = await getJwtClient();
   if (!auth) {
     throw new Error('GSC client not initialized.');
   }
@@ -158,7 +153,7 @@ async function getTopPages(siteUrl, startDate, endDate, limit = 100) {
  * @returns {Promise<Object>} Query-page performance data
  */
 async function getQueryPagePerformance(siteUrl, startDate, endDate, limit = 1000) {
-  const auth = getJwtClient();
+  const auth = await getJwtClient();
   if (!auth) {
     throw new Error('GSC client not initialized.');
   }
@@ -192,7 +187,7 @@ async function getQueryPagePerformance(siteUrl, startDate, endDate, limit = 1000
  * @returns {Promise<Object>} Sitemaps data
  */
 async function getSitemaps(siteUrl) {
-  const auth = getJwtClient();
+  const auth = await getJwtClient();
   if (!auth) {
     throw new Error('GSC client not initialized.');
   }
@@ -213,10 +208,39 @@ async function getSitemaps(siteUrl) {
   }
 }
 
+/**
+ * List all Search Console sites accessible by the service account
+ * @returns {Promise<Array>} List of sites with URL and permission level
+ */
+async function listSites() {
+  try {
+    const auth = await getJwtClient();
+    if (!auth) {
+      throw new Error('GSC authentication failed - check service account credentials');
+    }
+    
+    const webmasters = google.webmasters({ version: 'v3', auth });
+    const { data } = await webmasters.sites.list();
+
+    return data.siteEntry || [];
+  } catch (error) {
+    console.error('GSC listSites error:', error.message);
+    
+    // If no sites are found or service account has no access, return empty array
+    if (error.message.includes('authentication') || error.code === 401 || error.code === 403) {
+      console.warn('Service account has no Search Console sites access. Add the service account to GSC properties.');
+      return [];
+    }
+    
+    throw new Error(`Failed to list GSC sites: ${error.message}`);
+  }
+}
+
 module.exports = {
   querySearchAnalytics,
   getTopQueries,
   getTopPages,
   getQueryPagePerformance,
   getSitemaps,
+  listSites,
 };

@@ -1,10 +1,17 @@
 const { BetaAnalyticsDataClient } = require('@google-analytics/data');
+const { google } = require('googleapis');
 const path = require('path');
+const fs = require('fs');
 
 /**
  * GA4 Service
  * Fetches analytics data from Google Analytics 4 properties
  */
+
+const ADMIN_SCOPES = [
+  'https://www.googleapis.com/auth/analytics.readonly',
+  'https://www.googleapis.com/auth/analytics.edit',
+];
 
 // Initialize the client with service account credentials
 const getGA4Client = () => {
@@ -18,6 +25,29 @@ const getGA4Client = () => {
     return null;
   }
 };
+
+/**
+ * Get JWT client for Admin API authentication
+ * @returns {JWT} Google JWT client
+ */
+function getJwtClient() {
+  const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+    path.join(__dirname, '../../config/google-service-account.json');
+  
+  try {
+    // Use keyFile parameter instead of parsing JSON manually
+    const auth = new google.auth.GoogleAuth({
+      keyFile,
+      scopes: ADMIN_SCOPES,
+    });
+    
+    return auth.getClient();
+  } catch (error) {
+    console.error('GA4 JWT initialization error:', error.message);
+    console.error('Looking for file at:', keyFile);
+    return null;
+  }
+}
 
 /**
  * Get GA4 overview metrics
@@ -506,6 +536,59 @@ async function getBatchReports(propertyId, startDate = '30daysAgo', endDate = 't
   }
 }
 
+/**
+ * List all GA4 properties accessible by the service account
+ * @returns {Promise<Array>} List of GA4 properties
+ */
+async function listProperties() {
+  try {
+    const authClient = await getJwtClient();
+    if (!authClient) {
+      throw new Error('GA4 authentication failed - check service account credentials');
+    }
+
+    const analyticsadmin = google.analyticsadmin({ version: 'v1beta', auth: authClient });
+    
+    // First, list all accounts
+    const accountsResponse = await analyticsadmin.accounts.list();
+    const accounts = accountsResponse.data.accounts || [];
+    
+    const allProperties = [];
+    
+    // For each account, list properties
+    for (const account of accounts) {
+      try {
+        const propertiesResponse = await analyticsadmin.properties.list({
+          filter: `parent:${account.name}`,
+        });
+        
+        const properties = propertiesResponse.data.properties || [];
+        allProperties.push(...properties.map(prop => ({
+          propertyId: prop.name.split('/')[1], // Extract numeric ID from "properties/123456789"
+          displayName: prop.displayName,
+          websiteUrl: prop.websiteUrl || '',
+          account: account.displayName,
+          createTime: prop.createTime,
+        })));
+      } catch (error) {
+        console.error(`Error listing properties for account ${account.name}:`, error.message);
+      }
+    }
+    
+    return allProperties;
+  } catch (error) {
+    console.error('GA4 listProperties error:', error.message);
+    
+    // If no properties are found or service account has no access, return empty array
+    if (error.message.includes('authentication') || error.code === 401 || error.code === 403) {
+      console.warn('Service account has no GA4 properties access. Add the service account to GA4 properties.');
+      return [];
+    }
+    
+    throw new Error(`Failed to list GA4 properties: ${error.message}`);
+  }
+}
+
 module.exports = {
   getOverview,
   getLandingPages,
@@ -519,4 +602,5 @@ module.exports = {
   getEcommerceData,
   getCustomReport,
   getBatchReports,
+  listProperties,
 };

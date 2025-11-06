@@ -279,12 +279,12 @@ router.post(
 /**
  * @route   PUT /api/clients/:id
  * @desc    Update client
- * @access  Private (Boss/Manager/Admin can update integrations, Boss only for other fields)
+ * @access  Private (Boss/Manager/Admin/Staff can update integrations, Boss only for other fields)
  */
 router.put(
   '/:id',
   protect,
-  authorize('Boss', 'Manager', 'Admin'),
+  authorize('Boss', 'Manager', 'Admin', 'Staff'),
   async (req, res, next) => {
     try {
       const { assignedStaff, website, integrations, ...updateFields } = req.body;
@@ -297,6 +297,14 @@ router.put(
         });
       }
 
+      // Check if Staff is accessing their assigned client
+      if (req.user.role === 'Staff' && !client.assignedStaff.some(s => s.equals(req.user._id))) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'You can only update clients assigned to you',
+        });
+      }
+
       // Check if only integrations are being updated
       const isIntegrationsOnly = integrations && Object.keys(req.body).length === 1;
       
@@ -304,7 +312,7 @@ router.put(
       if (req.user.role !== 'Boss' && !isIntegrationsOnly) {
         return res.status(403).json({
           status: 'error',
-          message: 'Only Boss can update client details. Managers can update integrations only.',
+          message: 'Only Boss can update client details. Staff/Managers can update integrations only.',
         });
       }
 
