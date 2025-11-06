@@ -15,19 +15,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns';
-import Layout from '../../../components/Layout';
-import useAuthStore from '../../../store/auth';
+import Layout from '../../components/Layout';
+import useAuthStore from '../../store/auth';
 import toast from 'react-hot-toast';
 
 // Dynamic imports for heavy components
-const MetricCard = dynamic(() => import('../../../components/analytics/MetricCard'), { ssr: false });
-const TimeSeriesChart = dynamic(() => import('../../../components/analytics/TimeSeriesChart'), { ssr: false });
-const AcquisitionChart = dynamic(() => import('../../../components/analytics/AcquisitionChart'), { ssr: false });
-const DemographicsChart = dynamic(() => import('../../../components/analytics/DemographicsChart'), { ssr: false });
-const RealtimeMonitor = dynamic(() => import('../../../components/analytics/RealtimeMonitor'), { ssr: false });
-const GeographicMap = dynamic(() => import('../../../components/analytics/GeographicMap'), { ssr: false });
-const ConversionFunnel = dynamic(() => import('../../../components/analytics/ConversionFunnel'), { ssr: false });
-const DeviceBreakdown = dynamic(() => import('../../../components/analytics/DeviceBreakdown'), { ssr: false });
+const MetricCard = dynamic(() => import('../../components/analytics/MetricCard'), { ssr: false });
+const TimeSeriesChart = dynamic(() => import('../../components/analytics/TimeSeriesChart'), { ssr: false });
+const AcquisitionChart = dynamic(() => import('../../components/analytics/AcquisitionChart'), { ssr: false });
+const DemographicsChart = dynamic(() => import('../../components/analytics/DemographicsChart'), { ssr: false });
+const RealtimeMonitor = dynamic(() => import('../../components/analytics/RealtimeMonitor'), { ssr: false });
+const GeographicMap = dynamic(() => import('../../components/analytics/GeographicMap'), { ssr: false });
+const ConversionFunnel = dynamic(() => import('../../components/analytics/ConversionFunnel'), { ssr: false });
+const DeviceBreakdown = dynamic(() => import('../../components/analytics/DeviceBreakdown'), { ssr: false });
 
 export default function GA4Analytics() {
   const router = useRouter();

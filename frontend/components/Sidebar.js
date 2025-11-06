@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
+import { useState } from 'react'
 import useAuthStore from '../store/auth'
 import {
   HomeIcon,
@@ -15,12 +16,15 @@ import {
   LightBulbIcon,
   ChartBarSquareIcon,
   RectangleStackIcon,
-  ChartPieIcon
+  ChartPieIcon,
+  ChevronDownIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline'
 
 export default function Sidebar() {
   const router = useRouter()
   const user = useAuthStore(state => state.user)
+  const [analyticsExpanded, setAnalyticsExpanded] = useState(false)
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, isNew: true },
@@ -35,7 +39,17 @@ export default function Sidebar() {
     { name: 'Briefs', href: '/briefs', icon: RectangleStackIcon, isNew: true },
     { name: 'Tasks', href: '/tasks', icon: ClipboardDocumentListIcon, isNew: true },
     { name: 'Reports', href: '/reports', icon: ChartBarIcon },
-    { name: 'Analytics', href: '/analytics', icon: ChartPieIcon, isNew: true },
+    { 
+      name: 'Analytics', 
+      href: '/analytics', 
+      icon: ChartPieIcon, 
+      hasSubmenu: true,
+      submenu: [
+        { name: 'Google Analytics', href: '/analytics/google-analytics' },
+        { name: 'Google Search Console', href: '/analytics/google-search-console' },
+        { name: 'Google Business Profile', href: '/analytics/google-business-profile' }
+      ]
+    },
   ]
 
   if (user?.role === 'Boss') {
@@ -56,6 +70,68 @@ export default function Sidebar() {
           {navigation.map((item) => {
             const Icon = item.icon
             const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/')
+            
+            // Handle Analytics with submenu
+            if (item.hasSubmenu) {
+              return (
+                <div key={item.name}>
+                  <button
+                    onClick={() => setAnalyticsExpanded(!analyticsExpanded)}
+                    onMouseEnter={() => setAnalyticsExpanded(true)}
+                    className={`${
+                      isActive
+                        ? 'bg-orange-100 text-orange-600'
+                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                    } group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors w-full`}
+                  >
+                    <div className="flex items-center">
+                      <Icon
+                        className={`${
+                          isActive ? 'text-orange-600' : 'text-black-700 group-hover:text-gray-500'
+                        } mr-3 h-5 w-5 flex-shrink-0`}
+                        aria-hidden="true"
+                      />
+                      {item.name}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {item.isNew && (
+                        <span className="px-2 py-0.5 text-xs font-semibold text-white bg-orange-500 rounded-full">
+                          NEW
+                        </span>
+                      )}
+                      {analyticsExpanded ? (
+                        <ChevronDownIcon className="h-4 w-4" />
+                      ) : (
+                        <ChevronRightIcon className="h-4 w-4" />
+                      )}
+                    </div>
+                  </button>
+                  
+                  {analyticsExpanded && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      {item.submenu.map((subItem) => {
+                        const isSubActive = router.pathname === subItem.href
+                        return (
+                          <Link
+                            key={subItem.name}
+                            href={subItem.href}
+                            className={`${
+                              isSubActive
+                                ? 'bg-orange-50 text-orange-600'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                            } block px-3 py-2 text-sm rounded-lg transition-colors`}
+                          >
+                            {subItem.name}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            
+            // Regular navigation items
             return (
               <Link
                 key={item.name}
