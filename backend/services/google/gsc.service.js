@@ -237,6 +237,7 @@ async function listSites() {
 }
 
 module.exports = {
+  getJwtClient,
   querySearchAnalytics,
   getTopQueries,
   getTopPages,

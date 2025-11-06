@@ -368,6 +368,74 @@ router.get('/clients/:id/ga4/batch', protect, async (req, res, next) => {
 // ==================== GSC ROUTES ====================
 
 /**
+ * @route   GET /api/integrations/clients/:id/gsc/overview
+ * @desc    Get GSC overview metrics for a client
+ * @access  Private
+ */
+router.get('/clients/:id/gsc/overview', protect, async (req, res, next) => {
+  try {
+    const client = await Client.findById(req.params.id);
+    
+    if (!client || !client.integrations?.gscSiteUrl) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'GSC not configured',
+      });
+    }
+
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 30);
+    
+    const startDate = req.query.startDate || start.toISOString().slice(0, 10);
+    const endDate = req.query.endDate || end.toISOString().slice(0, 10);
+
+    const auth = await gscService.getJwtClient();
+    if (!auth) {
+      return res.status(500).json({
+        status: 'error',
+        message: 'GSC authentication failed',
+      });
+    }
+
+    const { google } = require('googleapis');
+    const webmasters = google.webmasters({ version: 'v3', auth });
+    
+    // Query without dimensions to get overall totals
+    const { data } = await webmasters.searchanalytics.query({
+      siteUrl: client.integrations.gscSiteUrl,
+      requestBody: {
+        startDate,
+        endDate,
+        rowLimit: 1
+        // No dimensions property = overall aggregated data
+      },
+    });
+
+    // Extract totals from the response
+    const totals = data.rows && data.rows.length > 0 ? data.rows[0] : {
+      clicks: 0,
+      impressions: 0,
+      ctr: 0,
+      position: 0
+    };
+
+    res.json({
+      status: 'success',
+      data: {
+        totalClicks: totals.clicks || 0,
+        totalImpressions: totals.impressions || 0,
+        averageCTR: (totals.ctr || 0) * 100, // Convert to percentage
+        averagePosition: totals.position || 0
+      }
+    });
+  } catch (error) {
+    console.error('GSC Overview error:', error);
+    next(error);
+  }
+});
+
+/**
  * @route   GET /api/integrations/clients/:id/gsc/queries
  * @desc    Get GSC top queries for a client
  * @access  Private

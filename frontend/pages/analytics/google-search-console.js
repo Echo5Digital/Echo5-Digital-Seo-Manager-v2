@@ -55,8 +55,16 @@ export default function GoogleSearchConsole() {
       const formattedStart = startDate.toISOString().split('T')[0]
       const formattedEnd = endDate.toISOString().split('T')[0]
 
-      // Fetch both queries and pages data
-      const [queriesResponse, pagesResponse] = await Promise.all([
+      // Fetch overview metrics, queries, and pages data
+      const [overviewResponse, queriesResponse, pagesResponse] = await Promise.all([
+        fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/clients/${clientId}/gsc/overview?startDate=${formattedStart}&endDate=${formattedEnd}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        ),
         fetch(
           `${process.env.NEXT_PUBLIC_API_BASE}/api/integrations/clients/${clientId}/gsc/queries?startDate=${formattedStart}&endDate=${formattedEnd}`,
           {
@@ -75,31 +83,20 @@ export default function GoogleSearchConsole() {
         )
       ])
       
+      const overviewResult = await overviewResponse.json()
       const queriesResult = await queriesResponse.json()
       const pagesResult = await pagesResponse.json()
       
-      if (queriesResult.status === 'success') {
-        const queries = queriesResult.data.queries || []
+      if (overviewResult.status === 'success') {
+        const overview = overviewResult.data
+        const queries = queriesResult.data?.queries || []
         const pages = pagesResult.data?.pages || []
         
-        // Calculate aggregate metrics from the queries data
-        let totalClicks = 0
-        let totalImpressions = 0
-        let totalCtr = 0
-        let totalPosition = 0
-        
-        queries.forEach(row => {
-          totalClicks += row.clicks || 0
-          totalImpressions += row.impressions || 0
-          totalCtr += row.ctr || 0
-          totalPosition += row.position || 0
-        })
-        
         const aggregateData = {
-          totalClicks,
-          totalImpressions,
-          averageCTR: queries.length > 0 ? (totalClicks / totalImpressions) * 100 : 0,
-          averagePosition: queries.length > 0 ? totalPosition / queries.length : 0,
+          totalClicks: overview.totalClicks || 0,
+          totalImpressions: overview.totalImpressions || 0,
+          averageCTR: overview.averageCTR || 0,
+          averagePosition: overview.averagePosition || 0,
           queries,
           pages,
           // These would need comparison data from a previous period
@@ -111,7 +108,7 @@ export default function GoogleSearchConsole() {
         
         setData(aggregateData)
       } else {
-        toast.error(queriesResult.message || 'Failed to fetch Search Console data')
+        toast.error(overviewResult.message || 'Failed to fetch Search Console data')
         setData(null)
       }
     } catch (err) {
@@ -140,10 +137,14 @@ export default function GoogleSearchConsole() {
 
   const handleDateRangeChange = (range) => {
     setDateRange(range)
+  }
+
+  // Fetch data when client or date range changes
+  useEffect(() => {
     if (selectedClient) {
       fetchGSCData(selectedClient)
     }
-  }
+  }, [selectedClient, dateRange])
 
   const formatNumber = (num) => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'

@@ -98,10 +98,14 @@ export default function GoogleAnalytics() {
 
   const handleDateRangeChange = (range) => {
     setDateRange(range)
+  }
+
+  // Fetch data when client or date range changes
+  useEffect(() => {
     if (selectedClient) {
       fetchGA4Data(selectedClient)
     }
-  }
+  }, [selectedClient, dateRange])
 
   const formatNumber = (num) => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
