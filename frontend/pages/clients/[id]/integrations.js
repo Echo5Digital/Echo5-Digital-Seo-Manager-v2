@@ -40,6 +40,7 @@ export default function ClientIntegrations() {
   const [gbpLocations, setGbpLocations] = useState([])
   const [loadingGBP, setLoadingGBP] = useState(false)
   const [selectedGbpAccount, setSelectedGbpAccount] = useState('')
+  const [gbpRateLimitCountdown, setGbpRateLimitCountdown] = useState(0)
 
   const SERVICE_ACCOUNT_EMAIL = 'echo5-analytics-service@capable-epigram-473210-v8.iam.gserviceaccount.com'
 
@@ -219,27 +220,28 @@ export default function ClientIntegrations() {
       )
       const result = await response.json()
       
-      if (result.status === 'success') {
-        setGbpAccounts(result.data)
+      if (result.status === 'success' || result.status === 'warning') {
+        setGbpAccounts(result.data?.accounts || result.data || [])
         setGbpConnected(true)
-        setMessage({ 
-          type: 'success', 
-          text: `Found ${result.data.length} business accounts` 
-        })
-      } else {
-        // Check for quota error
-        if (result.message && result.message.includes('Quota exceeded')) {
-          const retryAfter = result.retryAfter || 'later'
+        
+        // Handle quota exceeded with warning
+        if (result.status === 'warning' || result.data?.quotaExceeded) {
           setMessage({ 
-            type: 'error', 
-            text: `Google Business Profile API quota exceeded. Please try again ${retryAfter}.` 
+            type: 'warning', 
+            text: result.message || 'Google Business Profile API quota temporarily exceeded. Please wait 1-2 minutes and try again.'
           })
         } else {
+          const accountCount = result.data?.accounts?.length || result.data?.length || 0
           setMessage({ 
-            type: 'error', 
-            text: result.message || 'Failed to load GBP accounts. Please reconnect.' 
+            type: 'success', 
+            text: `Found ${accountCount} business account${accountCount !== 1 ? 's' : ''}` 
           })
         }
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: result.message || 'Failed to load GBP accounts. Please reconnect.' 
+        })
       }
     } catch (error) {
       console.error('Failed to load GBP accounts:', error)

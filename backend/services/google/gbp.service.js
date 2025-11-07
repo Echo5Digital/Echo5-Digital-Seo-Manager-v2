@@ -9,6 +9,90 @@ const SCOPES = [
   'https://www.googleapis.com/auth/business.manage',
 ];
 
+// In-memory cache for GBP data (prevents quota exhaustion)
+const cache = {
+  accounts: new Map(),
+  locations: new Map(),
+};
+
+// Cache TTL (Time To Live) in milliseconds
+const CACHE_TTL = {
+  accounts: 30 * 60 * 1000, // 30 minutes
+  locations: 15 * 60 * 1000, // 15 minutes
+};
+
+// Rate limiting - track last request time per user
+const rateLimiter = new Map();
+const MIN_REQUEST_INTERVAL = 30000; // 30 seconds between requests (safe for 2/minute quota)
+
+// Global rate limiter - prevent ANY GBP API call within 30 seconds
+let lastGlobalRequest = 0;
+const GLOBAL_MIN_INTERVAL = 30000; // 30 seconds globally
+
+/**
+ * Check if request is rate limited
+ * @param {string} key - User identifier
+ * @returns {boolean} True if should wait
+ */
+function isRateLimited(key) {
+  const now = Date.now();
+  
+  // Check global rate limit first
+  if (now - lastGlobalRequest < GLOBAL_MIN_INTERVAL) {
+    const waitTime = Math.ceil((GLOBAL_MIN_INTERVAL - (now - lastGlobalRequest)) / 1000);
+    console.log(`⏱ Global rate limit: Please wait ${waitTime} more seconds`);
+    return true;
+  }
+  
+  // Check user-specific rate limit
+  const lastRequest = rateLimiter.get(key);
+  if (lastRequest && now - lastRequest < MIN_REQUEST_INTERVAL) {
+    const waitTime = Math.ceil((MIN_REQUEST_INTERVAL - (now - lastRequest)) / 1000);
+    console.log(`⏱ User rate limit: Please wait ${waitTime} more seconds`);
+    return true;
+  }
+  
+  // Update both limiters
+  rateLimiter.set(key, now);
+  lastGlobalRequest = now;
+  return false;
+}
+
+/**
+ * Get cached data if available and not expired
+ * @param {string} type - Cache type (accounts, locations)
+ * @param {string} key - Cache key
+ * @returns {any|null} Cached data or null
+ */
+function getCached(type, key) {
+  const cacheMap = cache[type];
+  const cached = cacheMap.get(key);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL[type]) {
+    return cached.data;
+  }
+  
+  // Remove expired entry
+  if (cached) {
+    cacheMap.delete(key);
+  }
+  
+  return null;
+}
+
+/**
+ * Set cache data
+ * @param {string} type - Cache type
+ * @param {string} key - Cache key
+ * @param {any} data - Data to cache
+ */
+function setCache(type, key, data) {
+  cache[type].set(key, {
+    data,
+    timestamp: Date.now(),
+  });
+}
+
 /**
  * Get OAuth2 client
  * @returns {OAuth2Client} Google OAuth2 client
@@ -66,17 +150,57 @@ async function getTokensFromCode(code) {
  * @returns {Promise<Object>} Business accounts
  */
 async function listAccounts(refreshToken) {
+  // Check cache first
+  const cacheKey = `token_${refreshToken.substring(0, 20)}`;
+  const cached = getCached('accounts', cacheKey);
+  
+  if (cached) {
+    console.log('✓ Returning cached GBP accounts (avoiding API call)');
+    return cached;
+  }
+
+  // Rate limiting check
+  if (isRateLimited(cacheKey)) {
+    console.log('⏱ Rate limited - returning cached data or waiting');
+    const cachedData = getCached('accounts', cacheKey);
+    if (cachedData) {
+      console.log('✓ Returning cached accounts (rate limited)');
+      return cachedData;
+    }
+    throw new Error('API rate limit: Please wait 30 seconds between requests. Google Business Profile API allows only 2 requests per minute.');
+  }
+
   const auth = await getAuthorizedClient(refreshToken);
   const accountmanagement = google.mybusinessaccountmanagement({ version: 'v1', auth });
   
   try {
+    console.log('📡 Fetching GBP accounts from API...');
     const { data } = await accountmanagement.accounts.list();
-    return {
+    const result = {
       success: true,
       accounts: data.accounts || [],
     };
+    
+    // Cache the result
+    setCache('accounts', cacheKey, result);
+    console.log('✓ GBP accounts cached successfully');
+    
+    return result;
   } catch (error) {
-    console.error('GBP listAccounts error:', error.message);
+    // Handle quota exceeded error gracefully
+    if (error.code === 429 || error.message.includes('Quota exceeded')) {
+      console.warn('⚠️  GBP quota exceeded - quota resets every minute');
+      // Cache the error state to prevent repeated attempts
+      const errorResult = {
+        success: false,
+        accounts: [],
+        quotaExceeded: true,
+      };
+      setCache('accounts', cacheKey, errorResult);
+      throw new Error('Quota exceeded');
+    }
+    
+    console.error('❌ GBP listAccounts error:', error.message);
     throw new Error(`Failed to list GBP accounts: ${error.message}`);
   }
 }
@@ -88,6 +212,15 @@ async function listAccounts(refreshToken) {
  * @returns {Promise<Object>} Locations
  */
 async function listLocations(refreshToken, accountName) {
+  // Check cache first
+  const cacheKey = `${accountName}_${refreshToken.substring(0, 20)}`;
+  const cached = getCached('locations', cacheKey);
+  
+  if (cached) {
+    console.log('Returning cached GBP locations');
+    return cached;
+  }
+
   const auth = await getAuthorizedClient(refreshToken);
   const businessinformation = google.mybusinessbusinessinformation({ version: 'v1', auth });
   
@@ -97,12 +230,23 @@ async function listLocations(refreshToken, accountName) {
       readMask: 'name,title,storefrontAddress,phoneNumbers,websiteUri',
     });
     
-    return {
+    const result = {
       success: true,
       locations: data.locations || [],
     };
+    
+    // Cache the result
+    setCache('locations', cacheKey, result);
+    
+    return result;
   } catch (error) {
     console.error('GBP listLocations error:', error.message);
+    
+    // Handle quota exceeded error gracefully
+    if (error.code === 429 || error.message.includes('Quota exceeded')) {
+      throw new Error('Google Business Profile API quota exceeded. Please try again in a few minutes.');
+    }
+    
     throw new Error(`Failed to list GBP locations: ${error.message}`);
   }
 }

@@ -678,12 +678,19 @@ router.get('/gbp/accounts', protect, async (req, res, next) => {
       data,
     });
   } catch (error) {
-    // Handle quota exceeded error
-    if (error.message && error.message.includes('Quota exceeded')) {
-      return res.status(429).json({
-        status: 'error',
-        message: 'Google Business Profile API quota exceeded. Please try again in a few minutes.',
-        retryAfter: 60, // seconds
+    // Handle quota exceeded error - return friendly message instead of error
+    if (error.message && (error.message.includes('Quota exceeded') || error.message.includes('quota exceeded') || error.message.includes('rate limit'))) {
+      return res.status(200).json({
+        status: 'warning',
+        message: error.message.includes('30 seconds') 
+          ? 'Please wait 30 seconds between requests. Google Business Profile API has strict rate limits (2 requests per minute).'
+          : 'Google Business Profile API quota temporarily exceeded. The quota resets every minute. Please wait and try again.',
+        data: {
+          success: true,
+          accounts: [],
+          quotaExceeded: true,
+          rateLimited: true,
+        },
       });
     }
     next(error);
