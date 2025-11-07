@@ -10,23 +10,55 @@ const fs = require('fs');
 const SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly'];
 
 /**
+ * Get credentials from environment or file
+ * @returns {Object} Credentials object
+ */
+function getCredentials() {
+  // First, try to get credentials from environment variable
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    try {
+      return JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    } catch (error) {
+      console.error('Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY:', error.message);
+    }
+  }
+
+  // Fall back to file-based credentials
+  const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+    path.join(__dirname, '../../config/google-service-account.json');
+  
+  if (fs.existsSync(keyFile)) {
+    try {
+      return JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+    } catch (error) {
+      console.error('Failed to read service account file:', error.message);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Get JWT client for service account authentication
  * @returns {Promise} Google auth client
  */
 async function getJwtClient() {
-  const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS ||
-    path.join(__dirname, '../../config/google-service-account.json');
-  
   try {
+    const credentials = getCredentials();
+    
+    if (!credentials) {
+      console.error('No GSC credentials found. Set GOOGLE_SERVICE_ACCOUNT_KEY environment variable or provide credentials file.');
+      return null;
+    }
+
     const auth = new google.auth.GoogleAuth({
-      keyFile,
+      credentials,
       scopes: SCOPES,
     });
     
     return await auth.getClient();
   } catch (error) {
     console.error('GSC JWT initialization error:', error.message);
-    console.error('Looking for file at:', keyFile);
     return null;
   }
 }
