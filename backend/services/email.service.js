@@ -508,11 +508,22 @@ Echo5 SEO Operations Team
    */
   async verifyConnection() {
     try {
-      await this.transporter.verify();
+      // Add timeout to prevent hanging
+      const verifyPromise = this.transporter.verify();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Connection timeout')), 5000)
+      );
+      
+      await Promise.race([verifyPromise, timeoutPromise]);
       logger.info('SMTP connection verified successfully');
       return true;
     } catch (error) {
-      logger.error('SMTP connection verification failed:', error);
+      // Don't log full error in production to avoid cluttering logs
+      if (process.env.NODE_ENV === 'production') {
+        logger.warn('SMTP connection failed - Email notifications disabled');
+      } else {
+        logger.error('SMTP connection verification failed:', error.message);
+      }
       return false;
     }
   }

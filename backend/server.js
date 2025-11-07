@@ -264,16 +264,20 @@ server.listen(PORT, HOST, async () => {
   logger.info(`🚀 Server running on ${HOST}:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
   logger.info(`📱 Network access: http://<your-local-ip>:${PORT}`);
   
-  // Verify SMTP connection
+  // Verify SMTP connection (non-blocking, with timeout)
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-    const smtpConnected = await emailService.verifyConnection();
-    if (smtpConnected) {
-      logger.info('✅ SMTP connection verified - Email notifications enabled');
-    } else {
-      logger.warn('⚠️  SMTP connection failed - Email notifications disabled');
-    }
+    // Don't await - let it happen in background to not delay startup
+    emailService.verifyConnection().then(smtpConnected => {
+      if (smtpConnected) {
+        logger.info('✅ SMTP connection verified - Email notifications enabled');
+      } else {
+        logger.warn('⚠️  SMTP connection failed - Email notifications disabled (This is normal on Render free tier)');
+      }
+    }).catch(() => {
+      logger.warn('⚠️  SMTP verification error - Email notifications disabled');
+    });
   } else {
-    logger.warn('⚠️  SMTP credentials not configured - Email notifications disabled');
+    logger.info('ℹ️  SMTP credentials not configured - Email notifications disabled');
   }
 });
 
