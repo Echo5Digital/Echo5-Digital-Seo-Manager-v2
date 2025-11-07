@@ -69,17 +69,23 @@ async function getOverview(propertyId, startDate = '30daysAgo', endDate = 'today
       metrics: [
         { name: 'totalUsers' },
         { name: 'sessions' },
-        { name: 'engagedSessions' },
+        { name: 'screenPageViews' },
         { name: 'averageSessionDuration' },
         { name: 'bounceRate' },
-        { name: 'conversions' },
+        { name: 'engagedSessions' },
       ],
     });
 
+    // Parse metric values
+    const metricValues = response.rows?.[0]?.metricValues || [];
+    
     return {
-      success: true,
-      data: response,
-      metrics: response.rows?.[0]?.metricValues || [],
+      totalUsers: parseInt(metricValues[0]?.value || 0),
+      sessions: parseInt(metricValues[1]?.value || 0),
+      screenPageViews: parseInt(metricValues[2]?.value || 0),
+      averageSessionDuration: parseFloat(metricValues[3]?.value || 0),
+      bounceRate: parseFloat(metricValues[4]?.value || 0) * 100, // Convert to percentage
+      engagedSessions: parseInt(metricValues[5]?.value || 0),
     };
   } catch (error) {
     console.error('GA4 getOverview error:', error.message);
@@ -105,20 +111,33 @@ async function getLandingPages(propertyId, startDate = '30daysAgo', endDate = 't
     const [response] = await client.runReport({
       property: `properties/${propertyId}`,
       dateRanges: [{ startDate, endDate }],
-      dimensions: [{ name: 'landingPagePlusQueryString' }],
-      metrics: [
-        { name: 'sessions' },
-        { name: 'engagedSessions' },
-        { name: 'bounceRate' },
-        { name: 'conversions' },
+      dimensions: [
+        { name: 'pageTitle' },
+        { name: 'pagePath' }
       ],
-      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+      metrics: [
+        { name: 'screenPageViews' },
+        { name: 'totalUsers' },
+        { name: 'sessions' },
+      ],
+      orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
       limit,
     });
 
+    // Parse the response
+    const pages = (response.rows || []).map(row => ({
+      pageTitle: row.dimensionValues?.[0]?.value || '',
+      pagePath: row.dimensionValues?.[1]?.value || '',
+      path: row.dimensionValues?.[1]?.value || '',
+      views: parseInt(row.metricValues?.[0]?.value || 0),
+      screenPageViews: parseInt(row.metricValues?.[0]?.value || 0),
+      users: parseInt(row.metricValues?.[1]?.value || 0),
+      totalUsers: parseInt(row.metricValues?.[1]?.value || 0),
+      sessions: parseInt(row.metricValues?.[2]?.value || 0),
+    }));
+
     return {
-      success: true,
-      data: response.rows || [],
+      pages,
     };
   } catch (error) {
     console.error('GA4 getLandingPages error:', error.message);
@@ -151,6 +170,8 @@ async function getTrafficSources(propertyId, startDate = '30daysAgo', endDate = 
         { name: 'sessions' },
         { name: 'totalUsers' },
         { name: 'engagedSessions' },
+        { name: 'bounceRate' },
+        { name: 'averageSessionDuration' },
       ],
       orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
       limit: 20,
@@ -223,25 +244,111 @@ async function getRealtimeData(propertyId) {
   }
 
   try {
-    const [response] = await client.runRealtimeReport({
-      property: `properties/${propertyId}`,
-      dimensions: [
-        { name: 'country' },
-        { name: 'deviceCategory' },
-        { name: 'unifiedScreenName' }
-      ],
-      metrics: [
-        { name: 'activeUsers' }
-      ],
-      limit: 10
-    });
+    let totalActiveUsers = 0;
+    let minuteData = [];
+    let activePages = [];
+    let activeSources = [];
+    let activeEvents = [];
+
+    // Query 1: Get total active users
+    try {
+      const [totalResponse] = await client.runRealtimeReport({
+        property: `properties/${propertyId}`,
+        metrics: [{ name: 'activeUsers' }]
+      });
+      totalActiveUsers = totalResponse.rows && totalResponse.rows.length > 0
+        ? parseInt(totalResponse.rows[0].metricValues[0]?.value || 0)
+        : 0;
+    } catch (error) {
+      console.error('Failed to fetch total active users:', error.message);
+    }
+
+    // Query 2: Get active users by minute
+    try {
+      const [minuteResponse] = await client.runRealtimeReport({
+        property: `properties/${propertyId}`,
+        dimensions: [{ name: 'minutesAgo' }],
+        metrics: [{ name: 'activeUsers' }]
+      });
+      minuteData = minuteResponse.rows?.map(row => ({
+        minutesAgo: parseInt(row.dimensionValues[0]?.value || 0),
+        activeUsers: parseInt(row.metricValues[0]?.value || 0)
+      })).sort((a, b) => a.minutesAgo - b.minutesAgo) || [];
+    } catch (error) {
+      console.error('Failed to fetch minute data:', error.message);
+    }
+
+    // Query 3: Get page views by page (using unifiedScreenName which combines page and screen)
+    try {
+      const [pageResponse] = await client.runRealtimeReport({
+        property: `properties/${propertyId}`,
+        dimensions: [{ name: 'unifiedScreenName' }],
+        metrics: [{ name: 'screenPageViews' }]
+      });
+      activePages = (pageResponse.rows?.map(row => ({
+        page: row.dimensionValues[0]?.value || '(not set)',
+        activeUsers: 0, // Not available in this query
+        views: parseInt(row.metricValues[0]?.value || 0)
+      })) || []).sort((a, b) => b.views - a.views).slice(0, 10);
+    } catch (error) {
+      console.error('Failed to fetch page data with unifiedScreenName:', error.message);
+    }
+
+    // Query 4: Get active users by city (as a proxy for geographic distribution)
+    try {
+      const [sourceResponse] = await client.runRealtimeReport({
+        property: `properties/${propertyId}`,
+        dimensions: [{ name: 'city' }],
+        metrics: [{ name: 'activeUsers' }]
+      });
+      activeSources = (sourceResponse.rows?.map(row => ({
+        source: row.dimensionValues[0]?.value || '(not set)',
+        activeUsers: parseInt(row.metricValues[0]?.value || 0)
+      })) || []).sort((a, b) => b.activeUsers - a.activeUsers).slice(0, 10);
+    } catch (error) {
+      console.error('Failed to fetch city data:', error.message);
+      // If city fails, just show "All Users"
+      activeSources = [{
+        source: 'All Users',
+        activeUsers: totalActiveUsers
+      }];
+    }
+
+    // Query 5: Get event counts
+    try {
+      const [eventResponse] = await client.runRealtimeReport({
+        property: `properties/${propertyId}`,
+        dimensions: [{ name: 'eventName' }],
+        metrics: [{ name: 'eventCount' }]
+      });
+      activeEvents = (eventResponse.rows?.map(row => ({
+        event: row.dimensionValues[0]?.value || '(not set)',
+        eventCount: parseInt(row.metricValues[0]?.value || 0)
+      })) || []).sort((a, b) => b.eventCount - a.eventCount).slice(0, 10);
+    } catch (error) {
+      console.error('Failed to fetch event data:', error.message);
+    }
+
+    // Calculate time-based totals
+    const last30Min = totalActiveUsers;
+    const last5Min = minuteData
+      .filter(d => d.minutesAgo >= 0 && d.minutesAgo < 5)
+      .reduce((sum, d) => sum + d.activeUsers, 0);
+    const lastMinute = minuteData.find(d => d.minutesAgo === 0)?.activeUsers || totalActiveUsers;
 
     return {
-      success: true,
-      data: response,
+      activeUsers: lastMinute,
+      last30Min,
+      last5Min,
+      lastMinute,
+      minuteData,
+      activePages,
+      activeSources,
+      activeEvents,
+      timestamp: new Date().toISOString()
     };
   } catch (error) {
-    console.error('GA4 getRealtimeData error:', error.message);
+    console.error('GA4 getRealtimeData error:', error);
     throw new Error(`Failed to fetch realtime data: ${error.message}`);
   }
 }
@@ -589,6 +696,43 @@ async function listProperties() {
   }
 }
 
+/**
+ * Get device breakdown data
+ * @param {string} propertyId - GA4 Property ID
+ * @param {string} startDate - Start date
+ * @param {string} endDate - End date
+ * @returns {Promise<Array>} Device breakdown with users, sessions, bounce rate
+ */
+async function getDeviceData(propertyId, startDate = '30daysAgo', endDate = 'today') {
+  const client = getGA4Client();
+  if (!client) {
+    throw new Error('GA4 client not initialized');
+  }
+
+  try {
+    const [response] = await client.runReport({
+      property: `properties/${propertyId}`,
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: 'deviceCategory' }],
+      metrics: [
+        { name: 'totalUsers' },
+        { name: 'sessions' },
+        { name: 'bounceRate' },
+      ],
+    });
+
+    return response.rows?.map(row => ({
+      device: row.dimensionValues[0]?.value || 'Unknown',
+      users: parseInt(row.metricValues[0]?.value || 0),
+      sessions: parseInt(row.metricValues[1]?.value || 0),
+      bounceRate: parseFloat(row.metricValues[2]?.value || 0) * 100,
+    })) || [];
+  } catch (error) {
+    console.error('GA4 getDeviceData error:', error.message);
+    throw new Error(`Failed to fetch device data: ${error.message}`);
+  }
+}
+
 module.exports = {
   getOverview,
   getLandingPages,
@@ -603,4 +747,5 @@ module.exports = {
   getCustomReport,
   getBatchReports,
   listProperties,
+  getDeviceData,
 };

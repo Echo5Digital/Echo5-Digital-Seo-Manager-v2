@@ -76,11 +76,19 @@ router.get('/clients/:id/ga4/overview', protect, async (req, res, next) => {
     }
 
     const { startDate = '30daysAgo', endDate = 'today' } = req.query;
-    const data = await ga4Service.getOverview(client.integrations.ga4PropertyId, startDate, endDate);
+    
+    // Fetch overview metrics and top pages
+    const [overview, landingPages] = await Promise.all([
+      ga4Service.getOverview(client.integrations.ga4PropertyId, startDate, endDate),
+      ga4Service.getLandingPages(client.integrations.ga4PropertyId, startDate, endDate, 10)
+    ]);
 
     res.json({
       status: 'success',
-      data,
+      data: {
+        ...overview,
+        topPages: landingPages.pages || []
+      },
     });
   } catch (error) {
     next(error);
@@ -132,11 +140,23 @@ router.get('/clients/:id/ga4/traffic-sources', protect, async (req, res, next) =
     }
 
     const { startDate = '30daysAgo', endDate = 'today' } = req.query;
-    const data = await ga4Service.getLandingPages(client.integrations.ga4PropertyId, startDate, endDate);
+    const result = await ga4Service.getTrafficSources(client.integrations.ga4PropertyId, startDate, endDate);
+
+    // Parse the raw GA4 response into frontend-friendly format
+    const trafficSources = (result.data || []).map(row => ({
+      name: `${row.dimensionValues[0]?.value || '(direct)'} / ${row.dimensionValues[1]?.value || '(none)'}`,
+      source: row.dimensionValues[0]?.value || '(direct)',
+      medium: row.dimensionValues[1]?.value || '(none)',
+      sessions: parseInt(row.metricValues[0]?.value || 0),
+      users: parseInt(row.metricValues[1]?.value || 0),
+      engagedSessions: parseInt(row.metricValues[2]?.value || 0),
+      bounceRate: parseFloat(row.metricValues[3]?.value || 0),
+      avgSessionDuration: parseFloat(row.metricValues[4]?.value || 0)
+    }));
 
     res.json({
       status: 'success',
-      data,
+      data: trafficSources,
     });
   } catch (error) {
     next(error);
@@ -160,6 +180,34 @@ router.get('/clients/:id/ga4/realtime', protect, async (req, res, next) => {
     }
 
     const data = await ga4Service.getRealtimeData(client.integrations.ga4PropertyId);
+
+    res.json({
+      status: 'success',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/integrations/clients/:id/ga4/devices
+ * @desc    Get GA4 device breakdown data
+ * @access  Private
+ */
+router.get('/clients/:id/ga4/devices', protect, async (req, res, next) => {
+  try {
+    const client = await Client.findById(req.params.id);
+    
+    if (!client || !client.integrations?.ga4PropertyId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'GA4 not configured',
+      });
+    }
+
+    const { startDate = '30daysAgo', endDate = 'today' } = req.query;
+    const data = await ga4Service.getDeviceData(client.integrations.ga4PropertyId, startDate, endDate);
 
     res.json({
       status: 'success',
