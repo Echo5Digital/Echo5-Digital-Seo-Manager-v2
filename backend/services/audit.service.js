@@ -2,6 +2,8 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const { logger } = require('../utils/logger');
 const Page = require('../models/Page.model');
+const Client = require('../models/Client.model');
+const wordPressPluginService = require('./wordpress-plugin.service');
 
 // Rotating user agents to avoid detection
 const USER_AGENTS = [
@@ -72,16 +74,91 @@ class AuditService {
 
   /**
    * Perform full site audit
-   * @param {string} domain - Domain to audit
+   * @param {string} domainOrClientId - Domain to audit OR Client MongoDB ID
+   * @param {Object} options - Audit options
    * @returns {Promise<Object>} Audit results
    */
-  async performFullAudit(domain) {
+  async performFullAudit(domainOrClientId, options = {}) {
     try {
-      const baseUrl = this.formatUrl(domain);
+      let baseUrl;
+      let client = null;
+      let dataSource = 'scraping';
+      let discoveredPages = [];
+      
+      // Check if input is a MongoDB ObjectID (24 char hex) or domain
+      const isClientId = /^[0-9a-fA-F]{24}$/.test(domainOrClientId);
+      
+      if (isClientId) {
+        // Fetch client from database
+        client = await Client.findById(domainOrClientId);
+        
+        if (!client) {
+          throw new Error(`Client not found: ${domainOrClientId}`);
+        }
+        
+        baseUrl = this.formatUrl(client.website || client.domain);
+        logger.info(`🎯 Auditing client: ${client.name} (${client.domain})`);
+        
+        // Strategy: Try WordPress plugin first if enabled
+        if (client.dataSource === 'auto' || client.dataSource === 'wordpress_plugin') {
+          if (client.wordpressPlugin?.enabled && client.wordpressPlugin?.status === 'active') {
+            try {
+              logger.info(`🔌 Attempting to fetch data via WordPress Plugin for ${client.domain}`);
+              
+              const pluginResult = await wordPressPluginService.fetchClientContent(client._id, {
+                includeContent: true,
+                perPage: 100,
+                maxPages: options.maxPages || null
+              });
+              
+              if (pluginResult.success && pluginResult.items.length > 0) {
+                logger.info(`✅ WordPress Plugin fetch successful: ${pluginResult.items.length} pages`);
+                
+                // Convert plugin data to page format
+                discoveredPages = pluginResult.items.map(item => ({
+                  url: item.url,
+                  title: item.title,
+                  type: item.type,
+                  wordCount: item.content?.word_count || 0,
+                  // Store full plugin data for later analysis
+                  pluginData: item
+                }));
+                
+                dataSource = 'wordpress_plugin';
+                
+                logger.info(`🎉 Using ${discoveredPages.length} pages from WordPress Plugin`);
+              }
+            } catch (error) {
+              logger.error(`❌ WordPress Plugin failed for ${client.domain}:`, error.message);
+              
+              // If plugin-only mode, throw error
+              if (client.dataSource === 'wordpress_plugin') {
+                throw new Error(`WordPress plugin fetch failed: ${error.message}`);
+              }
+              
+              // Otherwise, log and fall back to scraping
+              logger.info(`🔄 Falling back to web scraping for ${client.domain}`);
+            }
+          } else {
+            logger.info(`⚠️ WordPress plugin not active for ${client.domain} (enabled: ${client.wordpressPlugin?.enabled}, status: ${client.wordpressPlugin?.status})`);
+          }
+        }
+        
+        // Force scraping if dataSource is set to 'scraping'
+        if (client.dataSource === 'scraping') {
+          logger.info(`🕷️ Scraping mode forced for ${client.domain}`);
+        }
+      } else {
+        // Direct domain audit (legacy support)
+        baseUrl = this.formatUrl(domainOrClientId);
+        logger.info(`🌐 Auditing domain: ${domainOrClientId}`);
+      }
+      
       const memoryConfig = this.getMemoryTier();
       
       console.log(`🧠 Memory tier: ${memoryConfig.tier.toUpperCase()} (${Math.round(require('os').totalmem() / 1024 / 1024)}MB available)`);
       console.log(`📊 Config: Discovery=${memoryConfig.maxDiscovery}, Analysis=${memoryConfig.maxAnalysis}, Batch=${memoryConfig.batchSize}`);
+      console.log(`📡 Data Source: ${dataSource.toUpperCase()}`);
       
       const results = {
         // Page Discovery & Analysis
@@ -116,12 +193,22 @@ class AuditService {
         
         // Metadata
         memoryTier: memoryConfig.tier,
-        auditConfig: memoryConfig
+        auditConfig: memoryConfig,
+        dataSource: dataSource, // Track which method was used
+        clientId: client?._id,
+        clientName: client?.name
       };
 
-      // Step 1: Discover pages from the website
-      console.log('🚀 Step 1: Starting page discovery...');
-      const discoveredPages = await this.discoverPages(baseUrl, memoryConfig.maxDiscovery);
+      // Step 1: Discover pages (or use plugin data)
+      if (discoveredPages.length === 0) {
+        // Traditional web scraping
+        console.log('🚀 Step 1: Starting page discovery via web scraping...');
+        discoveredPages = await this.discoverPages(baseUrl, memoryConfig.maxDiscovery);
+        dataSource = 'scraping';
+      } else {
+        console.log('🚀 Step 1: Using pages from WordPress Plugin (skipping discovery)...');
+      }
+      
       results.discoveredPages = discoveredPages;
       console.log('📋 Step 1 completed. Pages discovered:', discoveredPages.length);
       
@@ -214,20 +301,20 @@ class AuditService {
       if (memoryConfig.enableDeepAnalysis) {
         // Full analysis for medium/high memory
         await Promise.allSettled([
-          this.checkBrokenLinks(baseUrl).then(data => results.brokenLinks = data).catch(() => []),
-          this.checkMetaTags(baseUrl).then(data => results.metaIssues = data).catch(() => []),
-          this.checkAltTags(baseUrl).then(data => results.missingAltTags = data).catch(() => []),
-          this.checkRobotsTxt(baseUrl).then(data => results.robotsTxtIssues = data).catch(() => []),
-          this.checkSitemap(baseUrl).then(data => results.sitemapIssues = data).catch(() => []),
-          this.checkSSL(baseUrl).then(data => results.sslIssues = data).catch(() => []),
-          this.checkSchema(baseUrl).then(data => results.schemaIssues = data).catch(() => []),
+          this.checkBrokenLinks(baseUrl).then(data => { results.brokenLinks = Array.isArray(data) ? data : []; return data; }).catch(() => { results.brokenLinks = []; return []; }),
+          this.checkMetaTags(baseUrl).then(data => { results.metaIssues = Array.isArray(data) ? data : []; return data; }).catch(() => { results.metaIssues = []; return []; }),
+          this.checkAltTags(baseUrl).then(data => { results.missingAltTags = Array.isArray(data) ? data : []; return data; }).catch(() => { results.missingAltTags = []; return []; }),
+          this.checkRobotsTxt(baseUrl).then(data => { results.robotsTxtIssues = Array.isArray(data) ? data : []; return data; }).catch(() => { results.robotsTxtIssues = []; return []; }),
+          this.checkSitemap(baseUrl).then(data => { results.sitemapIssues = Array.isArray(data) ? data : []; return data; }).catch(() => { results.sitemapIssues = []; return []; }),
+          this.checkSSL(baseUrl).then(data => { results.sslIssues = Array.isArray(data) ? data : []; return data; }).catch(() => { results.sslIssues = []; return []; }),
+          this.checkSchema(baseUrl).then(data => { results.schemaIssues = Array.isArray(data) ? data : []; return data; }).catch(() => { results.schemaIssues = []; return []; }),
         ]);
       } else {
         // Lightweight checks only for low memory
         await Promise.allSettled([
-          this.checkRobotsTxt(baseUrl).then(data => results.robotsTxtIssues = data).catch(() => []),
-          this.checkSitemap(baseUrl).then(data => results.sitemapIssues = data).catch(() => []),
-          this.checkSSL(baseUrl).then(data => results.sslIssues = data).catch(() => []),
+          this.checkRobotsTxt(baseUrl).then(data => { results.robotsTxtIssues = Array.isArray(data) ? data : []; return data; }).catch(() => { results.robotsTxtIssues = []; return []; }),
+          this.checkSitemap(baseUrl).then(data => { results.sitemapIssues = Array.isArray(data) ? data : []; return data; }).catch(() => { results.sitemapIssues = []; return []; }),
+          this.checkSSL(baseUrl).then(data => { results.sslIssues = Array.isArray(data) ? data : []; return data; }).catch(() => { results.sslIssues = []; return []; }),
         ]);
         console.log('⚠️ Skipped heavy analysis (broken links, meta tags, alt tags, schema) due to low memory');
       }

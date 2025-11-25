@@ -42,11 +42,19 @@ export default function ClientIntegrations() {
   const [selectedGbpAccount, setSelectedGbpAccount] = useState('')
   const [gbpRateLimitCountdown, setGbpRateLimitCountdown] = useState(0)
 
+  // WordPress Plugin state
+  const [wpPluginApiKey, setWpPluginApiKey] = useState('')
+  const [wpPluginSiteUrl, setWpPluginSiteUrl] = useState('')
+  const [wpPluginStatus, setWpPluginStatus] = useState(null)
+  const [testingWpPlugin, setTestingWpPlugin] = useState(false)
+  const [savingWpPlugin, setSavingWpPlugin] = useState(false)
+
   const SERVICE_ACCOUNT_EMAIL = 'echo5-analytics-service@capable-epigram-473210-v8.iam.gserviceaccount.com'
 
   useEffect(() => {
     if (token && id) {
       fetchClient()
+      fetchWpPluginStatus()
     }
     
     // Listen for messages from OAuth popup
@@ -82,11 +90,125 @@ export default function ClientIntegrations() {
         setGa4PropertyId(fetchedClient?.integrations?.ga4PropertyId || '')
         setGscSiteUrl(fetchedClient?.integrations?.gscSiteUrl || '')
         setGbpLocationIds(fetchedClient?.integrations?.gbpLocationIds || [])
+        setWpPluginSiteUrl(fetchedClient?.website || '')
       }
     } catch (error) {
       console.error('Failed to fetch client:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Fetch WordPress Plugin Status
+  const fetchWpPluginStatus = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/clients/${id}/wordpress-plugin/status`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const result = await response.json()
+      console.log('WordPress Plugin Status:', result)
+      if (result.status === 'success') {
+        console.log('Setting WP Plugin Status:', result.data)
+        setWpPluginStatus(result.data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch WordPress plugin status:', error)
+    }
+  }
+
+  // Configure WordPress Plugin
+  const configureWpPlugin = async () => {
+    console.log('Configure Plugin clicked!')
+    console.log('API Key:', wpPluginApiKey ? 'Present' : 'Missing')
+    console.log('Site URL:', wpPluginSiteUrl)
+    
+    if (!wpPluginApiKey) {
+      console.log('No API key - showing error')
+      setMessage({ type: 'error', text: 'Please enter an API key' })
+      return
+    }
+
+    setSavingWpPlugin(true)
+    setMessage(null)
+    console.log('Sending configure request...')
+
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE}/api/clients/${id}/wordpress-plugin/configure`
+      console.log('POST to:', url)
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          apiKey: wpPluginApiKey,
+          siteUrl: wpPluginSiteUrl || client?.website
+        }),
+      })
+      
+      console.log('Response status:', response.status)
+      const result = await response.json()
+      console.log('Response data:', result)
+
+      if (result.status === 'success') {
+        console.log('Configuration successful!')
+        setMessage({ type: 'success', text: 'WordPress plugin configured successfully!' })
+        setWpPluginApiKey('') // Clear for security
+        await fetchWpPluginStatus()
+      } else {
+        console.error('Configuration failed:', result.message)
+        setMessage({ type: 'error', text: result.message || 'Failed to configure plugin' })
+      }
+    } catch (error) {
+      console.error('Failed to configure WordPress plugin:', error)
+      setMessage({ type: 'error', text: `Failed to configure WordPress plugin: ${error.message}` })
+    } finally {
+      setSavingWpPlugin(false)
+      console.log('Configure plugin finished')
+    }
+  }
+
+  // Test WordPress Plugin Connection
+  const testWpPlugin = async () => {
+    setTestingWpPlugin(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/api/clients/${id}/wordpress-plugin/test`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      const result = await response.json()
+
+      if (result.status === 'success' && result.data.success) {
+        setMessage({ 
+          type: 'success', 
+          text: `Plugin connected! Version: ${result.data.data?.version || 'Unknown'}` 
+        })
+        fetchWpPluginStatus()
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: result.data?.message || 'Plugin connection test failed' 
+        })
+      }
+    } catch (error) {
+      console.error('Failed to test WordPress plugin:', error)
+      setMessage({ type: 'error', text: 'Failed to test plugin connection' })
+    } finally {
+      setTestingWpPlugin(false)
     }
   }
 
@@ -715,6 +837,160 @@ export default function ClientIntegrations() {
                 )}
               </>
             )}
+          </div>
+
+          {/* WordPress Plugin Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                  WordPress Plugin Integration
+                  {wpPluginStatus?.status === 'active' && (
+                    <CheckCircleIcon className="h-5 w-5 text-green-500 ml-2" />
+                  )}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Direct content access via Echo5 SEO Exporter plugin (100x faster than scraping)
+                </p>
+              </div>
+            </div>
+
+            {/* Plugin Status */}
+            {wpPluginStatus ? (
+              wpPluginStatus.hasApiKey ? (
+                <div className={`mb-4 p-3 rounded-lg border ${
+                  wpPluginStatus.status === 'active' 
+                    ? 'bg-green-50 border-green-200' 
+                    : wpPluginStatus.status === 'error'
+                    ? 'bg-red-50 border-red-200'
+                    : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">
+                        Status: <span className={`${
+                          wpPluginStatus.status === 'active' ? 'text-green-700' :
+                          wpPluginStatus.status === 'error' ? 'text-red-700' :
+                          'text-gray-700'
+                        }`}>
+                          {wpPluginStatus.status?.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </p>
+                      {wpPluginStatus.pluginVersion && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Plugin v{wpPluginStatus.pluginVersion}
+                        </p>
+                      )}
+                      {wpPluginStatus.lastSync && (
+                        <p className="text-xs text-gray-600">
+                          Last sync: {new Date(wpPluginStatus.lastSync).toLocaleString()}
+                        </p>
+                      )}
+                      {wpPluginStatus.errorMessage && (
+                        <p className="text-xs text-red-600 mt-1">
+                          Error: {wpPluginStatus.errorMessage}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={testWpPlugin}
+                      disabled={testingWpPlugin}
+                      className="ml-4 px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2 whitespace-nowrap"
+                      title={testingWpPlugin ? 'Testing...' : 'Click to test plugin connection'}
+                    >
+                      {testingWpPlugin ? (
+                        <>
+                          <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                          Testing...
+                        </>
+                      ) : (
+                        'Test Connection'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    ⚠️ No API key configured. Please enter an API key below and click "Configure Plugin".
+                  </p>
+                </div>
+              )
+            ) : (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-sm text-gray-600">
+                  Loading plugin status...
+                </p>
+              </div>
+            )}
+
+            {/* Configuration Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  WordPress Site URL
+                </label>
+                <input
+                  type="url"
+                  value={wpPluginSiteUrl}
+                  onChange={(e) => setWpPluginSiteUrl(e.target.value)}
+                  placeholder="https://your-site.com"
+                  disabled={!canEdit}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Plugin API Key
+                  <span className="text-xs text-gray-500 ml-2">
+                    (Get from WordPress → Settings → Echo5 SEO Exporter)
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={wpPluginApiKey}
+                  onChange={(e) => setWpPluginApiKey(e.target.value)}
+                  placeholder="echo5_xxxxxxxxxxxxx"
+                  disabled={!canEdit}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 font-mono text-sm"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={configureWpPlugin}
+                  disabled={!wpPluginApiKey || savingWpPlugin || !canEdit}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  {savingWpPlugin ? (
+                    <>
+                      <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      {wpPluginStatus?.hasApiKey ? 'Update' : 'Configure'} Plugin
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Installation Instructions */}
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm font-medium text-blue-900 mb-2">
+                  📦 Plugin Installation:
+                </p>
+                <ol className="text-xs text-blue-800 space-y-1 ml-4 list-decimal">
+                  <li>Download plugin from <code className="bg-white px-1 rounded">wordpress-plugin/echo5-seo-exporter.zip</code></li>
+                  <li>In WordPress: Plugins → Add New → Upload Plugin</li>
+                  <li>Activate the plugin</li>
+                  <li>Go to Settings → Echo5 SEO Exporter</li>
+                  <li>Copy the API key and paste it above</li>
+                  <li>Click "Configure Plugin" then "Test Connection"</li>
+                </ol>
+              </div>
+            </div>
           </div>
 
           {/* Save Button */}

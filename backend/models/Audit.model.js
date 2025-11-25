@@ -225,13 +225,8 @@ const auditSchema = new mongoose.Schema({
       severity: String,
     }],
     
-    // Schema Markup
-    schemaIssues: [{
-      url: String,
-      issue: String,
-      type: String,
-      severity: String,
-    }],
+    // Schema Markup - Using Mixed type to accept any shape without casting errors
+    schemaIssues: [mongoose.Schema.Types.Mixed],
     
     // Internal Linking
     internalLinkingIssues: [{
@@ -304,6 +299,12 @@ const auditSchema = new mongoose.Schema({
     longTermActions: [String],
     estimatedImpact: String,
     analyzedAt: Date,
+  },
+  
+  dataSource: {
+    type: String,
+    enum: ['scraping', 'wordpress_plugin', 'auto'],
+    default: 'scraping',
   },
   
   performedBy: {

@@ -6,6 +6,8 @@ const User = require('../models/User.model');
 const { protect, authorize } = require('../middleware/auth');
 const { validate } = require('../middleware/validator');
 const aiService = require('../services/ai.service');
+const wordPressPluginService = require('../services/wordpress-plugin.service');
+const Encryption = require('../utils/encryption');
 
 /**
  * @route   GET /api/clients
@@ -481,4 +483,220 @@ router.get('/:id/health', protect, async (req, res, next) => {
   }
 });
 
+/**
+ * @route   POST /api/clients/:id/wordpress-plugin/configure
+ * @desc    Configure WordPress plugin for client
+ * @access  Private (Boss/Manager only)
+ */
+router.post(
+  '/:id/wordpress-plugin/configure',
+  protect,
+  authorize('Boss', 'Manager'),
+  [
+    body('apiKey').notEmpty().withMessage('API key is required'),
+    body('siteUrl').optional().isURL().withMessage('Invalid site URL'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { apiKey, siteUrl } = req.body;
+      
+      const client = await Client.findById(req.params.id);
+      
+      if (!client) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Client not found',
+        });
+      }
+      
+      // Encrypt API key
+      const encryptedKey = Encryption.encrypt(apiKey);
+      
+      // Update client
+      await Client.updateOne(
+        { _id: req.params.id },
+        {
+          'wordpressPlugin.apiKey': encryptedKey,
+          'wordpressPlugin.siteUrl': siteUrl || client.website,
+          'wordpressPlugin.enabled': true,
+          'wordpressPlugin.status': 'not_configured', // Will be set to 'active' after successful test
+        }
+      );
+      
+      res.json({
+        status: 'success',
+        message: 'WordPress plugin configured successfully',
+        data: {
+          enabled: true,
+          siteUrl: siteUrl || client.website,
+          status: 'not_configured'
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error configuring WordPress plugin:', error);
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route   POST /api/clients/:id/wordpress-plugin/test
+ * @desc    Test WordPress plugin connection
+ * @access  Private
+ */
+router.post('/:id/wordpress-plugin/test', protect, async (req, res, next) => {
+  try {
+    const client = await Client.findById(req.params.id);
+    
+    if (!client) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Client not found',
+      });
+    }
+    
+    if (!client.wordpressPlugin?.enabled) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'WordPress plugin not configured for this client',
+      });
+    }
+    
+    const result = await wordPressPluginService.testClientConnection(req.params.id);
+    
+    res.json({
+      status: result.success ? 'success' : 'error',
+      data: result
+    });
+  } catch (error) {
+    console.error('❌ Error testing WordPress plugin:', error);
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/clients/:id/wordpress-plugin/status
+ * @desc    Get WordPress plugin status for client
+ * @access  Private
+ */
+router.get('/:id/wordpress-plugin/status', protect, async (req, res, next) => {
+  try {
+    // Need to select apiKey to check if it exists (but don't return it)
+    const client = await Client.findById(req.params.id).select('+wordpressPlugin.apiKey');
+    
+    if (!client) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Client not found',
+      });
+    }
+    
+    const pluginData = client.wordpressPlugin || {};
+    
+    res.json({
+      status: 'success',
+      data: {
+        enabled: pluginData.enabled || false,
+        status: pluginData.status || 'not_configured',
+        siteUrl: pluginData.siteUrl,
+        lastSync: pluginData.lastSync,
+        lastHealthCheck: pluginData.lastHealthCheck,
+        pluginVersion: pluginData.pluginVersion,
+        errorMessage: pluginData.errorMessage,
+        hasApiKey: !!pluginData.apiKey
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching WordPress plugin status:', error);
+    next(error);
+  }
+});
+
+/**
+ * @route   POST /api/clients/:id/wordpress-plugin/disable
+ * @desc    Disable WordPress plugin for client
+ * @access  Private (Boss/Manager only)
+ */
+router.post(
+  '/:id/wordpress-plugin/disable',
+  protect,
+  authorize('Boss', 'Manager'),
+  async (req, res, next) => {
+    try {
+      const client = await Client.findById(req.params.id);
+      
+      if (!client) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Client not found',
+        });
+      }
+      
+      await Client.updateOne(
+        { _id: req.params.id },
+        {
+          'wordpressPlugin.enabled': false,
+          'wordpressPlugin.status': 'disconnected'
+        }
+      );
+      
+      res.json({
+        status: 'success',
+        message: 'WordPress plugin disabled successfully'
+      });
+    } catch (error) {
+      console.error('❌ Error disabling WordPress plugin:', error);
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route   PUT /api/clients/:id/data-source
+ * @desc    Update data source preference (auto/wordpress_plugin/scraping)
+ * @access  Private (Boss/Manager only)
+ */
+router.put(
+  '/:id/data-source',
+  protect,
+  authorize('Boss', 'Manager'),
+  [
+    body('dataSource')
+      .isIn(['auto', 'wordpress_plugin', 'scraping'])
+      .withMessage('Invalid data source. Must be: auto, wordpress_plugin, or scraping'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { dataSource } = req.body;
+      
+      const client = await Client.findByIdAndUpdate(
+        req.params.id,
+        { dataSource },
+        { new: true, runValidators: true }
+      );
+      
+      if (!client) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Client not found',
+        });
+      }
+      
+      res.json({
+        status: 'success',
+        message: 'Data source updated successfully',
+        data: {
+          dataSource: client.dataSource
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error updating data source:', error);
+      next(error);
+    }
+  }
+);
+
 module.exports = router;
+

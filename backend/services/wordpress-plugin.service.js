@@ -1,13 +1,167 @@
 const axios = require('axios');
 const { logger } = require('../utils/logger');
+const Encryption = require('../utils/encryption');
+const Client = require('../models/Client.model');
 
 /**
  * WordPress Plugin Data Fetcher Service
  * 
  * Uses the Echo5 SEO Exporter plugin to fetch content directly from WordPress
  * without scraping. This eliminates timeout, blocking, and incomplete data issues.
+ * 
+ * Now supports per-client encrypted API key storage in MongoDB.
  */
 class WordPressPluginService {
+  
+  /**
+   * Get decrypted API key for a client
+   * @param {Object} client - Client document (must include wordpressPlugin.apiKey)
+   * @returns {string|null} Decrypted API key or null
+   */
+  async getClientApiKey(client) {
+    try {
+      if (!client.wordpressPlugin?.apiKey) {
+        return null;
+      }
+      
+      return Encryption.decrypt(client.wordpressPlugin.apiKey);
+    } catch (error) {
+      logger.error(`Failed to decrypt API key for client ${client._id}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Test connection for a specific client
+   * Updates client status in database based on result
+   * @param {string} clientId - Client MongoDB ID
+   * @returns {Promise<Object>} Connection test result
+   */
+  async testClientConnection(clientId) {
+    try {
+      const client = await Client.findById(clientId)
+        .select('+wordpressPlugin.apiKey'); // Explicitly select encrypted API key
+      
+      if (!client) {
+        throw new Error('Client not found');
+      }
+      
+      if (!client.wordpressPlugin?.enabled) {
+        return {
+          success: false,
+          message: 'WordPress plugin not enabled for this client'
+        };
+      }
+      
+      const apiKey = await this.getClientApiKey(client);
+      
+      if (!apiKey) {
+        return {
+          success: false,
+          message: 'No API key configured for this client'
+        };
+      }
+      
+      const siteUrl = client.wordpressPlugin.siteUrl || client.website;
+      const result = await this.testConnection(siteUrl, apiKey);
+      
+      // Update client status in database
+      const updateData = {
+        'wordpressPlugin.lastHealthCheck': new Date(),
+      };
+      
+      if (result.success) {
+        updateData['wordpressPlugin.status'] = 'active';
+        updateData['wordpressPlugin.pluginVersion'] = result.data?.version;
+        updateData['wordpressPlugin.errorMessage'] = null;
+      } else {
+        updateData['wordpressPlugin.status'] = result.pluginInstalled ? 'error' : 'disconnected';
+        updateData['wordpressPlugin.errorMessage'] = result.message;
+      }
+      
+      await Client.updateOne({ _id: clientId }, updateData);
+      
+      logger.info(`WordPress plugin health check for ${client.domain}: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+      
+      return result;
+      
+    } catch (error) {
+      logger.error(`testClientConnection error for client ${clientId}:`, error);
+      
+      // Update client with error status
+      await Client.updateOne(
+        { _id: clientId },
+        {
+          'wordpressPlugin.status': 'error',
+          'wordpressPlugin.errorMessage': error.message,
+          'wordpressPlugin.lastHealthCheck': new Date()
+        }
+      );
+      
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+  
+  /**
+   * Fetch all content for a specific client
+   * Uses client's encrypted API key from database
+   * @param {string} clientId - Client MongoDB ID
+   * @param {Object} options - Fetch options
+   * @returns {Promise<Object>} All pages and posts
+   */
+  async fetchClientContent(clientId, options = {}) {
+    try {
+      const client = await Client.findById(clientId)
+        .select('+wordpressPlugin.apiKey');
+      
+      if (!client) {
+        throw new Error('Client not found');
+      }
+      
+      if (!client.wordpressPlugin?.enabled) {
+        throw new Error('WordPress plugin not enabled for this client');
+      }
+      
+      const apiKey = await this.getClientApiKey(client);
+      
+      if (!apiKey) {
+        throw new Error('No API key configured for this client');
+      }
+      
+      const siteUrl = client.wordpressPlugin.siteUrl || client.website;
+      const result = await this.fetchAllContent(siteUrl, apiKey, options);
+      
+      // Update last sync time on success
+      if (result.success) {
+        await Client.updateOne(
+          { _id: clientId },
+          {
+            'wordpressPlugin.lastSync': new Date(),
+            'wordpressPlugin.status': 'active'
+          }
+        );
+      }
+      
+      return result;
+      
+    } catch (error) {
+      logger.error(`fetchClientContent error for client ${clientId}:`, error);
+      
+      // Update client with error
+      await Client.updateOne(
+        { _id: clientId },
+        {
+          'wordpressPlugin.status': 'error',
+          'wordpressPlugin.errorMessage': error.message
+        }
+      );
+      
+      throw error;
+    }
+  }
   
   /**
    * Test connection to WordPress plugin
@@ -18,9 +172,17 @@ class WordPressPluginService {
   async testConnection(siteUrl, apiKey) {
     try {
       const baseUrl = this.getApiBaseUrl(siteUrl);
+      console.log('🔍 Testing connection:');
+      console.log('   Site URL:', siteUrl);
+      console.log('   Base URL:', baseUrl);
+      console.log('   API Key:', apiKey);
+      console.log('   Full URL:', `${baseUrl}/health`);
+      console.log('⚠️  Note: WordPress plugin must accept api_key query parameter');
+      
+      // Try with query parameter (WordPress CORS strips custom headers)
       const response = await axios.get(`${baseUrl}/health`, {
-        headers: {
-          'X-API-Key': apiKey
+        params: {
+          api_key: apiKey
         },
         timeout: 10000
       });
@@ -32,6 +194,8 @@ class WordPressPluginService {
         message: 'Plugin connection successful'
       };
     } catch (error) {
+      console.log('❌ Connection error:', error.response?.status, error.response?.data);
+      
       if (error.response?.status === 404) {
         return {
           success: false,
@@ -80,10 +244,8 @@ class WordPressPluginService {
       
       while (hasMore) {
         const response = await axios.get(`${baseUrl}/content/all`, {
-          headers: {
-            'X-API-Key': apiKey
-          },
           params: {
+            api_key: apiKey,
             page: currentPage,
             per_page: perPage,
             include_content: includeContent
@@ -140,8 +302,8 @@ class WordPressPluginService {
     try {
       const baseUrl = this.getApiBaseUrl(siteUrl);
       const response = await axios.get(`${baseUrl}/pages/${pageId}`, {
-        headers: {
-          'X-API-Key': apiKey
+        params: {
+          api_key: apiKey
         },
         timeout: 15000
       });
@@ -171,8 +333,8 @@ class WordPressPluginService {
     try {
       const baseUrl = this.getApiBaseUrl(siteUrl);
       const response = await axios.get(`${baseUrl}/structure`, {
-        headers: {
-          'X-API-Key': apiKey
+        params: {
+          api_key: apiKey
         },
         timeout: 10000
       });
@@ -338,7 +500,13 @@ class WordPressPluginService {
    */
   getApiBaseUrl(siteUrl) {
     // Remove trailing slash
-    const cleanUrl = siteUrl.replace(/\/$/, '');
+    let cleanUrl = siteUrl.replace(/\/$/, '');
+    
+    // Add https:// if no protocol specified
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `https://${cleanUrl}`;
+    }
+    
     return `${cleanUrl}/wp-json/echo5-seo/v1`;
   }
 }

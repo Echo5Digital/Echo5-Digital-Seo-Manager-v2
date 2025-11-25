@@ -85,8 +85,18 @@ class Echo5_SEO_Security {
             return $api_key_header;
         }
         
-        // Try query parameter (less secure, but convenient for testing)
-        return $request->get_param('api_key');
+        // Try query parameter from WP_REST_Request
+        $api_key = $request->get_param('api_key');
+        if ($api_key) {
+            return $api_key;
+        }
+        
+        // Try $_GET directly as fallback
+        if (isset($_GET['api_key']) && !empty($_GET['api_key'])) {
+            return sanitize_text_field($_GET['api_key']);
+        }
+        
+        return null;
     }
     
     /**

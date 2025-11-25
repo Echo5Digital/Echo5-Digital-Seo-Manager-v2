@@ -235,6 +235,47 @@ const clientSchema = new mongoose.Schema({
       default: true,
     },
   },
+  // WordPress Plugin Integration
+  wordpressPlugin: {
+    enabled: {
+      type: Boolean,
+      default: false,
+    },
+    apiKey: {
+      type: String,
+      select: false, // Don't select by default for security
+    },
+    siteUrl: {
+      type: String,
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: ['not_configured', 'active', 'error', 'disconnected'],
+      default: 'not_configured',
+    },
+    lastSync: {
+      type: Date,
+    },
+    lastHealthCheck: {
+      type: Date,
+    },
+    pluginVersion: {
+      type: String,
+    },
+    errorMessage: {
+      type: String,
+    },
+  },
+  // Data Source Selection
+  dataSource: {
+    type: String,
+    enum: ['auto', 'wordpress_plugin', 'scraping'],
+    default: 'auto',
+    // 'auto': Try plugin first, fallback to scraping if plugin unavailable
+    // 'wordpress_plugin': Only use plugin, fail if not available
+    // 'scraping': Force traditional web scraping
+  },
   notes: {
     type: String,
   },

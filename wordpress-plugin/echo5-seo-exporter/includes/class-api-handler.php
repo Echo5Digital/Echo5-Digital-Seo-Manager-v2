@@ -77,6 +77,10 @@ class Echo5_SEO_API_Handler {
             'callback' => array($this, 'get_all_content'),
             'permission_callback' => array($this->security, 'verify_api_key'),
             'args' => array(
+                'api_key' => array(
+                    'required' => false,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ),
                 'per_page' => array(
                     'default' => 50,
                     'sanitize_callback' => 'absint',
@@ -111,6 +115,15 @@ class Echo5_SEO_API_Handler {
             'methods' => 'GET',
             'callback' => array($this, 'health_check'),
             'permission_callback' => array($this->security, 'verify_api_key'),
+            'args' => array(
+                'api_key' => array(
+                    'required' => false,
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'validate_callback' => function($param) {
+                        return is_string($param);
+                    }
+                ),
+            ),
         ));
         
         // Regenerate API key (admin only)

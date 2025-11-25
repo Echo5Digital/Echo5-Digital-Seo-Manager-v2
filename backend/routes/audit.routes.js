@@ -78,20 +78,74 @@ router.post('/', protect, async (req, res, next) => {
       triggeredBy: req.user._id,
     });
 
-    // Start audit (async)
-    auditService.performFullAudit(url || client.domain)
+    // Start audit (async) - Pass Client ID to enable WordPress plugin integration
+    auditService.performFullAudit(clientId)
       .then(async (results) => {
-  const summary = auditService.calculateAuditScore(results);
-        console.log('📊 Calculated Summary:', JSON.stringify(summary, null, 2));
-        const aiAnalysis = await aiService.analyzeAuditResults(summary, url || client.domain);
+        const summary = auditService.calculateAuditScore(results);
+        console.log('📡 Data Source Used:', results.dataSource || 'scraping');
+        const aiAnalysis = await aiService.analyzeAuditResults(summary, client.website || client.domain);
 
-        audit.results = results;
+        // Map audit results explicitly into the schema shape to avoid casting issues
+        const cleanedResults = {
+          // Core discovery / analysis
+          discoveredPages: Array.isArray(results.discoveredPages) ? results.discoveredPages : [],
+          pageAnalysis: Array.isArray(results.pageAnalysis) ? results.pageAnalysis : [],
+          pages: Array.isArray(results.pages) ? results.pages : [],
+
+          // Aggregated data
+          metaAnalysis: Array.isArray(results.metaAnalysis) ? results.metaAnalysis : [],
+          headingStructure: Array.isArray(results.headingStructure) ? results.headingStructure : [],
+          imageAnalysis: Array.isArray(results.imageAnalysis) ? results.imageAnalysis : [],
+          linkAnalysis: Array.isArray(results.linkAnalysis) ? results.linkAnalysis : [],
+          contentAnalysis: Array.isArray(results.contentAnalysis) ? results.contentAnalysis : [],
+
+          // Original issue buckets (backwards compatible section in schema)
+          brokenLinks: Array.isArray(results.brokenLinks) ? results.brokenLinks : [],
+          missingAltTags: Array.isArray(results.missingAltTags) ? results.missingAltTags : [],
+          metaIssues: Array.isArray(results.metaIssues) ? results.metaIssues : [],
+          noindexPages: Array.isArray(results.noindexPages) ? results.noindexPages : [],
+          pageSpeed: Array.isArray(results.pageSpeed) ? results.pageSpeed : [],
+
+          // Critical field causing validation errors – only keep if it's a real array of objects
+          schemaIssues: Array.isArray(results.schemaIssues)
+            ? results.schemaIssues.filter((i) =>
+                i &&
+                typeof i === 'object' &&
+                typeof i.url === 'string' &&
+                typeof i.issue === 'string'
+              )
+            : [],
+
+          internalLinkingIssues: Array.isArray(results.internalLinkingIssues) ? results.internalLinkingIssues : [],
+          sitemapIssues: Array.isArray(results.sitemapIssues) ? results.sitemapIssues : [],
+          robotsTxtIssues: Array.isArray(results.robotsTxtIssues) ? results.robotsTxtIssues : [],
+          sslIssues: Array.isArray(results.sslIssues) ? results.sslIssues : [],
+          mobileIssues: Array.isArray(results.mobileIssues) ? results.mobileIssues : [],
+
+          // Core Web Vitals placeholder
+          coreWebVitals: Array.isArray(results.coreWebVitals) ? results.coreWebVitals : [],
+
+          // Keep dataSource inside results for convenience as well
+          dataSource: results.dataSource || 'scraping',
+        };
+
+        audit.results = cleanedResults;
         audit.summary = summary;
         audit.aiAnalysis = aiAnalysis;
         audit.status = 'Completed';
         audit.completedAt = new Date();
-        await audit.save();
-        console.log('✅ Audit saved with summary:', JSON.stringify(audit.summary, null, 2));
+        audit.dataSource = cleanedResults.dataSource;
+        
+        try {
+          await audit.save();
+          console.log('✅ Audit saved successfully');
+          console.log('📡 Data Source:', audit.dataSource);
+          console.log('📊 Summary:', summary);
+        } catch (saveError) {
+          console.error('❌ Error saving audit:', saveError.message);
+          console.error('❌ Validation errors:', saveError.errors);
+          throw saveError;
+        }
 
         // Update client SEO health
         client.seoHealth = {
@@ -269,11 +323,12 @@ router.post('/run/:clientId', protect, async (req, res, next) => {
       triggeredBy: req.user._id,
     });
 
-    // Start audit (async)
-    auditService.performFullAudit(client.domain)
+    // Start audit (async) - Pass Client ID to enable WordPress plugin integration
+    auditService.performFullAudit(client._id.toString())
       .then(async (results) => {
         const summary = auditService.calculateAuditScore(results);
-        const aiAnalysis = await aiService.analyzeAuditResults(summary, client.domain);
+        console.log('📡 Data Source Used:', results.dataSource || 'scraping');
+        const aiAnalysis = await aiService.analyzeAuditResults(summary, client.website || client.domain);
 
         audit.results = results;
         audit.summary = summary;
