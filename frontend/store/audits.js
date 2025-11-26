@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import useAuthStore from './auth'
 
+// Track active polling interval outside the store to prevent multiple intervals
+let activePollingInterval = null
+
 const useAuditStore = create((set, get) => ({
   audits: [],
   loading: false,
@@ -121,17 +124,24 @@ const useAuditStore = create((set, get) => ({
           audits: [data.data, ...state.audits]
         }))
 
+        // Clear any existing polling interval before starting a new one
+        if (activePollingInterval) {
+          clearInterval(activePollingInterval)
+          activePollingInterval = null
+        }
+
         // Poll for audit status
         let pollCount = 0
         const maxPolls = 200 // Maximum 10 minutes (200 * 3 seconds)
-        const pollInterval = setInterval(async () => {
+        activePollingInterval = setInterval(async () => {
           try {
             pollCount++
             
             // Safety check - stop polling after max attempts
             if (pollCount > maxPolls) {
               console.warn('⚠️ Max polling attempts reached, stopping...');
-              clearInterval(pollInterval);
+              clearInterval(activePollingInterval);
+              activePollingInterval = null;
               set(state => ({
                 loading: false,
                 error: 'Audit is taking longer than expected',
@@ -171,32 +181,37 @@ const useAuditStore = create((set, get) => ({
               // Update progress based on status
               if (audit.status === 'In Progress') {
                 const steps = get().auditProgress.steps
-                const currentProgress = get().auditProgress.progress
                 
                 // Calculate new progress based on poll count
                 // Progress smoothly from 10% to 95% over the polling period
                 const targetProgress = Math.min(10 + (pollCount * 2.5), 95)
                 
-                // Progress should only increase, never decrease
-                const newProgress = Math.max(currentProgress, targetProgress)
-                
                 // Calculate step index based on progress
                 const stepIndex = Math.min(
-                  Math.floor((newProgress / 100) * steps.length),
+                  Math.floor((targetProgress / 100) * steps.length),
                   steps.length - 2
                 )
                 
-                set(state => ({
-                  auditProgress: {
-                    ...state.auditProgress,
-                    step: steps[stepIndex],
-                    progress: newProgress
+                // Only update if progress is increasing (use functional update to avoid stale state)
+                set(state => {
+                  const currentProgress = state.auditProgress.progress
+                  // Progress should only increase, never decrease
+                  if (targetProgress <= currentProgress) {
+                    return state // No change
                   }
-                }))
+                  return {
+                    auditProgress: {
+                      ...state.auditProgress,
+                      step: steps[stepIndex],
+                      progress: targetProgress
+                    }
+                  }
+                })
               } else if (audit.status === 'Completed') {
                 // Audit completed
                 console.log('✅ Audit completed! Stopping polling...');
-                clearInterval(pollInterval)
+                clearInterval(activePollingInterval)
+                activePollingInterval = null
                 set(state => ({
                   loading: false,
                   auditProgress: {
@@ -220,7 +235,8 @@ const useAuditStore = create((set, get) => ({
               } else if (audit.status === 'Failed') {
                 // Audit failed
                 console.log('❌ Audit failed! Stopping polling...');
-                clearInterval(pollInterval)
+                clearInterval(activePollingInterval)
+                activePollingInterval = null
                 set(state => ({
                   loading: false,
                   error: audit.error || 'Audit failed',

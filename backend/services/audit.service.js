@@ -651,7 +651,18 @@ class AuditService {
         }
       })
 
-      await Promise.allSettled(upserts)
+      // Process in batches to avoid overwhelming MongoDB
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < upserts.length; i += BATCH_SIZE) {
+        const batch = upserts.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(batch);
+        // Small delay between batches to prevent connection exhaustion
+        if (i + BATCH_SIZE < upserts.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      console.log(`✅ Persisted ${upserts.length} pages in batches of ${BATCH_SIZE}`);
     } catch (err) {
       logger.error('persistPages error:', err)
     }
