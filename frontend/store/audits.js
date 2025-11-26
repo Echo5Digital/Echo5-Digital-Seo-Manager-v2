@@ -171,16 +171,26 @@ const useAuditStore = create((set, get) => ({
               // Update progress based on status
               if (audit.status === 'In Progress') {
                 const steps = get().auditProgress.steps
-                // Progress through steps based on poll count
-                const stepIndex = Math.min(Math.floor(pollCount / 2), steps.length - 2)
-                const baseProgress = (stepIndex / (steps.length - 1)) * 90
-                const randomProgress = Math.random() * 10
+                const currentProgress = get().auditProgress.progress
+                
+                // Calculate new progress based on poll count
+                // Progress smoothly from 10% to 95% over the polling period
+                const targetProgress = Math.min(10 + (pollCount * 2.5), 95)
+                
+                // Progress should only increase, never decrease
+                const newProgress = Math.max(currentProgress, targetProgress)
+                
+                // Calculate step index based on progress
+                const stepIndex = Math.min(
+                  Math.floor((newProgress / 100) * steps.length),
+                  steps.length - 2
+                )
                 
                 set(state => ({
                   auditProgress: {
                     ...state.auditProgress,
                     step: steps[stepIndex],
-                    progress: Math.min(baseProgress + randomProgress, 95)
+                    progress: newProgress
                   }
                 }))
               } else if (audit.status === 'Completed') {
