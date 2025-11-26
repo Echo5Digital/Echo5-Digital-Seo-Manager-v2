@@ -184,49 +184,6 @@ const usePagesStore = create((set, get) => ({
     }
   },
 
-  // Bulk refresh SEO scores for all pages (or pages without scores)
-  refreshAllSEOScores: async (clientId, onlyMissing = false) => {
-    const { pages } = get()
-    const token = useAuthStore.getState().token
-    
-    // Filter pages - either all or only those without scores
-    const pagesToRefresh = onlyMissing 
-      ? pages.filter(p => !p.seo?.seoScore && p.seo?.seoScore !== 0)
-      : pages
-    
-    let completed = 0
-    let failed = 0
-    
-    // Process in batches of 5 to avoid overwhelming the server
-    const batchSize = 5
-    for (let i = 0; i < pagesToRefresh.length; i += batchSize) {
-      const batch = pagesToRefresh.slice(i, i + batchSize)
-      
-      await Promise.all(batch.map(async (page) => {
-        try {
-          const resp = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/${page._id}/check-seo`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-          const data = await resp.json()
-          if (data.status === 'success') {
-            set(state => ({
-              pages: state.pages.map(p => p._id === page._id ? data.data.page : p)
-            }))
-            completed++
-          } else {
-            failed++
-          }
-        } catch (e) {
-          console.error(`Failed to refresh SEO for ${page.url}:`, e)
-          failed++
-        }
-      }))
-    }
-    
-    return { completed, failed, total: pagesToRefresh.length }
-  },
-
   suggestSEOFixes: async (pageId, seoReport) => {
     try {
       const token = useAuthStore.getState().token

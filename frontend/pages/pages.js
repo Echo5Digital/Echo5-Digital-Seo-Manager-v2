@@ -23,12 +23,11 @@ import {
 
 export default function Pages() {
   const { clients, fetchClients } = useClientStore()
-  const { pages, fetchPages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage, checkSEO, refreshAllSEOScores, error, loading } = usePagesStore()
+  const { pages, fetchPages, fetchPage, updateFocusKeyword, refreshContent, recrawlPage, checkSEO, error, loading } = usePagesStore()
   const { runAudit, auditProgress } = useAuditStore()
   const { keywords, fetchKeywords } = useKeywordStore()
   const [syncing, setSyncing] = useState(false)
   const [recrawling, setRecrawling] = useState({})
-  const [refreshingAll, setRefreshingAll] = useState(false)
   const [clientId, setClientId] = useState('')
   const [selectedId, setSelectedId] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -363,29 +362,6 @@ export default function Pages() {
                       <option value="needs-work">Needs Work (40-59)</option>
                       <option value="poor">Poor (&lt;40)</option>
                     </select>
-                    <button
-                      className="px-3 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 disabled:opacity-50 flex items-center gap-2 transition-colors"
-                      disabled={refreshingAll}
-                      title="Refresh SEO scores for all pages"
-                      onClick={async () => {
-                        try {
-                          setRefreshingAll(true)
-                          const result = await refreshAllSEOScores(clientId, true) // Only refresh pages without scores
-                          if (result.total === 0) {
-                            alert('All pages already have SEO scores!')
-                          } else {
-                            alert(`Refreshed ${result.completed} of ${result.total} pages${result.failed > 0 ? ` (${result.failed} failed)` : ''}`)
-                          }
-                        } catch (err) {
-                          alert(`Failed to refresh: ${err.message}`)
-                        } finally {
-                          setRefreshingAll(false)
-                        }
-                      }}
-                    >
-                      <ArrowPathIcon className={`w-4 h-4 ${refreshingAll ? 'animate-spin' : ''}`} />
-                      {refreshingAll ? 'Refreshing...' : 'Refresh All Scores'}
-                    </button>
                   </div>
                 </div>
               </div>
