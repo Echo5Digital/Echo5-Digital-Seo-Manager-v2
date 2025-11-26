@@ -3,11 +3,14 @@ import Layout from '../components/Layout'
 import useAuthStore from '../store/auth'
 import useClientStore from '../store/clients'
 import UserAvatar from '../components/UserAvatar'
+import Link from 'next/link'
 import { 
   UserGroupIcon, 
   DocumentCheckIcon, 
   ChartBarIcon,
-  ClockIcon 
+  ClockIcon,
+  SparklesIcon,
+  ArrowRightIcon
 } from '@heroicons/react/24/outline'
 
 export default function Dashboard() {
@@ -39,6 +42,24 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="space-y-6">
+        {/* Executive Dashboard Banner */}
+        <Link href="/dashboard/executive" className="block">
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-6 text-white hover:from-indigo-700 hover:to-purple-700 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white/20 rounded-lg">
+                  <SparklesIcon className="h-8 w-8" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Executive Intelligence Dashboard</h2>
+                  <p className="text-indigo-200 mt-1">AI-powered insights, client health matrix, and trend analysis</p>
+                </div>
+              </div>
+              <ArrowRightIcon className="h-6 w-6" />
+            </div>
+          </div>
+        </Link>
+
         <div className="flex items-center gap-4">
           <UserAvatar user={user} size="xl" />
           <div>

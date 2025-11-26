@@ -6,6 +6,20 @@ import useAuditStore from '../store/audits'
 import useAuthStore from '../store/auth'
 import usePagesStore from '../store/pages'
 import useKeywordStore from '../store/keywords'
+import { 
+  MagnifyingGlassIcon, 
+  ArrowPathIcon, 
+  DocumentTextIcon,
+  ChartBarIcon,
+  LinkIcon,
+  PhotoIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  XCircleIcon,
+  ArrowTopRightOnSquareIcon,
+  DocumentArrowDownIcon,
+  FunnelIcon
+} from '@heroicons/react/24/outline'
 
 export default function Pages() {
   const { clients, fetchClients } = useClientStore()
@@ -16,30 +30,60 @@ export default function Pages() {
   const [recrawling, setRecrawling] = useState({})
   const [clientId, setClientId] = useState('')
   const [selectedId, setSelectedId] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [scoreFilter, setScoreFilter] = useState('all')
 
   useEffect(() => { fetchClients() }, [fetchClients])
   useEffect(() => { fetchKeywords() }, [fetchKeywords])
   useEffect(() => { if (clientId) fetchPages(clientId) }, [clientId, fetchPages])
 
-  // Show all pages from database (backend already filters excluded pages)
+  // Filter pages
   const mainPages = useMemo(() => {
-    // Backend already filters out excluded pages via { excluded: { $ne: true } }
-    // So we just return all pages we received
-    const filtered = pages || [];
+    let filtered = pages || [];
     
-    console.log(`Pages: ${pages?.length || 0} total, ${filtered.length} displayed`);
+    // Search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      filtered = filtered.filter(p => 
+        p.url?.toLowerCase().includes(term) || 
+        p.title?.toLowerCase().includes(term) ||
+        p.seo?.focusKeyword?.toLowerCase().includes(term)
+      )
+    }
+    
+    // Score filter
+    if (scoreFilter !== 'all') {
+      filtered = filtered.filter(p => {
+        const score = p.seo?.seoScore || 0
+        switch (scoreFilter) {
+          case 'excellent': return score >= 80
+          case 'good': return score >= 60 && score < 80
+          case 'needs-work': return score >= 40 && score < 60
+          case 'poor': return score < 40
+          default: return true
+        }
+      })
+    }
     
     return filtered;
-  }, [pages]);
+  }, [pages, searchTerm, scoreFilter]);
 
   const selectedPage = useMemo(() => pages.find(p => p._id === selectedId), [pages, selectedId])
+  
+  // Stats
+  const stats = useMemo(() => {
+    const total = pages?.length || 0
+    const excellent = pages?.filter(p => (p.seo?.seoScore || 0) >= 80).length || 0
+    const needsWork = pages?.filter(p => (p.seo?.seoScore || 0) < 60).length || 0
+    const avgScore = total > 0 ? Math.round(pages.reduce((sum, p) => sum + (p.seo?.seoScore || 0), 0) / total) : 0
+    return { total, excellent, needsWork, avgScore }
+  }, [pages])
   
   // Export SEO report as PDF
   const exportToPDF = async (page) => {
     try {
       const seoReport = await checkSEO(page._id)
       
-      // Create a clean HTML document for PDF
       const html = `
         <!DOCTYPE html>
         <html>
@@ -47,414 +91,543 @@ export default function Pages() {
           <meta charset="UTF-8">
           <title>SEO Report - ${page.title || page.url}</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
-            h1 { color: #1a56db; border-bottom: 3px solid #1a56db; padding-bottom: 10px; }
-            h2 { color: #2563eb; margin-top: 30px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
-            h3 { color: #4b5563; margin-top: 20px; }
-            .score { font-size: 48px; font-weight: bold; text-align: center; margin: 20px 0; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; color: #1f2937; line-height: 1.6; }
+            h1 { color: #1e40af; border-bottom: 3px solid #3b82f6; padding-bottom: 12px; font-size: 28px; }
+            h2 { color: #1e3a8a; margin-top: 32px; font-size: 20px; }
+            .score { font-size: 64px; font-weight: bold; text-align: center; margin: 24px 0; }
             .score.excellent { color: #16a34a; }
             .score.good { color: #ca8a04; }
-            .score.fair { color: #ea580c; }
             .score.poor { color: #dc2626; }
-            .meta { background: #f9fafb; padding: 15px; border-left: 4px solid #2563eb; margin: 20px 0; }
-            .meta-item { margin: 8px 0; }
-            .meta-label { font-weight: bold; color: #4b5563; }
-            .issue { padding: 12px; margin: 10px 0; border-left: 4px solid #dc2626; background: #fef2f2; }
-            .issue.high { border-color: #dc2626; background: #fef2f2; }
-            .issue.medium { border-color: #ea580c; background: #fff7ed; }
-            .issue.low { border-color: #ca8a04; background: #fefce8; }
-            .check { padding: 12px; margin: 10px 0; border-left: 4px solid #16a34a; background: #f0fdf4; }
-            .recommendation { padding: 12px; margin: 10px 0; border-left: 4px solid #2563eb; background: #eff6ff; }
-            .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }
-            .stat { background: #f9fafb; padding: 15px; border-radius: 8px; text-align: center; }
-            .stat-value { font-size: 24px; font-weight: bold; color: #1a56db; }
-            .stat-label { font-size: 12px; color: #6b7280; margin-top: 5px; }
-            .severity { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-            .severity.critical { background: #dc2626; color: white; }
-            .severity.high { background: #ea580c; color: white; }
-            .severity.medium { background: #ca8a04; color: white; }
-            .severity.low { background: #eab308; color: #422006; }
-            .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; }
+            .meta { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); padding: 20px; border-radius: 12px; margin: 20px 0; }
+            .meta-item { margin: 10px 0; font-size: 14px; }
+            .meta-label { font-weight: 600; color: #374151; }
+            .issue { padding: 14px; margin: 12px 0; border-radius: 8px; border-left: 4px solid; }
+            .issue.critical { border-color: #dc2626; background: #fef2f2; }
+            .issue.high { border-color: #ea580c; background: #fff7ed; }
+            .issue.medium { border-color: #ca8a04; background: #fefce8; }
+            .check { padding: 14px; margin: 12px 0; border-radius: 8px; border-left: 4px solid #16a34a; background: #f0fdf4; }
+            .recommendation { padding: 14px; margin: 12px 0; border-radius: 8px; border-left: 4px solid #3b82f6; background: #eff6ff; }
+            .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0; }
+            .stat { background: #f9fafb; padding: 20px; border-radius: 12px; text-align: center; border: 1px solid #e5e7eb; }
+            .stat-value { font-size: 28px; font-weight: bold; color: #1e40af; }
+            .stat-label { font-size: 12px; color: #6b7280; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+            .footer { margin-top: 48px; padding-top: 24px; border-top: 2px solid #e5e7eb; text-align: center; color: #9ca3af; font-size: 12px; }
           </style>
         </head>
         <body>
-          <h1>SEO Analysis Report</h1>
+          <h1>🔍 SEO Analysis Report</h1>
           
           <div class="meta">
-            <div class="meta-item"><span class="meta-label">Page Title:</span> ${page.title || 'Not set'}</div>
-            <div class="meta-item"><span class="meta-label">URL:</span> ${page.url || 'Not set'}</div>
-            <div class="meta-item"><span class="meta-label">Generated:</span> ${new Date().toLocaleString()}</div>
+            <div class="meta-item"><span class="meta-label">Page:</span> ${page.title || 'Untitled'}</div>
+            <div class="meta-item"><span class="meta-label">URL:</span> ${page.url}</div>
             <div class="meta-item"><span class="meta-label">Focus Keyword:</span> ${page.seo?.focusKeyword || 'Not set'}</div>
+            <div class="meta-item"><span class="meta-label">Generated:</span> ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}</div>
           </div>
 
-          <h2>SEO Score</h2>
-          <div class="score ${
-            (seoReport.data?.seoReport?.score || 0) >= 80 ? 'excellent' :
-            (seoReport.data?.seoReport?.score || 0) >= 60 ? 'good' :
-            (seoReport.data?.seoReport?.score || 0) >= 40 ? 'fair' : 'poor'
-          }">${seoReport.data?.seoReport?.score || 0}/100</div>
+          <h2>Overall Score</h2>
+          <div class="score ${(seoReport.data?.seoReport?.score || 0) >= 80 ? 'excellent' : (seoReport.data?.seoReport?.score || 0) >= 60 ? 'good' : 'poor'}">
+            ${seoReport.data?.seoReport?.score || 0}<span style="font-size: 24px; color: #9ca3af">/100</span>
+          </div>
 
           <div class="stats">
-            <div class="stat">
-              <div class="stat-value">${page.content?.wordCount || 0}</div>
-              <div class="stat-label">Words</div>
-            </div>
-            <div class="stat">
-              <div class="stat-value">${page.content?.links?.internal || 0}</div>
-              <div class="stat-label">Internal Links</div>
-            </div>
-            <div class="stat">
-              <div class="stat-value">${Array.isArray(page.images) ? page.images.length : 0}</div>
-              <div class="stat-label">Images</div>
-            </div>
+            <div class="stat"><div class="stat-value">${page.content?.wordCount || 0}</div><div class="stat-label">Words</div></div>
+            <div class="stat"><div class="stat-value">${page.content?.links?.internal || 0}</div><div class="stat-label">Internal Links</div></div>
+            <div class="stat"><div class="stat-value">${Array.isArray(page.images) ? page.images.length : 0}</div><div class="stat-label">Images</div></div>
           </div>
 
           ${seoReport.data?.seoReport?.issues?.length > 0 ? `
-          <h2>Issues Found (${seoReport.data.seoReport.issues.length})</h2>
-          ${seoReport.data.seoReport.issues.map(issue => `
-            <div class="issue ${issue.severity}">
-              <span class="severity ${issue.severity}">${issue.severity.toUpperCase()}</span>
-              <strong>${issue.category}:</strong> ${issue.message}
-            </div>
-          `).join('')}
+          <h2>⚠️ Issues (${seoReport.data.seoReport.issues.length})</h2>
+          ${seoReport.data.seoReport.issues.map(issue => `<div class="issue ${issue.severity}"><strong>${issue.category}:</strong> ${issue.message}</div>`).join('')}
           ` : ''}
 
           ${seoReport.data?.seoReport?.checks?.length > 0 ? `
-          <h2>Passed Checks (${seoReport.data.seoReport.checks.length})</h2>
-          ${seoReport.data.seoReport.checks.map(check => `
-            <div class="check">
-              <strong>${check.category}:</strong> ${check.message}
-            </div>
-          `).join('')}
+          <h2>✅ Passed (${seoReport.data.seoReport.checks.length})</h2>
+          ${seoReport.data.seoReport.checks.map(check => `<div class="check"><strong>${check.category}:</strong> ${check.message}</div>`).join('')}
           ` : ''}
 
           ${seoReport.data?.seoReport?.recommendations?.length > 0 ? `
-          <h2>Recommendations (${seoReport.data.seoReport.recommendations.length})</h2>
-          ${seoReport.data.seoReport.recommendations.map(rec => `
-            <div class="recommendation">
-              <strong>${rec.category}:</strong> ${rec.message}
-            </div>
-          `).join('')}
+          <h2>💡 Recommendations</h2>
+          ${seoReport.data.seoReport.recommendations.map(rec => `<div class="recommendation"><strong>${rec.category}:</strong> ${rec.message}</div>`).join('')}
           ` : ''}
 
-          <h2>Page Details</h2>
-          <div class="meta">
-            <div class="meta-item"><span class="meta-label">H1:</span> ${page.h1 || 'Not set'}</div>
-            <div class="meta-item"><span class="meta-label">Meta Description:</span> ${page.metaDescription || 'Not set'}</div>
-            <div class="meta-item"><span class="meta-label">Canonical URL:</span> ${page.seo?.canonical || 'Not set'}</div>
-            <div class="meta-item"><span class="meta-label">Robots:</span> ${page.seo?.robots || 'index,follow'}</div>
-          </div>
-
-          <div class="footer">
-            Generated by Echo5 SEO Operations Platform<br>
-            © ${new Date().getFullYear()} - All Rights Reserved
-          </div>
+          <div class="footer">Generated by Echo5 SEO Operations Platform • ${new Date().getFullYear()}</div>
         </body>
         </html>
       `
 
-      // Create a new window with the HTML content
       const printWindow = window.open('', '_blank')
       printWindow.document.write(html)
       printWindow.document.close()
-      
-      // Wait for content to load, then trigger print dialog
-      setTimeout(() => {
-        printWindow.print()
-      }, 500)
+      setTimeout(() => printWindow.print(), 500)
     } catch (err) {
       console.error('PDF export error:', err)
       alert(`Failed to export PDF: ${err.message}`)
     }
   }
   
-  // Get primary keywords for the selected client
   const getPrimaryKeywordsForClient = (pageClientId) => {
-    // Handle both string ID and populated object
     const clientIdToMatch = typeof pageClientId === 'string' ? pageClientId : pageClientId?._id
-    
     return (keywords || []).filter(kw => {
       const kwClientId = typeof kw.clientId === 'string' ? kw.clientId : kw.clientId?._id
       return kwClientId === clientIdToMatch && kw.keywordType === 'Primary'
     })
   }
 
+  const getScoreColor = (score) => {
+    if (!score && score !== 0) return 'bg-gray-100 text-gray-500'
+    if (score >= 80) return 'bg-emerald-100 text-emerald-700'
+    if (score >= 60) return 'bg-amber-100 text-amber-700'
+    if (score >= 40) return 'bg-orange-100 text-orange-700'
+    return 'bg-red-100 text-red-700'
+  }
+
+  const getScoreIcon = (score) => {
+    if (!score && score !== 0) return null
+    if (score >= 80) return <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
+    if (score >= 60) return <ExclamationTriangleIcon className="w-4 h-4 text-amber-600" />
+    return <XCircleIcon className="w-4 h-4 text-red-600" />
+  }
+
   return (
     <Layout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">Pages</h1>
-          <div>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className="px-3 py-2 border rounded"
-            >
-              <option value="">Select Client</option>
-              {clients.map(c => (
-                <option key={c._id} value={c._id}>{c.name}</option>
-              ))}
-            </select>
-            {clientId && (
-              <button
-                className="ml-3 px-3 py-2 rounded border text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
-                disabled={syncing}
-                onClick={async () => {
-                  try {
-                    setSyncing(true)
-                    const token = useAuthStore.getState().token
-                    await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/sync-from-audits?clientId=${clientId}`, {
-                      method: 'POST',
-                      headers: { 'Authorization': `Bearer ${token}` }
-                    })
-                    await fetchPages(clientId)
-                  } finally {
-                    setSyncing(false)
-                  }
-                }}
-              >{syncing ? 'Syncing…' : 'Sync from last audit'}</button>
-            )}
+      <div className="min-h-screen">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Page Optimizer</h1>
+              <p className="text-gray-500 mt-1 text-sm">Analyze and optimize your pages for better SEO performance</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select
+                value={clientId}
+                onChange={(e) => { setClientId(e.target.value); setSelectedId(''); }}
+                className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+              >
+                <option value="">Select Client</option>
+                {clients.map(c => (
+                  <option key={c._id} value={c._id}>{c.name}</option>
+                ))}
+              </select>
+              {clientId && (
+                <button
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm transition-colors"
+                  disabled={syncing}
+                  onClick={async () => {
+                    try {
+                      setSyncing(true)
+                      const token = useAuthStore.getState().token
+                      await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/api/pages/sync-from-audits?clientId=${clientId}`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                      })
+                      await fetchPages(clientId)
+                    } finally {
+                      setSyncing(false)
+                    }
+                  }}
+                >
+                  <ArrowPathIcon className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                  {syncing ? 'Syncing…' : 'Sync'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          {(!clientId) ? (
-            <div className="p-12 text-center text-gray-500">Select a client to view pages</div>
-          ) : loading ? (
-            <div className="p-12 text-center text-gray-500">Loading pages…</div>
-          ) : error ? (
-            <div className="p-4 bg-red-50 text-red-700 rounded">{error}</div>
-          ) : mainPages.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="text-gray-700 mb-3">No pages found for this client.</div>
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
-                  disabled={!clientId || auditProgress.isRunning}
-                  onClick={async () => {
-                    try {
-                      await runAudit(clientId)
-                      // Poll pages list a few times to reflect persisted pages
-                      setTimeout(() => fetchPages(clientId), 4000)
-                      setTimeout(() => fetchPages(clientId), 8000)
-                      setTimeout(() => fetchPages(clientId), 15000)
-                    } catch {}
-                  }}
-                >{auditProgress.isRunning ? 'Audit running…' : 'Run audit now'}</button>
+        {/* Stats Cards - Only show when client selected */}
+        {clientId && pages?.length > 0 && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <DocumentTextIcon className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+                  <div className="text-xs text-gray-500">Total Pages</div>
+                </div>
               </div>
-              <div className="text-xs text-gray-500 mt-2">Audits run async and may take a minute. This page will refresh automatically.</div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <CheckCircleIcon className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-emerald-600">{stats.excellent}</div>
+                  <div className="text-xs text-gray-500">Excellent (80+)</div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-100 rounded-lg">
+                  <ExclamationTriangleIcon className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-amber-600">{stats.needsWork}</div>
+                  <div className="text-xs text-gray-500">Needs Work</div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 rounded-lg">
+                  <ChartBarIcon className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-indigo-600">{stats.avgScore}</div>
+                  <div className="text-xs text-gray-500">Avg Score</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          {(!clientId) ? (
+            <div className="p-16 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <DocumentTextIcon className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Select a Client</h3>
+              <p className="text-gray-500 text-sm">Choose a client from the dropdown above to view and optimize their pages</p>
+            </div>
+          ) : loading ? (
+            <div className="p-16 text-center">
+              <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-500">Loading pages…</p>
+            </div>
+          ) : error ? (
+            <div className="p-6 bg-red-50 text-red-700 rounded-lg m-4">{error}</div>
+          ) : mainPages.length === 0 && !searchTerm && scoreFilter === 'all' ? (
+            <div className="p-16 text-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MagnifyingGlassIcon className="w-8 h-8 text-blue-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Pages Found</h3>
+              <p className="text-gray-500 text-sm mb-6">Run an audit to discover and analyze pages for this client</p>
+              <button
+                className="px-6 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2"
+                disabled={auditProgress.isRunning}
+                onClick={async () => {
+                  try {
+                    await runAudit(clientId)
+                    setTimeout(() => fetchPages(clientId), 4000)
+                    setTimeout(() => fetchPages(clientId), 8000)
+                    setTimeout(() => fetchPages(clientId), 15000)
+                  } catch {}
+                }}
+              >
+                {auditProgress.isRunning ? (
+                  <>
+                    <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                    Running Audit…
+                  </>
+                ) : (
+                  <>
+                    <MagnifyingGlassIcon className="w-5 h-5" />
+                    Run Site Audit
+                  </>
+                )}
+              </button>
             </div>
           ) : (
             <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gradient-to-r from-gray-700 to-gray-800 text-white text-sm">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold">#</th>
-                    <th className="px-4 py-3 text-left font-semibold">URL</th>
-                    <th className="px-4 py-3 text-left font-semibold">Title</th>
-                    <th className="px-4 py-3 text-center font-semibold">Score</th>
-                    <th className="px-4 py-3 text-center font-semibold">Focus Keyword</th>
-                    <th className="px-4 py-3 text-center font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mainPages.map((p, idx) => {
-                    const score = p.seo?.seoScore;
-                    
-                    return (
-                    <tr key={p._id}
-                        onClick={async () => { 
-                          setSelectedId(p._id); 
-                          if (!p?.content?.sample) { 
-                            try { 
-                              await refreshContent(p._id);
-                              await checkSEO(p._id);
-                            } catch (err) {
-                              console.error('Auto-capture error:', err)
-                              alert(`Failed to auto-capture content: ${err.message}`)
-                            } 
-                          } 
-                        }}
-                        className={`border-b hover:bg-blue-50 cursor-pointer transition-colors ${selectedId === p._id ? 'bg-blue-100' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
-                    >
-                      <td className="px-4 py-3 text-gray-700 font-semibold">{idx + 1}</td>
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <a href={p.url} target="_blank" rel="noreferrer" className="text-blue-600 text-sm font-medium max-w-md truncate block hover:underline" title={p.url}>
-                          {p.url}
-                        </a>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-gray-900 text-sm font-medium max-w-xs truncate" title={p.title}>
-                          {p.title || <span className="text-gray-400 italic">No title</span>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {score ? (
-                          <div className="flex flex-col items-center">
-                            <span className={`text-2xl font-bold ${
-                              score >= 80 ? 'text-green-600' : score >= 60 ? 'text-yellow-600' : score >= 40 ? 'text-orange-600' : 'text-red-600'
-                            }`}>{score}</span>
-                            <span className="text-xs text-gray-500">/100</span>
-                          </div>
-                        ) : <span className="text-gray-400">N/A</span>}
-                      </td>
-                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
-                        <FocusEditor 
-                          page={p} 
-                          onSave={updateFocusKeyword} 
-                          keywords={getPrimaryKeywordsForClient(p.clientId)}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded transition-colors"
-                            disabled={recrawling[p._id]}
-                            onClick={async (e) => {
-                              e.stopPropagation()
-                              try {
-                                setRecrawling(prev => ({ ...prev, [p._id]: true }))
-                                await recrawlPage(p._id)
-                                alert('Page recrawled successfully!')
-                              } catch (err) {
-                                console.error('Recrawl error:', err)
-                                alert(`Failed to recrawl page: ${err.message}`)
-                              } finally {
-                                setRecrawling(prev => ({ ...prev, [p._id]: false }))
-                              }
-                            }}
-                          >{recrawling[p._id] ? 'Recrawling…' : 'Recrawl'}</button>
-                          <Link href={`/page/${p._id}`} legacyBehavior>
-                            <a className="px-4 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-bold rounded transition-colors" onClick={e => e.stopPropagation()}>Details</a>
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {selectedPage && (
-              <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2 bg-white border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-semibold text-gray-900">{selectedPage.title}</h2>
-                    <a className="text-sm text-blue-600 underline" href={selectedPage.url} target="_blank" rel="noreferrer">Open page</a>
-                  </div>
-                  <div className="text-xs text-gray-500 mb-4 break-all">{selectedPage.url}</div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold text-gray-700">Content preview</h3>
-                      <button
-                        className="px-2 py-1 text-xs rounded bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-700"
-                        onClick={async () => { 
-                          try { 
-                            await refreshContent(selectedPage._id)
-                            alert('Content captured successfully!')
-                          } catch (err) {
-                            console.error('Capture content error:', err)
-                            alert(`Failed to capture content: ${err.message}`)
-                          }
-                        }}
-                      >{selectedPage?.content?.sample ? 'Re-capture content' : 'Capture content'}</button>
-                    </div>
-                    {Array.isArray(selectedPage?.content?.blocks) && selectedPage.content.blocks.length > 0 ? (
-                      <div className="bg-gray-50 border rounded p-3 max-h-80 overflow-auto divide-y">
-                        {selectedPage.content.blocks.map((b, idx) => (
-                          <div key={idx} className="py-2">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border bg-white text-gray-700">{b.tag}</span>
-                              {/^h[1-6]$/.test(b.tag || '') && (
-                                <span className="text-xs text-gray-500">Heading</span>
-                              )}
-                            </div>
-                            <div className={`text-sm ${/^h[1-6]$/.test(b.tag || '') ? 'font-semibold text-gray-900' : 'text-gray-800'}`}>{b.text}</div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 border rounded p-3 max-h-80 overflow-auto">
-                        {selectedPage?.content?.sample || 'No content captured for this page.'}
-                      </div>
-                    )}
-                  </div>
-                  {Array.isArray(selectedPage?.content?.internalLinks) && selectedPage.content.internalLinks.length > 0 && (
-                    <div className="mt-4">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-2">Internal Links ({selectedPage.content.internalLinks.length})</h3>
-                      <div className="bg-gray-50 border rounded p-3 max-h-64 overflow-auto space-y-2">
-                        {selectedPage.content.internalLinks.map((link, idx) => (
-                          <div key={idx} className="text-xs border-b border-gray-200 pb-2 last:border-b-0">
-                            <div className="font-medium text-gray-900 mb-1">"{link.anchorText}"</div>
-                            <div className="flex items-center gap-2">
-                              <a href={link.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all flex-1">{link.url}</a>
-                              {link.isNofollow && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border">nofollow</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="bg-white border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-600">SEO Score</div>
-                    <div className="flex items-center gap-2">
-                      <div className={`px-2 py-1 rounded text-sm font-semibold ${
-                        (selectedPage.seo?.seoScore || 0) >= 80 ? 'bg-green-100 text-green-800' :
-                        (selectedPage.seo?.seoScore || 0) >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                        (selectedPage.seo?.seoScore || 0) >= 40 ? 'bg-orange-100 text-orange-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>{selectedPage.seo?.seoScore ?? 'N/A'}</div>
-                      <button
-                        className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                        onClick={async () => {
-                          try {
-                            await checkSEO(selectedPage._id)
-                            alert('SEO analysis complete!')
-                          } catch (err) {
-                            console.error('SEO check error:', err)
-                            alert(`Failed to analyze SEO: ${err.message}`)
-                          }
-                        }}
-                      >Analyze</button>
-                      <button
-                        className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                        onClick={() => exportToPDF(selectedPage)}
-                        title="Export SEO report as PDF"
-                      >
-                        📄 PDF
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1">Focus keyword</div>
-                    <FocusEditor 
-                      page={selectedPage} 
-                      onSave={updateFocusKeyword} 
-                      keywords={getPrimaryKeywordsForClient(selectedPage.clientId)}
+              {/* Search & Filter Bar */}
+              <div className="p-4 border-b border-gray-200 bg-gray-50/50">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search pages by URL, title, or keyword..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     />
                   </div>
-                  <div className="text-sm"><span className="text-gray-500">H1:</span> <span className="text-gray-800">{selectedPage.h1 || '—'}</span></div>
-                  <div className="text-sm"><span className="text-gray-500">Meta description:</span>
-                    <div className="text-gray-800 mt-1 whitespace-pre-wrap break-words">{selectedPage.metaDescription || '—'}</div>
-                  </div>
-                  <div className="text-sm flex flex-col gap-1">
-                    <div><span className="text-gray-500">Canonical:</span> <span className="text-gray-800 break-all">{selectedPage.seo?.canonical || '—'}</span></div>
-                    <div><span className="text-gray-500">Robots:</span> <span className="text-gray-800">{selectedPage.seo?.robots || 'index,follow'}</span></div>
-                  </div>
-                  <div className="text-sm grid grid-cols-3 gap-2 pt-2">
-                    <Stat label="Words" value={selectedPage?.content?.wordCount ?? '—'} />
-                    <Stat label="Internal links" value={selectedPage?.content?.links?.internal ?? '—'} />
-                    <Stat label="Images" value={Array.isArray(selectedPage?.images) ? selectedPage.images.length : '—'} />
+                  <div className="flex items-center gap-2">
+                    <FunnelIcon className="w-4 h-4 text-gray-400" />
+                    <select
+                      value={scoreFilter}
+                      onChange={(e) => setScoreFilter(e.target.value)}
+                      className="px-3 py-2.5 border border-gray-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All Scores</option>
+                      <option value="excellent">Excellent (80+)</option>
+                      <option value="good">Good (60-79)</option>
+                      <option value="needs-work">Needs Work (40-59)</option>
+                      <option value="poor">Poor (&lt;40)</option>
+                    </select>
                   </div>
                 </div>
               </div>
-            )}
+
+              {/* Pages List */}
+              <div className="divide-y divide-gray-100">
+                {mainPages.length === 0 ? (
+                  <div className="p-12 text-center text-gray-500">
+                    No pages match your search or filter criteria
+                  </div>
+                ) : (
+                  mainPages.map((p, idx) => {
+                    const score = p.seo?.seoScore
+                    const isSelected = selectedId === p._id
+                    
+                    return (
+                      <div 
+                        key={p._id}
+                        onClick={() => setSelectedId(isSelected ? '' : p._id)}
+                        className={`p-4 cursor-pointer transition-all hover:bg-blue-50/50 ${isSelected ? 'bg-blue-50 ring-2 ring-inset ring-blue-200' : ''}`}
+                      >
+                        {/* Page Row - Responsive */}
+                        <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4">
+                          {/* Score Badge */}
+                          <div className="flex items-center gap-3 lg:w-20 shrink-0">
+                            <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center ${getScoreColor(score)}`}>
+                              <span className="text-lg font-bold">{score ?? '—'}</span>
+                              <span className="text-[10px] opacity-70">score</span>
+                            </div>
+                          </div>
+                          
+                          {/* Page Info */}
+                          <div className="flex-1 min-w-0 overflow-hidden">
+                            <div className="flex items-start gap-2 mb-1">
+                              <h3 className="font-semibold text-gray-900 truncate flex-1" title={p.title || p.url}>
+                                {p.title || <span className="text-gray-400 italic">Untitled Page</span>}
+                              </h3>
+                              {getScoreIcon(score)}
+                            </div>
+                            <a 
+                              href={p.url} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              onClick={e => e.stopPropagation()}
+                              className="text-sm text-blue-600 hover:underline truncate block"
+                              title={p.url}
+                            >
+                              {p.url?.replace(/^https?:\/\/(www\.)?/, '')}
+                            </a>
+                            {/* Mobile Stats - includes SEO score */}
+                            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-500 lg:hidden">
+                              <span className={`flex items-center gap-1 font-semibold ${
+                                score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-amber-600' : score >= 40 ? 'text-orange-600' : 'text-red-600'
+                              }`}>
+                                <ChartBarIcon className="w-3.5 h-3.5" />
+                                {score ?? '—'}/100
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <DocumentTextIcon className="w-3.5 h-3.5" />
+                                {p.content?.wordCount || 0} words
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <LinkIcon className="w-3.5 h-3.5" />
+                                {p.content?.links?.internal || 0} links
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <PhotoIcon className="w-3.5 h-3.5" />
+                                {p.images?.length || 0} images
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* Desktop Stats - includes SEO score */}
+                          <div className="hidden lg:flex items-center gap-6 text-sm text-gray-600 shrink-0">
+                            <div className="text-center w-16">
+                              <div className={`text-xl font-bold ${
+                                score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-amber-600' : score >= 40 ? 'text-orange-600' : score ? 'text-red-600' : 'text-gray-400'
+                              }`}>{score ?? '—'}</div>
+                              <div className="text-xs text-gray-400">SEO</div>
+                            </div>
+                            <div className="text-center w-16">
+                              <div className="font-semibold text-gray-900">{p.content?.wordCount || 0}</div>
+                              <div className="text-xs text-gray-400">words</div>
+                            </div>
+                            <div className="text-center w-16">
+                              <div className="font-semibold text-gray-900">{p.content?.links?.internal || 0}</div>
+                              <div className="text-xs text-gray-400">links</div>
+                            </div>
+                            <div className="text-center w-16">
+                              <div className="font-semibold text-gray-900">{p.images?.length || 0}</div>
+                              <div className="text-xs text-gray-400">images</div>
+                            </div>
+                          </div>
+                          
+                          {/* Focus Keyword */}
+                          <div className="lg:w-44 shrink-0" onClick={e => e.stopPropagation()}>
+                            <FocusEditor 
+                              page={p} 
+                              onSave={updateFocusKeyword} 
+                              keywords={getPrimaryKeywordsForClient(p.clientId)}
+                            />
+                          </div>
+                          
+                          {/* Actions */}
+                          <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                            <button
+                              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors disabled:opacity-50"
+                              disabled={recrawling[p._id]}
+                              title="Recrawl page"
+                              onClick={async () => {
+                                try {
+                                  setRecrawling(prev => ({ ...prev, [p._id]: true }))
+                                  await recrawlPage(p._id)
+                                } catch (err) {
+                                  alert(`Failed to recrawl: ${err.message}`)
+                                } finally {
+                                  setRecrawling(prev => ({ ...prev, [p._id]: false }))
+                                }
+                              }}
+                            >
+                              <ArrowPathIcon className={`w-4 h-4 ${recrawling[p._id] ? 'animate-spin' : ''}`} />
+                            </button>
+                            <Link href={`/page/${p._id}`} className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors" title="View details">
+                              <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                            </Link>
+                          </div>
+                        </div>
+                        
+                        {/* Expanded Details */}
+                        {isSelected && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                              {/* Content Preview */}
+                              <div className="lg:col-span-2 space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-semibold text-gray-900">Content Preview</h4>
+                                  <button
+                                    className="text-xs px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors font-medium"
+                                    onClick={async (e) => {
+                                      e.stopPropagation()
+                                      try { 
+                                        await refreshContent(p._id)
+                                      } catch (err) {
+                                        alert(`Failed: ${err.message}`)
+                                      }
+                                    }}
+                                  >
+                                    {p.content?.blocks?.length > 0 ? 'Refresh' : 'Capture Content'}
+                                  </button>
+                                </div>
+                                
+                                {Array.isArray(p.content?.blocks) && p.content.blocks.length > 0 ? (
+                                  <div className="bg-gray-50 rounded-xl p-4 max-h-64 overflow-auto space-y-3">
+                                    {p.content.blocks.slice(0, 10).map((b, idx) => (
+                                      <div key={idx} className="flex items-start gap-2">
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
+                                          b.tag?.match(/^h[1-2]$/) ? 'bg-indigo-100 text-indigo-700' :
+                                          b.tag?.match(/^h[3-6]$/) ? 'bg-blue-100 text-blue-700' :
+                                          'bg-gray-200 text-gray-600'
+                                        }`}>{b.tag}</span>
+                                        <span className={`text-sm break-words ${b.tag?.match(/^h[1-3]$/) ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                                          {b.text?.substring(0, 150)}{b.text?.length > 150 ? '…' : ''}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {p.content.blocks.length > 10 && (
+                                      <div className="text-xs text-gray-500 text-center pt-2">
+                                        +{p.content.blocks.length - 10} more blocks
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-600 break-words">
+                                    {p.content?.sample?.substring(0, 300) || 'No content captured. Click "Capture Content" to fetch.'}
+                                    {p.content?.sample?.length > 300 && '…'}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* SEO Details */}
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-semibold text-gray-900">SEO Details</h4>
+                                  <div className="flex gap-2">
+                                    <button
+                                      className="text-xs px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors font-medium"
+                                      onClick={async (e) => {
+                                        e.stopPropagation()
+                                        try { await checkSEO(p._id) } catch {}
+                                      }}
+                                    >
+                                      Analyze
+                                    </button>
+                                    <button
+                                      className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors font-medium flex items-center gap-1"
+                                      onClick={(e) => { e.stopPropagation(); exportToPDF(p) }}
+                                    >
+                                      <DocumentArrowDownIcon className="w-3.5 h-3.5" />
+                                      PDF
+                                    </button>
+                                  </div>
+                                </div>
+                                
+                                {/* Prominent SEO Score */}
+                                <div className={`rounded-xl p-4 text-center ${
+                                  score >= 80 ? 'bg-emerald-50 border border-emerald-200' :
+                                  score >= 60 ? 'bg-amber-50 border border-amber-200' :
+                                  score >= 40 ? 'bg-orange-50 border border-orange-200' :
+                                  score ? 'bg-red-50 border border-red-200' :
+                                  'bg-gray-50 border border-gray-200'
+                                }`}>
+                                  <div className={`text-4xl font-bold ${
+                                    score >= 80 ? 'text-emerald-600' :
+                                    score >= 60 ? 'text-amber-600' :
+                                    score >= 40 ? 'text-orange-600' :
+                                    score ? 'text-red-600' :
+                                    'text-gray-400'
+                                  }`}>
+                                    {score ?? '—'}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">SEO Score</div>
+                                  <div className={`text-xs font-medium mt-1 ${
+                                    score >= 80 ? 'text-emerald-700' :
+                                    score >= 60 ? 'text-amber-700' :
+                                    score >= 40 ? 'text-orange-700' :
+                                    score ? 'text-red-700' :
+                                    'text-gray-500'
+                                  }`}>
+                                    {score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : score >= 40 ? 'Needs Work' : score ? 'Poor' : 'Not Analyzed'}
+                                  </div>
+                                </div>
+                                
+                                <div className="bg-gray-50 rounded-xl p-4 space-y-3 text-sm">
+                                  <div>
+                                    <div className="text-xs text-gray-500 mb-1">H1 Heading</div>
+                                    <div className="text-gray-900 font-medium truncate" title={p.h1}>{p.h1 || <span className="text-gray-400">Not set</span>}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-gray-500 mb-1">Meta Description</div>
+                                    <div className="text-gray-700 text-xs line-clamp-2 break-words">{p.metaDescription || <span className="text-gray-400">Not set</span>}</div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200">
+                                    <div>
+                                      <div className="text-xs text-gray-500">Canonical</div>
+                                      <div className="text-xs text-gray-700 truncate">{p.seo?.canonical ? '✓ Set' : '✗ Missing'}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs text-gray-500">Robots</div>
+                                      <div className="text-xs text-gray-700">{p.seo?.robots || 'index,follow'}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+              
+              {/* Footer */}
+              <div className="p-4 border-t border-gray-200 bg-gray-50/50 text-center text-sm text-gray-500">
+                Showing {mainPages.length} of {pages?.length || 0} pages
+              </div>
             </>
           )}
         </div>
@@ -482,28 +655,17 @@ function FocusEditor({ page, onSave, keywords = [] }) {
   }
   
   return (
-    <div className="flex items-center gap-2">
-      <select
-        className="px-3 py-1.5 border rounded w-56 disabled:opacity-50"
-        value={value}
-        onChange={e => handleChange(e.target.value)}
-        disabled={saving}
-      >
-        <option value="">Select focus keyword</option>
-        {keywords.map(kw => (
-          <option key={kw._id} value={kw.keyword}>{kw.keyword}</option>
-        ))}
-      </select>
-      {saving && <span className="text-xs text-gray-500">Saving...</span>}
-    </div>
-  )
-}
-
-function Stat({ label, value }) {
-  return (
-    <div className="bg-gray-50 border rounded p-2 text-center">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-base font-semibold text-gray-900">{value}</div>
-    </div>
+    <select
+      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50 truncate"
+      value={value}
+      onChange={e => handleChange(e.target.value)}
+      disabled={saving}
+      onClick={e => e.stopPropagation()}
+    >
+      <option value="">Focus keyword…</option>
+      {keywords.map(kw => (
+        <option key={kw._id} value={kw.keyword}>{kw.keyword}</option>
+      ))}
+    </select>
   )
 }

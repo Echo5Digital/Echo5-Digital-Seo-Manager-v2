@@ -4,7 +4,7 @@ import Layout from '../components/Layout'
 import ClientOnboardingForm from '../src/components/client/ClientOnboardingForm'
 import useClientStore from '../store/clients'
 import UserAvatar from '../components/UserAvatar'
-import { PlusIcon, TrashIcon, PencilIcon, EyeIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon, PencilIcon, EyeIcon, Cog6ToothIcon, SparklesIcon } from '@heroicons/react/24/outline'
 
 export default function Clients() {
   const router = useRouter()
@@ -219,6 +219,13 @@ export default function Clients() {
                   </div>
                   <div className="flex gap-2 ml-4">
                     <button
+                      onClick={() => router.push(`/clients/${client._id}/intelligence`)}
+                      className="text-indigo-600 hover:text-indigo-900 p-1"
+                      title="AI Intelligence"
+                    >
+                      <SparklesIcon className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => router.push(`/clients/${client._id}/integrations`)}
                       className="text-purple-600 hover:text-purple-900 p-1"
                       title="Integration Settings"
@@ -336,12 +343,21 @@ export default function Clients() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleView(client)}
-                  className="mt-4 w-full btn btn-secondary text-sm"
-                >
-                  View Details
-                </button>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => handleView(client)}
+                    className="flex-1 btn btn-secondary text-sm"
+                  >
+                    View Details
+                  </button>
+                  <button
+                    onClick={() => router.push(`/clients/${client._id}/intelligence`)}
+                    className="flex-1 btn text-sm bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white border-0 flex items-center justify-center gap-1"
+                  >
+                    <SparklesIcon className="w-4 h-4" />
+                    Intelligence
+                  </button>
+                </div>
               </div>
             ))}
           </div>

@@ -42,6 +42,15 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
               await user.save();
               logger.info('✅ Linked Google account to existing user:', user.email);
             } else {
+              // Email domain restriction: New users must use @echo5digital.com
+              const allowedDomain = 'echo5digital.com';
+              const emailDomain = profile.emails[0].value.split('@')[1]?.toLowerCase();
+              
+              if (emailDomain !== allowedDomain) {
+                logger.warn('❌ Registration blocked - unauthorized domain:', profile.emails[0].value);
+                return done(null, false, { message: `Only @${allowedDomain} email addresses are allowed to register` });
+              }
+              
               user = await User.create({
                 name: profile.displayName,
                 email: profile.emails[0].value,
@@ -97,6 +106,7 @@ const notificationRoutes = require('./routes/notification.routes');
 const pageRoutes = require('./routes/page.routes');
 const blogRoutes = require('./routes/blog.routes');
 const integrationRoutes = require('./routes/integration.routes');
+const intelligenceRoutes = require('./routes/intelligence.routes'); // NEW: Phase 1 Intelligence API
 
 // Import services
 const emailService = require('./services/email.service');
@@ -245,6 +255,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/pages', pageRoutes);
 app.use('/api/blogs', blogRoutes);
 app.use('/api/integrations', integrationRoutes);
+app.use('/api/intelligence', intelligenceRoutes); // NEW: Phase 1 Intelligence API
 
 // 404 handler
 app.use((req, res) => {

@@ -18,7 +18,8 @@ import {
   RectangleStackIcon,
   ChartPieIcon,
   ChevronDownIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline'
 
 export default function Sidebar() {
@@ -28,6 +29,7 @@ export default function Sidebar() {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, isNew: true },
+    { name: 'Intelligence', href: '/dashboard/executive', icon: SparklesIcon, isNew: true, isAI: true },
     { name: 'Clients', href: '/clients', icon: UserGroupIcon, isNew: true },
     { name: 'SEO Audits', href: '/audits', icon: DocumentCheckIcon, isNew: true },
     { name: 'Keywords', href: '/keywords', icon: MagnifyingGlassIcon },
@@ -151,7 +153,11 @@ export default function Sidebar() {
                   />
                   {item.name}
                 </div>
-                {item.isNew && (
+                {item.isAI ? (
+                  <span className="px-2 py-0.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full">
+                    AI
+                  </span>
+                ) : item.isNew && (
                   <span className="px-2 py-0.5 text-xs font-semibold text-white bg-orange-500 rounded-full">
                     NEW
                   </span>

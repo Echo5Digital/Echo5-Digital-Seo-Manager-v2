@@ -6,11 +6,58 @@ const Notification = require('../models/Notification.model');
 const auditService = require('../services/audit.service');
 const aiService = require('../services/ai.service');
 
+// NEW: Import data sync and delta tracking services
+const dataSyncService = require('../services/dataSync.service');
+const deltaTrackingService = require('../services/deltaTracking.service');
+
+// Feature flag for daily sync (can be controlled via env)
+const ENABLE_DAILY_SYNC = process.env.ENABLE_DAILY_SYNC !== 'false';
+
 /**
  * Initialize all scheduled jobs
  */
 function initScheduler() {
   logger.info('📅 Initializing scheduler...');
+
+  // ============== NEW: Daily Data Sync Jobs ==============
+  
+  if (ENABLE_DAILY_SYNC) {
+    // Daily GA4 data sync (Every day at 2 AM)
+    cron.schedule('0 2 * * *', async () => {
+      logger.info('⏰ Running daily GA4 data sync...');
+      await dailyGA4Sync();
+    });
+
+    // Daily GSC data sync (Every day at 2:30 AM)
+    cron.schedule('30 2 * * *', async () => {
+      logger.info('⏰ Running daily GSC data sync...');
+      await dailyGSCSync();
+    });
+
+    // Daily GBP data sync (Every day at 3 AM - before audits)
+    cron.schedule('0 3 * * *', async () => {
+      logger.info('⏰ Running daily GBP data sync...');
+      await dailyGBPSync();
+    });
+
+    // Calculate deltas after syncs complete (Every day at 4 AM)
+    cron.schedule('0 4 * * *', async () => {
+      logger.info('⏰ Calculating daily deltas...');
+      await dailyDeltaCalculation();
+    });
+
+    // Generate daily AI insights (Every day at 5 AM)
+    cron.schedule('0 5 * * *', async () => {
+      logger.info('⏰ Generating daily AI insights...');
+      await dailyInsightsGeneration();
+    });
+
+    logger.info('✅ Daily sync jobs enabled');
+  } else {
+    logger.info('⚠️ Daily sync jobs disabled (ENABLE_DAILY_SYNC=false)');
+  }
+
+  // ============== Existing Jobs ==============
 
   // Weekly keyword rank tracking (Every Monday at 6 AM)
   cron.schedule('0 6 * * 1', async () => {
@@ -24,8 +71,8 @@ function initScheduler() {
     await monthlyReportGeneration();
   });
 
-  // Daily audit for clients with daily frequency (Every day at 3 AM)
-  cron.schedule('0 3 * * *', async () => {
+  // Daily audit for clients with daily frequency (Every day at 3:30 AM - after GBP sync)
+  cron.schedule('30 3 * * *', async () => {
     logger.info('⏰ Running daily audits...');
     await dailyAudits();
   });
@@ -211,4 +258,148 @@ module.exports = {
   monthlyReportGeneration,
   dailyAudits,
   checkOverdueTasks,
+  // NEW: Export sync functions
+  dailyGA4Sync,
+  dailyGSCSync,
+  dailyGBPSync,
+  dailyDeltaCalculation,
+  dailyInsightsGeneration,
 };
+
+// ============== NEW: Daily Sync Functions ==============
+
+/**
+ * Daily GA4 data sync for all clients
+ */
+async function dailyGA4Sync() {
+  try {
+    const clients = await Client.find({
+      isActive: true,
+      'integrations.ga4PropertyId': { $exists: true, $ne: '' }
+    });
+
+    logger.info(`📊 Syncing GA4 data for ${clients.length} clients...`);
+    let success = 0;
+    let failed = 0;
+
+    for (const client of clients) {
+      try {
+        await dataSyncService.syncClientGA4(client._id);
+        success++;
+      } catch (err) {
+        logger.error(`GA4 sync failed for ${client.name}:`, err.message);
+        failed++;
+      }
+      // Rate limit: 1 second between requests
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    logger.info(`✅ GA4 sync complete: ${success} success, ${failed} failed`);
+  } catch (error) {
+    logger.error('Daily GA4 sync error:', error);
+  }
+}
+
+/**
+ * Daily GSC data sync for all clients
+ */
+async function dailyGSCSync() {
+  try {
+    const clients = await Client.find({
+      isActive: true,
+      'integrations.gscSiteUrl': { $exists: true, $ne: '' }
+    });
+
+    logger.info(`🔍 Syncing GSC data for ${clients.length} clients...`);
+    let success = 0;
+    let failed = 0;
+
+    for (const client of clients) {
+      try {
+        await dataSyncService.syncClientGSC(client._id);
+        success++;
+      } catch (err) {
+        logger.error(`GSC sync failed for ${client.name}:`, err.message);
+        failed++;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    logger.info(`✅ GSC sync complete: ${success} success, ${failed} failed`);
+  } catch (error) {
+    logger.error('Daily GSC sync error:', error);
+  }
+}
+
+/**
+ * Daily GBP data sync for all clients
+ */
+async function dailyGBPSync() {
+  try {
+    const clients = await Client.find({
+      isActive: true,
+      'integrations.gbpLocationIds.0': { $exists: true }
+    });
+
+    logger.info(`📍 Syncing GBP data for ${clients.length} clients...`);
+    let success = 0;
+    let failed = 0;
+
+    for (const client of clients) {
+      try {
+        await dataSyncService.syncClientGBP(client._id);
+        success++;
+      } catch (err) {
+        logger.error(`GBP sync failed for ${client.name}:`, err.message);
+        failed++;
+      }
+      // GBP has stricter rate limits
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    logger.info(`✅ GBP sync complete: ${success} success, ${failed} failed`);
+  } catch (error) {
+    logger.error('Daily GBP sync error:', error);
+  }
+}
+
+/**
+ * Calculate deltas for all clients
+ */
+async function dailyDeltaCalculation() {
+  try {
+    logger.info('📈 Calculating deltas for all clients...');
+    const results = await deltaTrackingService.calculateAllClientDeltas();
+    logger.info(`✅ Delta calculation complete: ${results.success} success, ${results.noData} no data, ${results.failed} failed`);
+  } catch (error) {
+    logger.error('Daily delta calculation error:', error);
+  }
+}
+
+/**
+ * Generate daily AI insights
+ */
+async function dailyInsightsGeneration() {
+  try {
+    const clients = await Client.find({ isActive: true }).limit(10); // Limit to avoid API costs
+    
+    logger.info(`🧠 Generating AI insights for ${clients.length} clients...`);
+
+    for (const client of clients) {
+      try {
+        // Only generate if SEO health is below threshold or has critical issues
+        if (client.seoHealth?.score < 70 || client.seoHealth?.criticalIssues > 0) {
+          const clientIntelligenceService = require('../services/clientIntelligence.service');
+          await clientIntelligenceService.generateAIInsights(client._id);
+          logger.info(`Generated insights for ${client.name}`);
+        }
+      } catch (err) {
+        logger.error(`Insights generation failed for ${client.name}:`, err.message);
+      }
+    }
+
+    logger.info('✅ Daily insights generation complete');
+  } catch (error) {
+    logger.error('Daily insights generation error:', error);
+  }
+}

@@ -68,6 +68,79 @@ const userSchema = new mongoose.Schema({
   },
   resetPasswordToken: String,
   resetPasswordExpire: Date,
+  
+  // NEW: Skills tracking
+  skills: [{
+    name: {
+      type: String,
+      enum: [
+        'Technical SEO',
+        'Content Writing',
+        'Link Building',
+        'Local SEO',
+        'Analytics',
+        'Keyword Research',
+        'On-Page Optimization',
+        'Site Auditing',
+        'Competitor Analysis',
+        'Reporting',
+        'Client Communication',
+        'Project Management'
+      ]
+    },
+    level: {
+      type: String,
+      enum: ['Beginner', 'Intermediate', 'Advanced', 'Expert'],
+      default: 'Intermediate'
+    },
+    yearsExperience: { type: Number, default: 0 }
+  }],
+  
+  // NEW: Capacity tracking
+  capacity: {
+    hoursPerWeek: { type: Number, default: 40 },
+    currentLoad: { type: Number, default: 0 },      // Hours currently assigned
+    maxClients: { type: Number, default: 10 },
+    availability: {
+      type: String,
+      enum: ['Available', 'Busy', 'Overloaded', 'On Leave'],
+      default: 'Available'
+    }
+  },
+  
+  // NEW: Activity tracking
+  activityLog: [{
+    action: {
+      type: String,
+      enum: [
+        'login',
+        'logout', 
+        'task_created',
+        'task_completed',
+        'audit_run',
+        'report_generated',
+        'client_updated',
+        'keyword_added',
+        'page_added',
+        'backlink_added'
+      ]
+    },
+    details: mongoose.Schema.Types.Mixed,
+    clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
+    timestamp: { type: Date, default: Date.now },
+    ipAddress: String
+  }],
+  
+  // NEW: Performance metrics
+  performance: {
+    tasksCompleted: { type: Number, default: 0 },
+    tasksCompletedThisMonth: { type: Number, default: 0 },
+    avgTaskCompletionTime: Number,     // in hours
+    auditsRun: { type: Number, default: 0 },
+    reportsGenerated: { type: Number, default: 0 },
+    lastActive: Date,
+    streak: { type: Number, default: 0 }  // Consecutive active days
+  }
 }, {
   timestamps: true,
 });

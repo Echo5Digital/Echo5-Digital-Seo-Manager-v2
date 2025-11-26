@@ -25,6 +25,17 @@ router.post(
     try {
       const { name, email, password, role } = req.body;
 
+      // Email domain restriction: Non-Boss users must use @echo5digital.com
+      const allowedDomain = 'echo5digital.com';
+      const emailDomain = email.split('@')[1]?.toLowerCase();
+      
+      if (role !== 'Boss' && emailDomain !== allowedDomain) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Non-admin users must use an @${allowedDomain} email address`,
+        });
+      }
+
       // Check if user exists
       const existingUser = await User.findOne({ email });
       if (existingUser) {

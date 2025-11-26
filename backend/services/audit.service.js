@@ -513,11 +513,40 @@ class AuditService {
           
           const h1 = Array.isArray(headings.h1Text) ? (headings.h1Text[0] || '') : ''
           const metaDescription = meta.description?.text || ''
+          
+          // Calculate SEO score directly from available data (don't rely on stored seoAnalysis)
+          const calculatedSeoScore = this.calculatePageSEOScore({
+            hasTitle: !!title,
+            titleLength: title.length,
+            hasDescription: !!metaDescription,
+            descriptionLength: metaDescription.length,
+            hasH1: headings.h1Count === 1 || (Array.isArray(headings.h1Text) && headings.h1Text.length === 1),
+            wordCount: content.wordCount || 0,
+            imagesWithAlt: images.withAlt || 0,
+            totalImages: images.total || 0,
+            internalLinks: pa.links?.internal?.count || 0,
+            hasStructuredData: (pa.structuredData?.types?.length > 0) || false
+          });
 
           // Check if page already exists to preserve focus keyword and exclusion status
           const existingPage = await Page.findOne({ clientId, slug })
           const existingFocusKeyword = existingPage?.seo?.focusKeyword
           const existingExcluded = existingPage?.excluded
+          
+          // Auto-detect focus keyword if not already set
+          let focusKeyword = existingFocusKeyword;
+          if (!focusKeyword) {
+            focusKeyword = this.detectFocusKeyword({
+              title,
+              h1,
+              metaDescription,
+              slug,
+              sampleText: content.sampleText || ''
+            });
+          }
+          
+          // DEBUG: Log extracted title, score, and focus keyword
+          console.log(`📝 Page: ${slug} | Title: "${title?.substring(0, 30) || 'EMPTY'}" | Score: ${calculatedSeoScore} | Focus: "${focusKeyword || 'none'}"`);
 
           const update = {
             clientId,
@@ -530,9 +559,9 @@ class AuditService {
             seo: {
               canonical: meta.canonical || undefined,
               robots: meta.robots || 'index,follow',
-              focusKeyword: existingFocusKeyword || undefined, // Preserve existing focus keyword
+              focusKeyword: focusKeyword || undefined, // Use detected or existing focus keyword
               readabilityScore: undefined,
-              seoScore: pa.seoAnalysis?.seoScore ?? undefined,
+              seoScore: calculatedSeoScore, // Use calculated score
             },
             structuredData: {
               type: (() => {
@@ -576,7 +605,11 @@ class AuditService {
                 external: pa.links?.external?.count || 0,
                 broken: pa.links?.potentiallyBroken || 0,
               },
-              sample: content.sampleText?.substring(0, 500) || undefined, // Limit to 500 chars
+              sample: content.sampleText?.substring(0, 2000) || undefined, // Expanded to 2000 chars
+              // NEW: Content blocks extracted during audit (no need to recrawl)
+              blocks: (content.blocks || []).slice(0, 50), // Up to 50 blocks
+              // NEW: Internal links with anchor text
+              internalLinks: (content.contentInternalLinks || []).slice(0, 100), // Up to 100 internal links
             },
             images: (images.details || []).slice(0, 20).map(img => ({ // Limit to 20 images per page
               url: img.src?.substring(0, 500) || '', // Limit URL length
@@ -1055,6 +1088,63 @@ class AuditService {
       // Remove scripts, styles, and other non-content for clean analysis
       $('script, style, noscript, iframe, svg').remove();
       
+      // ============================================
+      // ENHANCED CONTENT EXTRACTION (for Page Optimizer)
+      // Extract structured content blocks during audit
+      // ============================================
+      
+      // Try to find main content area first for cleaner extraction
+      let $contentArea = $('main, [role="main"], article, .content, #content, .main-content, #main-content, .post-content, .entry-content');
+      if ($contentArea.length === 0) {
+        $contentArea = $('body');
+      }
+      
+      // Extract content blocks (h1-h6, p elements)
+      const contentBlocks = [];
+      $contentArea.find('h1, h2, h3, h4, h5, h6, p').each((i, el) => {
+        if (contentBlocks.length >= 50) return false; // Limit blocks
+        const tag = el.tagName ? String(el.tagName).toLowerCase() : $(el).get(0)?.tagName?.toLowerCase();
+        const text = $(el).text().replace(/\s+/g, ' ').trim();
+        if (!text || text.length < 10) return; // Skip very short text
+        contentBlocks.push({ tag, text });
+      });
+      
+      // Fallback: try divs/sections if no blocks found
+      if (contentBlocks.length === 0) {
+        $contentArea.find('div, section, article, li').each((i, el) => {
+          if (contentBlocks.length >= 50) return false;
+          const $el = $(el);
+          const text = $el.clone().children().remove().end().text().replace(/\s+/g, ' ').trim();
+          if (!text || text.length < 15) return;
+          contentBlocks.push({ tag: 'div', text });
+        });
+      }
+      
+      // Extract internal links with anchor text for Page Optimizer
+      const contentInternalLinks = [];
+      const pageHost = (() => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' } })();
+      $contentArea.find('a[href]').each((i, el) => {
+        const href = $(el).attr('href');
+        const anchorText = $(el).text().replace(/\s+/g, ' ').trim();
+        const rel = $(el).attr('rel') || '';
+        if (!href || !anchorText) return;
+        try {
+          const absoluteUrl = new URL(href, url).href;
+          const linkHost = new URL(absoluteUrl).hostname.toLowerCase().replace(/^www\./, '');
+          if (linkHost === pageHost && !absoluteUrl.includes('#') && contentInternalLinks.length < 100) {
+            contentInternalLinks.push({
+              url: absoluteUrl,
+              anchorText: anchorText.substring(0, 200),
+              isNofollow: rel.includes('nofollow')
+            });
+          }
+        } catch {}
+      });
+      
+      // ============================================
+      // END ENHANCED CONTENT EXTRACTION
+      // ============================================
+      
   // Content Analysis with more details
   const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
       const wordCount = bodyText.split(' ').filter(w => w.length > 0).length;
@@ -1327,7 +1417,7 @@ class AuditService {
           htmlSize: response.data.length
         },
         
-        // Content
+        // Content (ENHANCED - includes blocks for Page Optimizer)
         content: {
           wordCount: wordCount,
           paragraphs: paragraphs,
@@ -1338,7 +1428,11 @@ class AuditService {
           textLength: bodyText.length,
           htmlSize: response.data.length,
           sampleText: bodyText.substring(0, 2000),
-          contentDensity: (wordCount / response.data.length * 100).toFixed(2) + '%'
+          contentDensity: (wordCount / response.data.length * 100).toFixed(2) + '%',
+          // NEW: Structured content blocks for Page Optimizer
+          blocks: contentBlocks,
+          // NEW: Internal links with anchor text
+          contentInternalLinks: contentInternalLinks
         },
         
         // SEO Opportunities & Issues
@@ -1426,6 +1520,141 @@ class AuditService {
     if (!metrics.hasStructuredData) score -= 5;
     
     return Math.max(0, Math.round(score));
+  }
+
+  /**
+   * Automatically detect the best focus keyword for a page
+   * Analyzes title, H1, meta description, URL slug, and content to suggest a focus keyword
+   * @param {Object} pageData - Object containing title, h1, metaDescription, slug, content
+   * @returns {string|null} - Suggested focus keyword or null if none found
+   */
+  detectFocusKeyword(pageData) {
+    const { title = '', h1 = '', metaDescription = '', slug = '', sampleText = '' } = pageData;
+    
+    // Skip detection for homepage or utility pages
+    if (slug === '__root__' || slug === '' || slug === '/') {
+      return null;
+    }
+    
+    // Common stop words to filter out
+    const stopWords = new Set([
+      'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
+      'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
+      'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must',
+      'shall', 'can', 'need', 'dare', 'ought', 'used', 'it', 'its', 'this', 'that',
+      'these', 'those', 'i', 'you', 'he', 'she', 'we', 'they', 'what', 'which', 'who',
+      'whom', 'whose', 'where', 'when', 'why', 'how', 'all', 'each', 'every', 'both',
+      'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
+      'same', 'so', 'than', 'too', 'very', 'just', 'about', 'into', 'through', 'during',
+      'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then',
+      'once', 'here', 'there', 'any', 'our', 'your', 'their', 'my', 'his', 'her', 'up',
+      'down', 'out', 'off', 'over', 'under', 'also', 'get', 'got', 'new', 'best', 'top',
+      'page', 'home', 'site', 'website', 'blog', 'post', 'article', 'read', 'click', 'learn'
+    ]);
+    
+    // Extract potential keywords from different sources with weights
+    const keywordCandidates = new Map(); // keyword -> score
+    
+    // Helper to extract and score n-grams (1-4 words)
+    const extractKeywords = (text, weight) => {
+      if (!text || typeof text !== 'string') return;
+      
+      // Clean and normalize text
+      const cleanText = text
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      const words = cleanText.split(' ').filter(w => w.length > 2 && !stopWords.has(w));
+      
+      // Single words (unigrams)
+      words.forEach(word => {
+        if (word.length >= 3) {
+          const current = keywordCandidates.get(word) || 0;
+          keywordCandidates.set(word, current + weight * 0.5);
+        }
+      });
+      
+      // 2-word phrases (bigrams) - most common for focus keywords
+      for (let i = 0; i < words.length - 1; i++) {
+        const bigram = `${words[i]} ${words[i + 1]}`;
+        if (bigram.length >= 5) {
+          const current = keywordCandidates.get(bigram) || 0;
+          keywordCandidates.set(bigram, current + weight);
+        }
+      }
+      
+      // 3-word phrases (trigrams)
+      for (let i = 0; i < words.length - 2; i++) {
+        const trigram = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+        if (trigram.length >= 8 && trigram.length <= 40) {
+          const current = keywordCandidates.get(trigram) || 0;
+          keywordCandidates.set(trigram, current + weight * 0.8);
+        }
+      }
+    };
+    
+    // Extract from URL slug (high weight - usually reflects main topic)
+    const slugText = slug.replace(/[-_]/g, ' ').replace(/\//g, ' ');
+    extractKeywords(slugText, 3);
+    
+    // Extract from H1 (highest weight - primary heading)
+    extractKeywords(h1, 4);
+    
+    // Extract from title (high weight)
+    // Remove common suffixes like "| Company Name" or "- Brand"
+    const cleanTitle = title.replace(/\s*[|\-–—]\s*[^|\-–—]+$/, '').trim();
+    extractKeywords(cleanTitle, 3.5);
+    
+    // Extract from meta description (medium weight)
+    extractKeywords(metaDescription, 2);
+    
+    // Extract from content sample (lower weight but helps confirm)
+    if (sampleText) {
+      extractKeywords(sampleText.substring(0, 500), 1);
+    }
+    
+    // Find the best keyword candidate
+    let bestKeyword = null;
+    let bestScore = 0;
+    
+    keywordCandidates.forEach((score, keyword) => {
+      // Prefer 2-3 word phrases over single words
+      const wordCount = keyword.split(' ').length;
+      let adjustedScore = score;
+      
+      // Boost 2-word phrases (ideal for SEO)
+      if (wordCount === 2) adjustedScore *= 1.3;
+      // Slight boost for 3-word phrases
+      else if (wordCount === 3) adjustedScore *= 1.1;
+      // Penalize very long phrases
+      else if (wordCount > 4) adjustedScore *= 0.5;
+      // Penalize single words slightly
+      else if (wordCount === 1) adjustedScore *= 0.7;
+      
+      // Penalize very short or very long keywords
+      if (keyword.length < 4) adjustedScore *= 0.3;
+      else if (keyword.length > 50) adjustedScore *= 0.5;
+      
+      // Bonus if keyword appears in multiple sources (already factored in by cumulative scoring)
+      
+      if (adjustedScore > bestScore) {
+        bestScore = adjustedScore;
+        bestKeyword = keyword;
+      }
+    });
+    
+    // Only return if we have a reasonably confident match
+    if (bestScore >= 2 && bestKeyword) {
+      // Capitalize first letter of each word for display
+      return bestKeyword
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+    
+    return null;
   }
 
   /**
