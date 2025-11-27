@@ -1,6 +1,173 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import useChatStore from '../../store/chat'
+
+/**
+ * Simple Markdown renderer for chat messages
+ */
+const renderMarkdown = (text) => {
+  if (!text) return null;
+  
+  const lines = text.split('\n');
+  const elements = [];
+  let tableBuffer = [];
+  let inTable = false;
+  let listBuffer = [];
+  let inList = false;
+  
+  const flushTable = () => {
+    if (tableBuffer.length > 0) {
+      const rows = tableBuffer.map(row => 
+        row.split('|').filter(cell => cell.trim() !== '').map(cell => cell.trim())
+      );
+      
+      // Filter out separator row (contains only dashes)
+      const dataRows = rows.filter(row => 
+        !row.every(cell => /^[-:]+$/.test(cell))
+      );
+      
+      if (dataRows.length > 0) {
+        const headers = dataRows[0];
+        const body = dataRows.slice(1);
+        
+        elements.push(
+          <div key={`table-${elements.length}`} className="my-3 w-full">
+            <table className="w-full text-xs border-collapse table-fixed">
+              <thead>
+                <tr className="bg-slate-600/50">
+                  {headers.map((h, i) => (
+                    <th key={i} className="px-1.5 py-1 text-left font-semibold text-slate-200 border-b border-slate-500 truncate">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {body.map((row, ri) => (
+                  <tr key={ri} className={ri % 2 === 0 ? 'bg-slate-700/30' : 'bg-slate-700/50'}>
+                    {row.map((cell, ci) => (
+                      <td key={ci} className="px-1.5 py-1 text-slate-300 border-b border-slate-600/50 truncate" title={cell}>
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      tableBuffer = [];
+    }
+  };
+  
+  const flushList = () => {
+    if (listBuffer.length > 0) {
+      elements.push(
+        <ul key={`list-${elements.length}`} className="my-2 space-y-1">
+          {listBuffer.map((item, i) => (
+            <li key={i} className="flex items-start gap-2 text-sm">
+              <span className="text-blue-400 mt-1">•</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      listBuffer = [];
+    }
+  };
+  
+  lines.forEach((line, idx) => {
+    // Check for table row
+    if (line.includes('|') && line.trim().startsWith('|')) {
+      if (!inTable) {
+        flushList();
+        inTable = true;
+      }
+      tableBuffer.push(line);
+      return;
+    } else if (inTable) {
+      flushTable();
+      inTable = false;
+    }
+    
+    // Check for list item
+    if (/^[-*•]\s/.test(line.trim())) {
+      if (!inList) inList = true;
+      listBuffer.push(line.trim().replace(/^[-*•]\s/, ''));
+      return;
+    } else if (inList) {
+      flushList();
+      inList = false;
+    }
+    
+    // Headers
+    if (line.startsWith('### **') && line.endsWith('**')) {
+      elements.push(
+        <h3 key={idx} className="text-base font-bold text-white mt-3 mb-2">
+          {line.replace(/^###\s*\*\*|\*\*$/g, '')}
+        </h3>
+      );
+      return;
+    }
+    if (line.startsWith('### ')) {
+      elements.push(
+        <h3 key={idx} className="text-base font-bold text-white mt-3 mb-2">
+          {line.replace(/^###\s*/, '').replace(/\*\*/g, '')}
+        </h3>
+      );
+      return;
+    }
+    if (line.startsWith('## ')) {
+      elements.push(
+        <h2 key={idx} className="text-lg font-bold text-white mt-3 mb-2">
+          {line.replace(/^##\s*/, '').replace(/\*\*/g, '')}
+        </h2>
+      );
+      return;
+    }
+    
+    // Bold text summary lines
+    if (line.startsWith('- **') && line.includes(':**')) {
+      const match = line.match(/^-\s*\*\*([^*]+)\*\*:?\s*(.*)$/);
+      if (match) {
+        elements.push(
+          <div key={idx} className="flex items-center gap-2 text-sm my-1">
+            <span className="text-purple-400">•</span>
+            <span className="font-semibold text-slate-200">{match[1]}:</span>
+            <span className="text-slate-300">{match[2]}</span>
+          </div>
+        );
+        return;
+      }
+    }
+    
+    // Empty lines
+    if (line.trim() === '') {
+      elements.push(<div key={idx} className="h-2" />);
+      return;
+    }
+    
+    // Regular paragraph with inline bold
+    const processedLine = line
+      .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
+      .replace(/`([^`]+)`/g, '<code class="bg-slate-600 px-1 rounded text-blue-300">$1</code>');
+    
+    elements.push(
+      <p 
+        key={idx} 
+        className="text-sm text-slate-300 my-1"
+        dangerouslySetInnerHTML={{ __html: processedLine }}
+      />
+    );
+  });
+  
+  // Flush any remaining buffers
+  if (inTable) flushTable();
+  if (inList) flushList();
+  
+  return elements;
+};
 
 /**
  * Modern Siri-like Wave Animation for minimized state
@@ -301,13 +468,17 @@ const ChatMessage = ({ message, index, onFeedback, onPin, onButtonClick }) => {
       </div>
 
       {/* Message content */}
-      <div className={`flex-1 max-w-[80%] ${isUser ? 'text-right' : ''}`}>
+      <div className={`flex-1 ${isUser ? 'max-w-[80%] text-right' : 'max-w-[95%]'}`}>
         <div className={`inline-block rounded-2xl px-4 py-2.5 ${
           isUser 
             ? 'bg-blue-600 text-white rounded-br-md' 
             : 'bg-slate-700 text-slate-100 rounded-bl-md'
         }`}>
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          {isUser ? (
+            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          ) : (
+            <div className="text-sm">{renderMarkdown(message.content)}</div>
+          )}
         </div>
 
         {/* Button suggestions */}
@@ -660,6 +831,7 @@ const ChatWindow = ({ onClose }) => {
     historyOpen,
     inputMode,
     settings,
+    isFullscreen,
     sendMessage,
     sendButtonAction,
     submitFeedback,
@@ -667,7 +839,8 @@ const ChatWindow = ({ onClose }) => {
     loadHistory,
     loadSession,
     setHistoryOpen,
-    setInputMode
+    setInputMode,
+    toggleFullscreen
   } = useChatStore()
 
   const [input, setInput] = useState('')
@@ -712,7 +885,11 @@ const ChatWindow = ({ onClose }) => {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 20, scale: 0.95 }}
       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-      className="fixed bottom-24 right-6 w-[420px] h-[600px] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col z-50"
+      className={`fixed bg-slate-900 shadow-2xl border border-slate-700 overflow-hidden flex flex-col z-50 transition-all duration-300 ${
+        isFullscreen 
+          ? 'inset-0 rounded-none' 
+          : 'bottom-24 right-6 w-[420px] h-[600px] rounded-2xl'
+      }`}
     >
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-4 flex items-center justify-between border-b border-slate-700">
@@ -736,6 +913,24 @@ const ChatWindow = ({ onClose }) => {
         
         <div className="flex items-center gap-2">
           <SiriOrb isActive={true} isListening={false} isTyping={isTyping} />
+          
+          {/* Fullscreen toggle button */}
+          <button
+            onClick={toggleFullscreen}
+            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {isFullscreen ? (
+              <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+              </svg>
+            )}
+          </button>
+          
           <button
             onClick={onClose}
             className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
@@ -748,7 +943,7 @@ const ChatWindow = ({ onClose }) => {
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${isFullscreen ? 'max-w-4xl mx-auto w-full' : ''}`}>
         {messages.map((msg, i) => (
           <ChatMessage
             key={i}
@@ -778,49 +973,51 @@ const ChatWindow = ({ onClose }) => {
 
       {/* Input area */}
       <div className="p-4 bg-slate-800 border-t border-slate-700">
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setInputMode('voice')}
-            className="p-2.5 rounded-full transition-colors hover:bg-slate-700 text-slate-400 hover:text-purple-400"
-            title="Voice input"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-          </button>
-          
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything..."
-            className="flex-1 bg-slate-700 rounded-full px-4 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          
-          <button
-            type="submit"
-            disabled={!input.trim()}
-            className="p-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-full transition-colors"
-          >
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-          </button>
-        </form>
-        
-        {/* Quick actions */}
-        <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
-          {['My Tasks', 'Daily Summary', 'Help'].map((action) => (
+        <div className={`${isFullscreen ? 'max-w-4xl mx-auto' : ''}`}>
+          <form onSubmit={handleSubmit} className="flex items-center gap-2">
             <button
-              key={action}
-              onClick={() => handleButtonClick(action)}
-              className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+              type="button"
+              onClick={() => setInputMode('voice')}
+              className="p-2.5 rounded-full transition-colors hover:bg-slate-700 text-slate-400 hover:text-purple-400"
+              title="Voice input"
             >
-              {action}
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
             </button>
-          ))}
+            
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask me anything..."
+              className="flex-1 bg-slate-700 rounded-full px-4 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              className="p-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-full transition-colors"
+            >
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </form>
+          
+          {/* Quick actions */}
+          <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
+            {['My Tasks', 'Daily Summary', 'Help'].map((action) => (
+              <button
+                key={action}
+                onClick={() => handleButtonClick(action)}
+                className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+              >
+                {action}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

@@ -26,12 +26,14 @@ const useChatStore = create((set, get) => ({
   // UI state
   historyOpen: false,
   inputMode: 'text', // 'text' or 'voice'
+  isFullscreen: false,
 
   // Actions
   setOpen: (isOpen) => set({ isOpen }),
   toggleOpen: () => set((state) => ({ isOpen: !state.isOpen })),
   setHistoryOpen: (historyOpen) => set({ historyOpen }),
   setInputMode: (inputMode) => set({ inputMode }),
+  toggleFullscreen: () => set((state) => ({ isFullscreen: !state.isFullscreen })),
   setContext: (context) => set({ context }),
   
   // Initialize chat session

@@ -408,12 +408,21 @@ class ChatService {
   async getClients(args, user) {
     const query = {};
     
-    if (args.status) query.status = args.status;
+    // isActive is a boolean in Client model
+    if (args.status === 'active') query.isActive = true;
+    else if (args.status === 'inactive') query.isActive = false;
     if (args.search) query.name = new RegExp(args.search, 'i');
 
     const clients = await Client.find(query)
-      .select('name domain status')
+      .select('name domain isActive')
       .limit(args.limit || 10);
+
+    // Get counts by status
+    const [activeCount, inactiveCount, totalCount] = await Promise.all([
+      Client.countDocuments({ isActive: true }),
+      Client.countDocuments({ isActive: false }),
+      Client.countDocuments({})
+    ]);
 
     return {
       count: clients.length,
@@ -421,8 +430,16 @@ class ChatService {
         id: c._id,
         name: c.name,
         domain: c.domain,
-        status: c.status
-      }))
+        status: c.isActive ? 'Active' : 'Inactive'
+      })),
+      summary: {
+        total: totalCount,
+        active: activeCount,
+        inactive: inactiveCount
+      },
+      message: totalCount === 0 
+        ? 'No clients in the system yet'
+        : `Found ${clients.length} client(s)`
     };
   }
 
@@ -971,13 +988,27 @@ class ChatService {
       return { error: 'You do not have permission to view this data' };
     }
 
-    const { limit = 5 } = args;
+    const { limit = 5, includeInactive = false } = args;
 
-    // Get clients with their metrics
-    const clients = await Client.find({ status: 'Active' }).select('name domain');
+    // Get clients - isActive is a boolean field
+    const clientQuery = includeInactive ? {} : { isActive: true };
+    const clients = await Client.find(clientQuery).select('name domain isActive');
+    
+    if (clients.length === 0) {
+      // Check if there are any clients at all
+      const totalClients = await Client.countDocuments({});
+      const inactiveClients = await Client.countDocuments({ isActive: false });
+      return {
+        clients: [],
+        count: 0,
+        message: totalClients === 0 
+          ? 'No clients found in the system. Add clients to get started!'
+          : `No active clients found. There are ${inactiveClients} inactive client(s).`
+      };
+    }
     
     const clientsWithMetrics = await Promise.all(clients.map(async (client) => {
-      const [pages, overdueTasks, avgScore] = await Promise.all([
+      const [issuePageCount, overdueTasks, avgScoreResult, totalPages, totalTasks] = await Promise.all([
         Page.countDocuments({ clientId: client._id, 'seo.seoScore': { $lt: 50 } }),
         Task.countDocuments({ 
           clientId: client._id, 
@@ -987,20 +1018,25 @@ class ChatService {
         Page.aggregate([
           { $match: { clientId: client._id } },
           { $group: { _id: null, avgScore: { $avg: '$seo.seoScore' } } }
-        ])
+        ]),
+        Page.countDocuments({ clientId: client._id }),
+        Task.countDocuments({ clientId: client._id, status: { $nin: ['Completed', 'Cancelled'] } })
       ]);
 
-      const score = avgScore[0]?.avgScore || 0;
-      const urgencyScore = (pages * 2) + (overdueTasks * 3) + ((100 - score) / 10);
+      const score = avgScoreResult[0]?.avgScore || 0;
+      const urgencyScore = (issuePageCount * 2) + (overdueTasks * 3) + ((100 - score) / 10);
 
       return {
         id: client._id,
         name: client.name,
         domain: client.domain,
-        issuePages: pages,
+        issuePages: issuePageCount,
+        totalPages,
         overdueTasks,
+        pendingTasks: totalTasks,
         avgSeoScore: Math.round(score),
-        urgencyScore: Math.round(urgencyScore)
+        urgencyScore: Math.round(urgencyScore),
+        status: urgencyScore > 20 ? 'needs-attention' : urgencyScore > 10 ? 'monitor' : 'healthy'
       };
     }));
 
@@ -1009,9 +1045,22 @@ class ChatService {
       .sort((a, b) => b.urgencyScore - a.urgencyScore)
       .slice(0, limit);
 
+    const needingAttention = sorted.filter(c => c.status === 'needs-attention').length;
+    const monitoring = sorted.filter(c => c.status === 'monitor').length;
+    const healthy = sorted.filter(c => c.status === 'healthy').length;
+
     return {
       clients: sorted,
-      count: sorted.length
+      count: sorted.length,
+      totalClients: clients.length,
+      summary: {
+        needingAttention,
+        monitoring,
+        healthy
+      },
+      message: needingAttention > 0 
+        ? `${needingAttention} client(s) need attention`
+        : 'All clients are in good standing'
     };
   }
 
