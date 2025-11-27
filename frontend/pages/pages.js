@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Layout from '../components/Layout'
+import QuickTaskModal from '../components/QuickTaskModal'
 import useClientStore from '../store/clients'
 import useAuditStore from '../store/audits'
 import useAuthStore from '../store/auth'
@@ -18,7 +19,8 @@ import {
   XCircleIcon,
   ArrowTopRightOnSquareIcon,
   DocumentArrowDownIcon,
-  FunnelIcon
+  FunnelIcon,
+  ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline'
 
 export default function Pages() {
@@ -32,6 +34,11 @@ export default function Pages() {
   const [selectedId, setSelectedId] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [scoreFilter, setScoreFilter] = useState('all')
+  
+  // Quick Task Modal state
+  const [showQuickTask, setShowQuickTask] = useState(false)
+  const [selectedIssue, setSelectedIssue] = useState(null)
+  const [selectedPageForTask, setSelectedPageForTask] = useState(null)
 
   useEffect(() => { fetchClients() }, [fetchClients])
   useEffect(() => { fetchKeywords() }, [fetchKeywords])
@@ -186,6 +193,72 @@ export default function Pages() {
     if (score >= 80) return <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
     if (score >= 60) return <ExclamationTriangleIcon className="w-4 h-4 text-amber-600" />
     return <XCircleIcon className="w-4 h-4 text-red-600" />
+  }
+
+  // Generate SEO issues from page data for Quick Task
+  const getPageIssues = (page) => {
+    if (!page) return []
+    const issues = []
+    
+    // Title issues
+    if (!page.title) {
+      issues.push({ category: 'Title', message: 'Page title is missing', severity: 'critical' })
+    } else if (page.title.length < 30) {
+      issues.push({ category: 'Title', message: `Title is too short (${page.title.length} chars, recommend 50-60)`, severity: 'medium' })
+    } else if (page.title.length > 60) {
+      issues.push({ category: 'Title', message: `Title is too long (${page.title.length} chars, recommend 50-60)`, severity: 'low' })
+    }
+    
+    // Meta Description issues
+    if (!page.metaDescription) {
+      issues.push({ category: 'Meta Description', message: 'Meta description is missing', severity: 'high' })
+    } else if (page.metaDescription.length < 120) {
+      issues.push({ category: 'Meta Description', message: `Meta description is too short (${page.metaDescription.length} chars, recommend 150-160)`, severity: 'medium' })
+    } else if (page.metaDescription.length > 160) {
+      issues.push({ category: 'Meta Description', message: `Meta description is too long (${page.metaDescription.length} chars)`, severity: 'low' })
+    }
+    
+    // H1 issues
+    if (!page.h1) {
+      issues.push({ category: 'H1', message: 'H1 heading is missing', severity: 'high' })
+    }
+    
+    // Content issues
+    if (!page.content?.wordCount || page.content.wordCount < 300) {
+      issues.push({ category: 'Content', message: `Low word count (${page.content?.wordCount || 0} words, recommend 300+)`, severity: 'medium' })
+    }
+    
+    // Internal Links issues
+    if (!page.content?.links?.internal || page.content.links.internal < 3) {
+      issues.push({ category: 'Internal Links', message: `Low internal links (${page.content?.links?.internal || 0}, recommend 3+)`, severity: 'medium' })
+    }
+    
+    // Image Alt issues
+    if (page.images && page.images.length > 0) {
+      const missingAlt = page.images.filter(img => !img.alt || !img.alt.trim()).length
+      if (missingAlt > 0) {
+        issues.push({ category: 'Images', message: `${missingAlt} image${missingAlt > 1 ? 's' : ''} missing alt text`, severity: 'medium' })
+      }
+    }
+    
+    // Focus keyword issues
+    if (!page.seo?.focusKeyword) {
+      issues.push({ category: 'Keywords', message: 'No focus keyword set', severity: 'medium' })
+    }
+    
+    // Canonical issues
+    if (!page.seo?.canonical) {
+      issues.push({ category: 'Technical', message: 'Canonical URL not set', severity: 'low' })
+    }
+    
+    return issues
+  }
+
+  // Open Quick Task modal for an issue
+  const openQuickTask = (issue, page) => {
+    setSelectedIssue(issue)
+    setSelectedPageForTask(page)
+    setShowQuickTask(true)
   }
 
   return (
@@ -614,6 +687,56 @@ export default function Pages() {
                                     </div>
                                   </div>
                                 </div>
+                                
+                                {/* Quick Task Actions - SEO Issues */}
+                                {(() => {
+                                  const issues = getPageIssues(p)
+                                  return issues.length > 0 ? (
+                                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-100">
+                                      <div className="flex items-center gap-2 mb-3">
+                                        <ClipboardDocumentListIcon className="w-4 h-4 text-indigo-600" />
+                                        <h4 className="text-sm font-semibold text-indigo-900">Quick Task Actions</h4>
+                                        <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full">{issues.length} issues</span>
+                                      </div>
+                                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        {issues.map((issue, idx) => (
+                                          <div 
+                                            key={idx} 
+                                            className="flex items-center justify-between gap-2 p-2 bg-white rounded-lg border border-gray-100 hover:border-indigo-200 transition-colors"
+                                          >
+                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                                                issue.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                                                issue.severity === 'high' ? 'bg-orange-100 text-orange-700' :
+                                                issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                                'bg-blue-100 text-blue-700'
+                                              }`}>
+                                                {issue.severity?.toUpperCase()}
+                                              </span>
+                                              <span className="text-xs text-gray-700 truncate">{issue.message}</span>
+                                            </div>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                openQuickTask(issue, p)
+                                              }}
+                                              className="shrink-0 text-[10px] px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors font-medium flex items-center gap-1"
+                                            >
+                                              <ClipboardDocumentListIcon className="w-3 h-3" />
+                                              Create Task
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100 text-center">
+                                      <CheckCircleIcon className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
+                                      <p className="text-sm text-emerald-700 font-medium">No major issues detected!</p>
+                                      <p className="text-xs text-emerald-600 mt-1">This page is well optimized</p>
+                                    </div>
+                                  )
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -631,6 +754,18 @@ export default function Pages() {
             </>
           )}
         </div>
+        
+        {/* Quick Task Modal */}
+        <QuickTaskModal
+          isOpen={showQuickTask}
+          onClose={() => {
+            setShowQuickTask(false)
+            setSelectedIssue(null)
+            setSelectedPageForTask(null)
+          }}
+          issue={selectedIssue}
+          page={selectedPageForTask}
+        />
       </div>
     </Layout>
   )

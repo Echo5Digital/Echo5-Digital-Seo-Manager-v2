@@ -4,7 +4,11 @@ const Task = require('../models/Task.model');
 const User = require('../models/User.model');
 const Notification = require('../models/Notification.model');
 const emailService = require('../services/email.service');
+const AIService = require('../services/ai.service');
 const { protect, authorize } = require('../middleware/auth');
+
+// Initialize AI service
+const aiService = new AIService();
 
 // GET /api/tasks - Get tasks (filtered by user role)
 router.get('/', protect, async (req, res, next) => {
@@ -210,6 +214,34 @@ router.delete('/:id', protect, authorize('Boss', 'Manager', 'Admin'), async (req
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// POST /api/tasks/suggest-fix - Generate AI fix suggestion for an SEO issue
+router.post('/suggest-fix', protect, async (req, res, next) => {
+  try {
+    const { issueType, issueDetails } = req.body;
+
+    if (!issueType) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Issue type is required',
+      });
+    }
+
+    // Generate AI fix suggestion
+    const suggestion = await aiService.generateFixSuggestion(issueType, issueDetails);
+
+    res.json({
+      status: 'success',
+      data: { suggestion },
+    });
+  } catch (error) {
+    console.error('AI suggestion error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message || 'Failed to generate AI suggestion',
+    });
   }
 });
 

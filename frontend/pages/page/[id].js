@@ -6,6 +6,7 @@ import usePagesStore from '../../store/pages'
 import useAuthStore from '../../store/auth'
 import SEOFixSuggestionsModal from '../../components/SEOFixSuggestionsModal'
 import AssignTasksModal from '../../components/AssignTasksModal'
+import QuickTaskModal from '../../components/QuickTaskModal'
 
 export default function PageDetail() {
   const router = useRouter()
@@ -18,6 +19,8 @@ export default function PageDetail() {
   const [seoReport, setSeoReport] = useState(null)
   const [showFixesModal, setShowFixesModal] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
+  const [showQuickTaskModal, setShowQuickTaskModal] = useState(false)
+  const [selectedIssueForTask, setSelectedIssueForTask] = useState(null)
   const [suggestions, setSuggestions] = useState([])
   const [selectedFixes, setSelectedFixes] = useState([])
   const [generatingFixes, setGeneratingFixes] = useState(false)
@@ -732,6 +735,18 @@ export default function PageDetail() {
                                   issue.severity === 'medium' ? 'bg-yellow-600 text-white' :
                                   'bg-gray-600 text-white'
                                 }`}>{issue.severity}</span>
+                                <button
+                                  onClick={() => {
+                                    setSelectedIssueForTask(issue)
+                                    setShowQuickTaskModal(true)
+                                  }}
+                                  className="ml-auto px-2 py-1 text-[10px] font-medium rounded bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors flex items-center gap-1"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                  </svg>
+                                  Create Task
+                                </button>
                               </div>
                               <div className="text-sm text-gray-700 leading-relaxed">{issue.message}</div>
                             </div>
@@ -884,6 +899,16 @@ export default function PageDetail() {
           setShowAssignModal(false)
           setSeoReport(null) // Close SEO report
         }}
+      />
+
+      <QuickTaskModal
+        isOpen={showQuickTaskModal}
+        onClose={() => {
+          setShowQuickTaskModal(false)
+          setSelectedIssueForTask(null)
+        }}
+        issue={selectedIssueForTask}
+        page={page}
       />
     </Layout>
   )
