@@ -3,7 +3,131 @@ import { motion, AnimatePresence } from 'framer-motion'
 import useChatStore from '../../store/chat'
 
 /**
- * Siri-like animated orb visualization
+ * Modern Siri-like Wave Animation for minimized state
+ */
+const SiriWaveButton = ({ onClick, hasUnread, isProcessing }) => {
+  return (
+    <motion.button
+      onClick={onClick}
+      className="relative group"
+      whileHover={{ scale: 1.08 }}
+      whileTap={{ scale: 0.92 }}
+      initial={{ opacity: 0, scale: 0.5 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.5 }}
+    >
+      {/* Outer ambient glow */}
+      <motion.div
+        className="absolute -inset-3 rounded-full opacity-60"
+        animate={{
+          scale: [1, 1.2, 1],
+          opacity: [0.3, 0.5, 0.3]
+        }}
+        transition={{
+          duration: 3,
+          repeat: Infinity,
+          ease: "easeInOut"
+        }}
+        style={{
+          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(139, 92, 246, 0.2) 50%, transparent 70%)'
+        }}
+      />
+
+      {/* Main container */}
+      <div className="relative w-16 h-16 rounded-full overflow-hidden shadow-2xl border border-white/10">
+        {/* Animated gradient background */}
+        <motion.div
+          className="absolute inset-0"
+          animate={{
+            background: [
+              'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #6B8DD6 100%)',
+              'linear-gradient(135deg, #764ba2 0%, #667eea 50%, #f093fb 100%)',
+              'linear-gradient(135deg, #6B8DD6 0%, #8E54E9 50%, #667eea 100%)',
+              'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #6B8DD6 100%)'
+            ]
+          }}
+          transition={{
+            duration: 8,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
+
+        {/* Siri-like wave bars */}
+        <div className="absolute inset-0 flex items-center justify-center gap-[3px]">
+          {[...Array(5)].map((_, i) => (
+            <motion.div
+              key={i}
+              className="w-[3px] bg-white/90 rounded-full"
+              animate={{
+                height: isProcessing 
+                  ? ['8px', '24px', '12px', '20px', '8px']
+                  : ['12px', '20px', '14px', '18px', '12px'],
+                opacity: [0.7, 1, 0.8, 1, 0.7]
+              }}
+              transition={{
+                duration: isProcessing ? 0.6 : 1.5,
+                repeat: Infinity,
+                delay: i * 0.12,
+                ease: "easeInOut"
+              }}
+              style={{
+                boxShadow: '0 0 8px rgba(255,255,255,0.5)'
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Subtle glass overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+        
+        {/* Inner glow ring */}
+        <motion.div
+          className="absolute inset-1 rounded-full border border-white/20"
+          animate={{
+            opacity: [0.3, 0.6, 0.3]
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
+      </div>
+
+      {/* Unread notification badge */}
+      {hasUnread && (
+        <motion.span 
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white"
+        >
+          <motion.span 
+            className="w-2 h-2 bg-white rounded-full"
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 1, repeat: Infinity }}
+          />
+        </motion.span>
+      )}
+
+      {/* Hover tooltip */}
+      <div className="absolute right-full mr-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none">
+        <div className="bg-slate-900/95 text-white text-sm px-4 py-2 rounded-xl shadow-xl whitespace-nowrap backdrop-blur-sm border border-white/10">
+          <div className="flex items-center gap-2">
+            <span className="text-purple-400">✨</span>
+            <span className="font-medium">Echo5 AI Assistant</span>
+          </div>
+          <div className="text-xs text-slate-400 mt-0.5">Click to chat</div>
+        </div>
+        {/* Tooltip arrow */}
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 w-2 h-2 bg-slate-900/95 rotate-45 border-r border-t border-white/10" />
+      </div>
+    </motion.button>
+  )
+}
+
+/**
+ * Siri-like animated orb visualization (for chat header)
  */
 const SiriOrb = ({ isActive, isListening, isTyping }) => {
   return (
@@ -114,7 +238,7 @@ const SiriOrb = ({ isActive, isListening, isTyping }) => {
 }
 
 /**
- * Floating Chat Button with Siri-like animation
+ * Floating Chat Button with Siri-like animation (legacy - kept for reference)
  */
 const ChatButton = ({ onClick, hasUnread, isTyping }) => {
   return (
@@ -732,21 +856,15 @@ export default function ChatWidget() {
 
   return (
     <>
-      {/* Floating button */}
+      {/* Floating Siri-like button */}
       <div className="fixed bottom-6 right-6 z-50">
         <AnimatePresence>
           {!isOpen && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0 }}
-            >
-              <ChatButton 
-                onClick={toggleOpen}
-                hasUnread={false}
-                isTyping={isTyping}
-              />
-            </motion.div>
+            <SiriWaveButton 
+              onClick={toggleOpen}
+              hasUnread={false}
+              isProcessing={isTyping}
+            />
           )}
         </AnimatePresence>
       </div>
