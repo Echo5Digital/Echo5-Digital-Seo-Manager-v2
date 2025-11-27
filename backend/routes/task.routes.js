@@ -4,11 +4,8 @@ const Task = require('../models/Task.model');
 const User = require('../models/User.model');
 const Notification = require('../models/Notification.model');
 const emailService = require('../services/email.service');
-const AIService = require('../services/ai.service');
+const aiService = require('../services/ai.service');
 const { protect, authorize } = require('../middleware/auth');
-
-// Initialize AI service
-const aiService = new AIService();
 
 // GET /api/tasks - Get tasks (filtered by user role)
 router.get('/', protect, async (req, res, next) => {

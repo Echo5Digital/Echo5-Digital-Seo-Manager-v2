@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
+import dynamic from 'next/dynamic'
 import useAuthStore from '../store/auth'
 import Sidebar from './Sidebar'
 import Navbar from './Navbar'
+
+// Dynamically import ChatWidget to avoid SSR issues with speech recognition
+const ChatWidget = dynamic(() => import('./chat/ChatWidget'), { ssr: false })
 
 export default function Layout({ children }) {
   const router = useRouter()
@@ -54,6 +58,8 @@ export default function Layout({ children }) {
           </div>
         </main>
       </div>
+      {/* AI Chatbot - Available on all authenticated pages */}
+      <ChatWidget />
     </div>
   )
 }

@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import useAuthStore from '../store/auth'
+import useChatStore from '../store/chat'
 import { UserCircleIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
 
 export default function Settings() {
   const user = useAuthStore(state => state.user)
   const token = useAuthStore(state => state.token)
+  const chatSettings = useChatStore(state => state.settings)
+  const updateChatSettings = useChatStore(state => state.updateSettings)
+  const clearChatHistory = useChatStore(state => state.clearHistory)
   const [profileData, setProfileData] = useState({
     name: '',
     email: '',
@@ -496,6 +500,140 @@ export default function Settings() {
                 </>
               )}
             </button>
+          </div>
+        </div>
+
+        {/* AI Assistant Settings Section */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-6">
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <div className="bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg p-2">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </div>
+            AI Assistant Settings
+          </h2>
+
+          <div className="space-y-4">
+            {/* Sound Notifications */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <h3 className="font-medium text-gray-900">Sound Notifications</h3>
+                <p className="text-sm text-gray-600">Play sound when AI responds</p>
+              </div>
+              <button
+                onClick={() => updateChatSettings({ soundEnabled: !chatSettings.soundEnabled })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  chatSettings.soundEnabled ? 'bg-blue-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    chatSettings.soundEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Voice Input */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <h3 className="font-medium text-gray-900">Voice Input</h3>
+                <p className="text-sm text-gray-600">Enable voice input for AI assistant</p>
+              </div>
+              <button
+                onClick={() => updateChatSettings({ voiceEnabled: !chatSettings.voiceEnabled })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  chatSettings.voiceEnabled ? 'bg-blue-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    chatSettings.voiceEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Show Timestamps */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <h3 className="font-medium text-gray-900">Show Timestamps</h3>
+                <p className="text-sm text-gray-600">Display time for each message</p>
+              </div>
+              <button
+                onClick={() => updateChatSettings({ showTimestamps: !chatSettings.showTimestamps })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  chatSettings.showTimestamps ? 'bg-blue-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    chatSettings.showTimestamps ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Clear Chat History */}
+            <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
+              <div>
+                <h3 className="font-medium text-red-900">Clear Chat History</h3>
+                <p className="text-sm text-red-600">Delete all past conversations (today's chat is preserved)</p>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to clear your chat history? This cannot be undone.')) {
+                    clearChatHistory()
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Clear History
+              </button>
+            </div>
+          </div>
+
+          {/* AI Capabilities Info */}
+          <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+            <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              What the AI Assistant can do
+            </h3>
+            <ul className="text-sm text-gray-600 space-y-2">
+              <li className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+                View and manage tasks (create, update status, assign)
+              </li>
+              <li className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+                View client information and performance metrics
+              </li>
+              <li className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+                Show SEO issues and audit summaries
+              </li>
+              <li className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+                View keyword rankings and daily summaries
+              </li>
+              <li className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Cannot run audits, create/delete clients or users
+              </li>
+            </ul>
           </div>
         </div>
       </div>

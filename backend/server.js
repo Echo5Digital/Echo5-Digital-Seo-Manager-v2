@@ -107,6 +107,7 @@ const pageRoutes = require('./routes/page.routes');
 const blogRoutes = require('./routes/blog.routes');
 const integrationRoutes = require('./routes/integration.routes');
 const intelligenceRoutes = require('./routes/intelligence.routes'); // NEW: Phase 1 Intelligence API
+const chatRoutes = require('./routes/chat.routes'); // AI Chatbot
 
 // Import services
 const emailService = require('./services/email.service');
@@ -256,6 +257,7 @@ app.use('/api/pages', pageRoutes);
 app.use('/api/blogs', blogRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/intelligence', intelligenceRoutes); // NEW: Phase 1 Intelligence API
+app.use('/api/chat', chatRoutes); // AI Chatbot
 
 // 404 handler
 app.use((req, res) => {
