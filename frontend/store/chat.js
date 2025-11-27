@@ -15,7 +15,7 @@ const useChatStore = create((set, get) => ({
   // Settings
   settings: {
     soundEnabled: true,
-    voiceEnabled: false,
+    voiceEnabled: true,
     showTimestamps: true,
     theme: 'auto'
   },

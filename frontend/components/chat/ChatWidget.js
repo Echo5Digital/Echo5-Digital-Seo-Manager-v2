@@ -508,10 +508,10 @@ const VoiceInput = ({ onTranscript, onCancel }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      className="absolute inset-0 bg-slate-900/95 backdrop-blur-sm flex flex-col items-center justify-center z-10"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 bg-slate-900/98 backdrop-blur-sm flex flex-col items-center justify-center z-50 rounded-2xl"
     >
       {/* Siri Orb */}
       <SiriOrb isActive={true} isListening={isListening} isTyping={false} />
@@ -748,7 +748,7 @@ const ChatWindow = ({ onClose }) => {
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 relative">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg, i) => (
           <ChatMessage
             key={i}
@@ -763,16 +763,6 @@ const ChatWindow = ({ onClose }) => {
         {isTyping && <TypingIndicator />}
         
         <div ref={messagesEndRef} />
-
-        {/* Voice input overlay */}
-        <AnimatePresence>
-          {inputMode === 'voice' && (
-            <VoiceInput
-              onTranscript={handleVoiceTranscript}
-              onCancel={() => setInputMode('text')}
-            />
-          )}
-        </AnimatePresence>
 
         {/* History sidebar */}
         <AnimatePresence>
@@ -792,13 +782,8 @@ const ChatWindow = ({ onClose }) => {
           <button
             type="button"
             onClick={() => setInputMode('voice')}
-            className={`p-2.5 rounded-full transition-colors ${
-              settings.voiceEnabled 
-                ? 'hover:bg-slate-700 text-slate-400 hover:text-blue-400' 
-                : 'text-slate-600 cursor-not-allowed'
-            }`}
-            title={settings.voiceEnabled ? 'Voice input' : 'Voice disabled in settings'}
-            disabled={!settings.voiceEnabled}
+            className="p-2.5 rounded-full transition-colors hover:bg-slate-700 text-slate-400 hover:text-purple-400"
+            title="Voice input"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -838,6 +823,16 @@ const ChatWindow = ({ onClose }) => {
           ))}
         </div>
       </div>
+
+      {/* Voice input overlay - positioned over entire chat window */}
+      <AnimatePresence>
+        {inputMode === 'voice' && (
+          <VoiceInput
+            onTranscript={handleVoiceTranscript}
+            onCancel={() => setInputMode('text')}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
